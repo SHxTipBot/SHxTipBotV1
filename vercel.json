@@ -1,0 +1,27 @@
+{
+    "version": 2,
+    "builds": [
+        {
+            "src": "registration_app.py",
+            "use": "@vercel/python"
+        },
+        {
+            "src": "web_static/**",
+            "use": "@vercel/static"
+        }
+    ],
+    "routes": [
+        {
+            "src": "/register",
+            "dest": "registration_app.py"
+        },
+        {
+            "src": "/api/(.*)",
+            "dest": "registration_app.py"
+        },
+        {
+            "src": "/(.*)",
+            "dest": "web_static/$1"
+        }
+    ]
+}

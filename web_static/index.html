@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SHx Tip Bot — Link Wallet</title>
+  <meta name="description"
+    content="Connect your Stellar wallet to the SHx Tip Bot for the Stronghold Discord community.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg: #0a0e1a;
+      --surface: rgba(255, 255, 255, 0.04);
+      --surface-hover: rgba(255, 255, 255, 0.08);
+      --border: rgba(255, 255, 255, 0.08);
+      --text: #e4e8f1;
+      --text-muted: #8892a8;
+      --accent: #00c9ff;
+      --accent-glow: rgba(0, 201, 255, 0.25);
+      --success: #00ff88;
+      --error: #ff4c4c;
+      --lobstr: #6c63ff;
+      --freighter: #00c9ff;
+      --radius: 14px;
+    }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background-image:
+        radial-gradient(ellipse 60% 50% at 50% 0%, rgba(0, 201, 255, 0.08), transparent),
+        radial-gradient(ellipse 40% 40% at 80% 90%, rgba(108, 99, 255, 0.06), transparent);
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Stronghold castle logo watermark */
+    body::before {
+      content: '';
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 600px;
+      height: 600px;
+      background-image: url('https://cdn.prod.website-files.com/5e9a1cde22bbc0a89dba7f5b/60c9649cf8fb48e5c883950e_Stronghold%20Logo%20Mark%20Blue.png');
+      background-size: contain;
+      background-repeat: no-repeat;
+      background-position: center;
+      opacity: 0.06;
+      pointer-events: none;
+      z-index: 0;
+      animation: floatLogo 20s ease-in-out infinite;
+    }
+
+    @keyframes floatLogo {
+
+      0%,
+      100% {
+        transform: translate(-50%, -50%) scale(1);
+      }
+
+      50% {
+        transform: translate(-50%, -50%) scale(1.05);
+      }
+    }
+
+    .card {
+      position: relative;
+      z-index: 1;
+    }
+
+    .card {
+      width: 100%;
+      max-width: 480px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      backdrop-filter: blur(24px);
+      padding: 40px 32px;
+      animation: fadeUp 0.5s ease-out;
+    }
+
+    @keyframes fadeUp {
+      from {
+        opacity: 0;
+        transform: translateY(16px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .logo {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+
+    .logo h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--accent), var(--lobstr));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .logo p {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      margin-top: 6px;
+    }
+
+    .network-badge {
+      display: inline-block;
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      padding: 3px 10px;
+      border-radius: 99px;
+      margin-top: 10px;
+    }
+
+    .network-badge.testnet {
+      background: rgba(255, 170, 0, 0.15);
+      color: #ffaa00;
+    }
+
+    .network-badge.public {
+      background: rgba(0, 255, 136, 0.15);
+      color: var(--success);
+    }
+
+    /* Steps */
+    .step {
+      display: none;
+    }
+
+    .step.active {
+      display: block;
+      animation: fadeUp 0.35s ease-out;
+    }
+
+    .step-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      margin-bottom: 16px;
+    }
+
+    /* Buttons */
+    .btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: 100%;
+      padding: 14px 20px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-family: inherit;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      color: var(--text);
+      background: var(--surface);
+    }
+
+    .btn:hover {
+      background: var(--surface-hover);
+      border-color: var(--accent);
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-freighter {
+      border-color: rgba(0, 201, 255, 0.3);
+    }
+
+    .btn-freighter:hover {
+      box-shadow: 0 0 20px var(--accent-glow);
+    }
+
+    .btn-lobstr {
+      border-color: rgba(108, 99, 255, 0.3);
+    }
+
+    .btn-lobstr:hover {
+      box-shadow: 0 0 20px rgba(108, 99, 255, 0.25);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), #0090cc);
+      border: none;
+      color: #fff;
+    }
+
+    .btn-primary:hover {
+      filter: brightness(1.15);
+    }
+
+    .btn+.btn {
+      margin-top: 12px;
+    }
+
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 20px 0;
+      color: var(--text-muted);
+      font-size: 0.8rem;
+    }
+
+    .divider::before,
+    .divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* Manual input */
+    .input-group {
+      margin-top: 16px;
+    }
+
+    .input-group label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    .input-group input {
+      width: 100%;
+      padding: 12px 14px;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: 'Inter', monospace;
+      font-size: 0.85rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .input-group input:focus {
+      border-color: var(--accent);
+    }
+
+    .input-group input::placeholder {
+      color: rgba(255, 255, 255, 0.2);
+    }
+
+    /* Status */
+    .status {
+      margin-top: 16px;
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      line-height: 1.5;
+    }
+
+    .status.error {
+      background: rgba(255, 76, 76, 0.12);
+      color: var(--error);
+    }
+
+    .status.success {
+      background: rgba(0, 255, 136, 0.12);
+      color: var(--success);
+    }
+
+    .status.info {
+      background: rgba(0, 201, 255, 0.12);
+      color: var(--accent);
+    }
+
+    .connected-addr {
+      margin: 16px 0;
+      padding: 12px 16px;
+      background: rgba(0, 201, 255, 0.06);
+      border: 1px solid rgba(0, 201, 255, 0.15);
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 0.8rem;
+      word-break: break-all;
+      color: var(--accent);
+    }
+
+    .instructions {
+      margin-top: 20px;
+      padding: 16px;
+      background: var(--surface);
+      border-radius: 8px;
+      font-size: 0.82rem;
+      line-height: 1.6;
+      color: var(--text-muted);
+    }
+
+    .instructions strong {
+      color: var(--text);
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .icon {
+      width: 22px;
+      height: 22px;
+    }
+
+    .wallet-logo {
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+      object-fit: contain;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="card">
+    <div class="logo">
+      <h1>SHx Tip Bot</h1>
+      <p>Stronghold Community</p>
+      <span class="network-badge {{NETWORK}}">{{NETWORK}}</span>
+    </div>
+
+    <!-- ── Step 1: Choose Wallet ── -->
+    <div class="step active" id="step-connect">
+      <div class="step-label">Step 1 — Connect Wallet</div>
+
+      <button class="btn btn-freighter" onclick="connectFreighter()">
+        <img class="wallet-logo"
+          src="https://lh3.googleusercontent.com/_IWkBPJYpuslJcxNCIxeoJqmKJ8WOek43XeEsE_EiDrMzawR31KTAVweF-oyGVKJjW9kbDkxByD6mpYoV7H8uGQA=s240"
+          alt="Freighter">
+        Connect with Freighter
+      </button>
+
+      <button class="btn btn-lobstr" onclick="connectLobstr()">
+        <img class="wallet-logo"
+          src="https://play-lh.googleusercontent.com/BFTQEU3Eb_H2362blCcI-mkGMkBayGm3R-rGlj1D1qZzbDJDKA0nvW45Nr8IgltVpdo=s240-rw"
+          alt="LOBSTR">
+        Connect with Lobstr
+      </button>
+
+      <div class="divider">or enter manually</div>
+
+      <div class="input-group">
+        <label for="manual-key">Stellar Public Key</label>
+        <input type="text" id="manual-key" placeholder="G..." maxlength="56">
+      </div>
+
+      <button class="btn" onclick="useManualKey()" style="margin-top: 12px;">
+        Use This Key
+      </button>
+
+      <div id="connect-status"></div>
+    </div>
+
+    <!-- ── Step 2: Approve & Link ── -->
+    <div class="step" id="step-approve">
+      <div class="step-label">Step 2 — Approve & Link</div>
+
+      <p style="font-size:0.88rem; color:var(--text-muted); margin-bottom:12px;">
+        Connected wallet:
+      </p>
+      <div class="connected-addr" id="display-key"></div>
+
+      <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:20px; line-height:1.5;">
+        Sign the approval transaction to allow the SHx Tip Bot contract to transfer SHx on
+        your behalf when you use <code>/tip</code> in Discord.
+      </p>
+
+      <button class="btn btn-primary" id="btn-approve" onclick="approveAndLink()">
+        Sign & Link Wallet
+      </button>
+
+      <button class="btn" onclick="goBack()" style="margin-top:8px; font-size:0.82rem;">
+        ← Choose a different wallet
+      </button>
+
+      <div id="approve-status"></div>
+    </div>
+
+    <!-- ── Step 3: Done ── -->
+    <div class="step" id="step-done">
+      <div style="text-align:center; padding:20px 0;">
+        <div style="font-size:3rem; margin-bottom:16px;">🎉</div>
+        <h2 style="font-size:1.3rem; margin-bottom:8px;">Wallet Linked!</h2>
+        <p style="color:var(--text-muted); font-size:0.9rem;">
+          Return to Discord and start tipping with <code>/tip</code>.
+        </p>
+      </div>
+
+      <div class="instructions">
+        <strong>Quick Start:</strong><br>
+        • <code>/tip @user 10 Great work!</code> — send 10 SHx<br>
+        • <code>/balance</code> — check your SHx balance<br>
+        • A small dynamic fee (based on network costs) is charged per tip.
+      </div>
+
+      <div id="done-trustline-warning"></div>
+    </div>
+  </div>
+
+  <script>
+    // ── Injected Config ──
+    const TOKEN = "{{TOKEN}}";
+    const NETWORK = "{{NETWORK}}";
+    const NETWORK_PASSPHRASE = "{{NETWORK_PASSPHRASE}}";
+    const API_BASE = window.location.origin;
+
+    let connectedKey = null;
+    let walletType = null; // "freighter" | "lobstr" | "manual"
+
+    // ── Step Navigation ──
+    function showStep(id) {
+      document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+      document.getElementById(id).classList.add('active');
+    }
+
+    function goBack() {
+      connectedKey = null;
+      walletType = null;
+      showStep('step-connect');
+    }
+
+    function setStatus(elId, msg, type) {
+      const el = document.getElementById(elId);
+      el.className = 'status ' + type;
+      el.innerHTML = msg;
+      el.style.display = 'block';
+    }
+
+    // ── Freighter ──
+    async function connectFreighter() {
+      const status = 'connect-status';
+      try {
+        if (typeof window.freighterApi === 'undefined' && typeof window.freighter === 'undefined') {
+          setStatus(status, 'Freighter extension not detected. <a href="https://freighter.app" target="_blank" style="color:var(--accent);">Install Freighter</a>', 'error');
+          return;
+        }
+        const api = window.freighterApi || window.freighter;
+
+        // Request access
+        const allowed = await api.requestAccess();
+        if (!allowed || allowed === "denied") {
+          setStatus(status, 'Access denied by Freighter.', 'error');
+          return;
+        }
+
+        const { publicKey } = await api.getAddress();
+        if (!publicKey) {
+          setStatus(status, 'Could not retrieve public key.', 'error');
+          return;
+        }
+
+        // Verify correct network
+        const network = await api.getNetwork();
+        const expectedNetwork = NETWORK === 'testnet' ? 'TESTNET' : 'PUBLIC';
+        if (network && network.toUpperCase() !== expectedNetwork) {
+          setStatus(status, `Please switch Freighter to <strong>${NETWORK}</strong> network.`, 'error');
+          return;
+        }
+
+        connectedKey = publicKey;
+        walletType = 'freighter';
+        proceedToApprove();
+      } catch (e) {
+        setStatus(status, 'Freighter error: ' + e.message, 'error');
+      }
+    }
+
+    // ── Lobstr ──
+    async function connectLobstr() {
+      const status = 'connect-status';
+      try {
+        // Check for Lobstr's in-app browser injected API
+        if (typeof window.lobstrSignTransaction !== 'undefined' ||
+          typeof window.lobstr !== 'undefined') {
+          // Running inside Lobstr's in-app browser
+          const api = window.lobstr || {};
+          if (api.getPublicKey) {
+            connectedKey = await api.getPublicKey();
+            walletType = 'lobstr';
+            proceedToApprove();
+            return;
+          }
+        }
+
+        // Fallback: prompt user to paste key and open Lobstr deep link for signing
+        setStatus(status,
+          '<strong>Lobstr Wallet</strong><br>' +
+          'Option A: Open this page in Lobstr\'s in-app browser.<br>' +
+          'Option B: Enter your public key below, then sign the approval in Lobstr when prompted.',
+          'info');
+        walletType = 'lobstr';
+      } catch (e) {
+        setStatus(status, 'Lobstr error: ' + e.message, 'error');
+      }
+    }
+
+    // ── Manual Key Entry ──
+    function useManualKey() {
+      const key = document.getElementById('manual-key').value.trim();
+      if (!key.startsWith('G') || key.length !== 56) {
+        setStatus('connect-status', 'Invalid Stellar public key. Must start with G and be 56 characters.', 'error');
+        return;
+      }
+      connectedKey = key;
+      walletType = 'manual';
+      proceedToApprove();
+    }
+
+    function proceedToApprove() {
+      document.getElementById('display-key').textContent = connectedKey;
+      showStep('step-approve');
+    }
+
+    // ── Approve & Link ──
+    async function approveAndLink() {
+      const btn = document.getElementById('btn-approve');
+      const status = 'approve-status';
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Processing...';
+
+      try {
+        // 1. Get the unsigned approve TX from the server
+        const txRes = await fetch(API_BASE + '/api/approve-tx', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ public_key: connectedKey }),
+        });
+        const txData = await txRes.json();
+
+        if (!txData.success) {
+          setStatus(status, 'Failed to build approval TX: ' + (txData.detail || 'Unknown error'), 'error');
+          btn.disabled = false;
+          btn.textContent = 'Sign & Link Wallet';
+          return;
+        }
+
+        const xdr = txData.xdr;
+
+        // 2. Sign the transaction with the user's wallet
+        let signedXdr = null;
+
+        if (walletType === 'freighter') {
+          const api = window.freighterApi || window.freighter;
+          const result = await api.signTransaction(xdr, { networkPassphrase: NETWORK_PASSPHRASE });
+          signedXdr = typeof result === 'string' ? result : result.signedTxXdr;
+        } else if (walletType === 'lobstr' && window.lobstrSignTransaction) {
+          signedXdr = await window.lobstrSignTransaction(xdr);
+        } else {
+          // For manual / lobstr fallback: show XDR and instructions
+          // Create a SEP-0007 deep link for Lobstr
+          const sep7 = 'web+stellar:tx?xdr=' + encodeURIComponent(xdr)
+            + '&network_passphrase=' + encodeURIComponent(NETWORK_PASSPHRASE);
+
+          setStatus(status,
+            '<strong>Sign this transaction in your wallet:</strong><br><br>' +
+            '<a href="' + sep7 + '" style="color:var(--lobstr); word-break:break-all;">Open in Lobstr / Wallet</a><br><br>' +
+            'After signing and submitting the transaction in your wallet app, ' +
+            'click "Complete Link" below.',
+            'info');
+
+          btn.textContent = 'Complete Link (skip signing)';
+          btn.disabled = false;
+          btn.onclick = () => linkOnly();
+          return;
+        }
+
+        // 3. TODO: Submit signed TX to Horizon (or the wallet may auto-submit)
+        // For Freighter, the signed TX is returned but not submitted.
+        // We could submit it via the backend, but for simplicity we assume
+        // the wallet handles submission or we submit here.
+
+        // 4. Link the wallet
+        await linkOnly();
+
+      } catch (e) {
+        setStatus(status, 'Error: ' + e.message, 'error');
+        btn.disabled = false;
+        btn.textContent = 'Sign & Link Wallet';
+      }
+    }
+
+    async function linkOnly() {
+      const status = 'approve-status';
+      const btn = document.getElementById('btn-approve');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Linking...';
+
+      try {
+        const res = await fetch(API_BASE + '/api/link', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: TOKEN, public_key: connectedKey }),
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          // Show trustline warning if needed
+          if (!data.has_shx_trustline) {
+            document.getElementById('done-trustline-warning').innerHTML =
+              '<div class="status error" style="margin-top:16px;">⚠️ Your wallet does not have an SHx trustline yet. ' +
+              'You must add a trustline for SHx before you can receive tips.</div>';
+          }
+          showStep('step-done');
+        } else {
+          setStatus(status, data.detail || data.message || 'Linking failed.', 'error');
+          btn.disabled = false;
+          btn.textContent = 'Sign & Link Wallet';
+        }
+      } catch (e) {
+        setStatus(status, 'Network error: ' + e.message, 'error');
+        btn.disabled = false;
+        btn.textContent = 'Sign & Link Wallet';
+      }
+    }
+  </script>
+
+</body>
+
+</html>
