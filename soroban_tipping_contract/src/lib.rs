@@ -10,7 +10,7 @@
 
 #![no_std]
 
-use soroban_sdk::{contract, contractimpl, contracttype, Address, Env, token};
+use soroban_sdk::{contract, contractimpl, contracttype, symbol_short, token, Address, Env};
 
 /// Persistent storage keys.
 #[contracttype]
@@ -18,6 +18,7 @@ pub enum DataKey {
     Admin,
     ShxContract,
     Treasury,
+    Version,
 }
 
 #[contract]
@@ -26,12 +27,7 @@ pub struct TippingContract;
 #[contractimpl]
 impl TippingContract {
     /// One-time initialisation. Must be called by the deployer before any tips.
-    ///
-    /// * `admin`        – Admin address (can update config later).
-    /// * `shx_contract` – Contract ID of the SHx Stellar Asset Contract (SAC).
-    /// * `treasury`     – Address that receives the fee portion of every tip.
     pub fn initialize(env: Env, admin: Address, shx_contract: Address, treasury: Address) {
-        // Prevent re-initialisation
         if env.storage().instance().has(&DataKey::Admin) {
             panic!("already initialized");
         }
@@ -39,21 +35,14 @@ impl TippingContract {
         admin.require_auth();
 
         env.storage().instance().set(&DataKey::Admin, &admin);
-        env.storage().instance().set(&DataKey::ShxContract, &shx_contract);
+        env.storage()
+            .instance()
+            .set(&DataKey::ShxContract, &shx_contract);
         env.storage().instance().set(&DataKey::Treasury, &treasury);
+        env.storage().instance().set(&DataKey::Version, &1u32);
     }
 
-    /// Execute a tip.
-    ///
-    /// Transfers `amount` SHx from `sender` to `recipient`, and `fee` SHx
-    /// from `sender` to the treasury.  Both transfers use the SAC's
-    /// `transfer_from`, so the sender must have approved this contract
-    /// for at least `amount + fee`.
-    ///
-    /// * `sender`    – The tipper (must have authorised via SAC `approve`).
-    /// * `recipient` – The tip recipient.
-    /// * `amount`    – Tip amount in SHx (7-decimal i128, e.g. 50_000_000 = 5 SHx).
-    /// * `fee`       – Fee amount in SHx, sent to treasury.
+    /// Execute a tip and emit a TipExecuted event.
     pub fn tip(env: Env, sender: Address, recipient: Address, amount: i128, fee: i128) {
         assert!(amount > 0, "amount must be > 0");
         assert!(fee >= 0, "fee must be >= 0");
@@ -62,29 +51,40 @@ impl TippingContract {
         let treasury: Address = env.storage().instance().get(&DataKey::Treasury).unwrap();
 
         let shx = token::TokenClient::new(&env, &shx_contract);
-
-        // The contract is the spender; sender must have approved it.
         let contract_address = env.current_contract_address();
 
-        // Transfer tip: sender → recipient
+        // 1. Transfer tip: sender → recipient
         shx.transfer_from(&contract_address, &sender, &recipient, &amount);
 
-        // Transfer fee: sender → treasury
+        // 2. Transfer fee: sender → treasury
         if fee > 0 {
             shx.transfer_from(&contract_address, &sender, &treasury, &fee);
         }
+
+        // 3. Emit TipExecuted Event
+        env.events().publish(
+            (symbol_short!("tip_exec"), sender.clone(), recipient.clone()),
+            (amount, fee),
+        );
     }
 
     /// Admin-only: update the treasury address.
     pub fn set_treasury(env: Env, new_treasury: Address) {
         let admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
         admin.require_auth();
-        env.storage().instance().set(&DataKey::Treasury, &new_treasury);
+        env.storage()
+            .instance()
+            .set(&DataKey::Treasury, &new_treasury);
     }
 
     /// Read the current treasury address.
     pub fn get_treasury(env: Env) -> Address {
         env.storage().instance().get(&DataKey::Treasury).unwrap()
+    }
+
+    /// Read the contract version.
+    pub fn get_version(env: Env) -> u32 {
+        env.storage().instance().get(&DataKey::Version).unwrap_or(0)
     }
 }
 
@@ -95,7 +95,14 @@ mod tests {
     use super::*;
     use soroban_sdk::{testutils::Address as _, token::StellarAssetClient, Address, Env};
 
-    fn setup_test() -> (Env, TippingContractClient<'static>, Address, Address, Address, Address) {
+    fn setup_test() -> (
+        Env,
+        TippingContractClient<'static>,
+        Address,
+        Address,
+        Address,
+        Address,
+    ) {
         let env = Env::default();
         env.mock_all_auths();
 
@@ -125,7 +132,14 @@ mod tests {
         let env = Box::leak(Box::new(env));
         let client = TippingContractClient::new(env, &contract_id);
 
-        (env.clone(), client, shx_contract.address(), sender, recipient, treasury)
+        (
+            env.clone(),
+            client,
+            shx_contract.address(),
+            sender,
+            recipient,
+            treasury,
+        )
     }
 
     #[test]
@@ -136,8 +150,8 @@ mod tests {
         // Tip 5 SHx with 1 SHx fee
         client.tip(&sender, &recipient, &50_000_000, &10_000_000);
 
-        assert_eq!(shx.balance(&recipient), 50_000_000);   // 5 SHx
-        assert_eq!(shx.balance(&treasury), 10_000_000);    // 1 SHx
+        assert_eq!(shx.balance(&recipient), 50_000_000); // 5 SHx
+        assert_eq!(shx.balance(&treasury), 10_000_000); // 1 SHx
     }
 
     #[test]

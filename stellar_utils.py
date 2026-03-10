@@ -60,26 +60,44 @@ def _to_stroops(amount: float) -> int:
     return int(round(amount * 10_000_000))
 
 
+# ── Global Session Management ────────────────────────────────────────────────
+
+_session: aiohttp.ClientSession | None = None
+
+async def get_session() -> aiohttp.ClientSession:
+    """Get or create a global aiohttp session."""
+    global _session
+    if _session is None or _session.closed:
+        _session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20))
+    return _session
+
+async def close_session():
+    """Close the global aiohttp session."""
+    global _session
+    if _session and not _session.closed:
+        await _session.close()
+
+
 # ── Balance & Trustline ──────────────────────────────────────────────────────
 
 async def get_shx_balance(public_key: str) -> float | None:
     """Query the SHx balance for a Stellar account via Horizon."""
     try:
-        async with aiohttp.ClientSession() as session:
-            url = f"{HORIZON_URL}/accounts/{public_key}"
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                if resp.status != 200:
-                    logger.warning(f"Horizon returned {resp.status} for account {public_key[:8]}...")
-                    return None
-                data = await resp.json()
-                for bal in data.get("balances", []):
-                    if (
-                        bal.get("asset_code") == SHX_ASSET_CODE
-                        and bal.get("asset_issuer") == SHX_ISSUER
-                    ):
-                        return float(bal["balance"])
-                # Account exists but has no SHx trustline
-                return 0.0
+        session = await get_session()
+        url = f"{HORIZON_URL}/accounts/{public_key}"
+        async with session.get(url) as resp:
+            if resp.status != 200:
+                logger.warning(f"Horizon returned {resp.status} for account {public_key[:8]}...")
+                return None
+            data = await resp.json()
+            for bal in data.get("balances", []):
+                if (
+                    bal.get("asset_code") == SHX_ASSET_CODE
+                    and bal.get("asset_issuer") == SHX_ISSUER
+                ):
+                    return float(bal["balance"])
+            # Account exists but has no SHx trustline
+            return 0.0
     except Exception as e:
         logger.error(f"Error fetching balance for {public_key[:8]}...: {e}")
         return None
@@ -100,23 +118,23 @@ async def get_shx_xlm_price() -> float | None:
     Returns XLM-per-SHx (how much XLM 1 SHx is worth).
     """
     try:
-        async with aiohttp.ClientSession() as session:
-            url = (
-                f"{HORIZON_URL}/order_book"
-                f"?selling_asset_type=credit_alphanum4"
-                f"&selling_asset_code={SHX_ASSET_CODE}"
-                f"&selling_asset_issuer={SHX_ISSUER}"
-                f"&buying_asset_type=native"
-                f"&limit=1"
-            )
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                if resp.status != 200:
-                    return None
-                data = await resp.json()
-                # Bids = people willing to buy SHx (price = XLM per SHx)
-                if data.get("bids"):
-                    return float(data["bids"][0]["price"])
+        session = await get_session()
+        url = (
+            f"{HORIZON_URL}/order_book"
+            f"?selling_asset_type=credit_alphanum4"
+            f"&selling_asset_code={SHX_ASSET_CODE}"
+            f"&selling_asset_issuer={SHX_ISSUER}"
+            f"&buying_asset_type=native"
+            f"&limit=1"
+        )
+        async with session.get(url) as resp:
+            if resp.status != 200:
                 return None
+            data = await resp.json()
+            # Bids = people willing to buy SHx (price = XLM per SHx)
+            if data.get("bids"):
+                return float(data["bids"][0]["price"])
+            return None
     except Exception as e:
         logger.error(f"Error fetching SHx/XLM price: {e}")
         return None
@@ -125,9 +143,6 @@ async def get_shx_xlm_price() -> float | None:
 async def calculate_gas_shx() -> float:
     """
     Calculate the SHx equivalent of the XLM gas cost for a Soroban tip.
-
-    A small portion of SHX is deducted from the tip the recipient receives
-    and sent to the house account to reimburse it for the XLM gas it fronts.
     """
     xlm_per_shx = await get_shx_xlm_price()
 
@@ -195,6 +210,9 @@ async def execute_tip(
         # Simulate
         sim = soroban_server.simulate_transaction(tx)
         if sim.error:
+            logger.error(f"Soroban Simulation Error: {sim.error}")
+            if hasattr(sim, 'events') and sim.events:
+                logger.error(f"Simulation Events: {sim.events}")
             return _fail(f"Simulation failed: {sim.error}")
 
         # Prepare (attach resource footprint, adjust fees)
@@ -204,6 +222,7 @@ async def execute_tip(
         # Submit
         response = soroban_server.send_transaction(tx)
         if response.status == SendTransactionStatus.ERROR:
+            logger.error(f"Soroban Submit Error: {response.error}")
             return _fail(f"Submit error: {response.error}")
 
         tx_hash = response.hash
@@ -219,6 +238,7 @@ async def execute_tip(
                     "error": None,
                 }
             if result.status == GetTransactionStatus.FAILED:
+                logger.error(f"Transaction failed on-chain: {result.error_result_xdr if hasattr(result, 'error_result_xdr') else 'Unknown'}")
                 return _fail("Transaction failed on-chain.", tx_hash)
             await asyncio.sleep(1)
 
@@ -246,11 +266,7 @@ async def build_approve_tx_xdr(
     allowance_amount: float = 1_000_000,
 ) -> str:
     """
-    Build an *unsigned* transaction XDR that calls `approve` on the SHx SAC,
-    granting the tipping contract permission to spend the user's SHx.
-
-    On testnet, if the account doesn't exist, it will be auto-funded via
-    Friendbot and given an SHX trustline first.
+    Build an *unsigned* transaction XDR that calls `approve` on the SHx SAC.
     """
     horizon_server = Server(HORIZON_URL)
 
@@ -269,18 +285,16 @@ async def build_approve_tx_xdr(
             )
         # Auto-fund via Friendbot on testnet
         logger.info(f"Account {user_public_key[:8]}... not found on testnet, funding via Friendbot...")
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                f"https://friendbot.stellar.org?addr={user_public_key}",
-                timeout=aiohttp.ClientTimeout(total=20),
-            ) as resp:
-                if resp.status != 200:
-                    text = await resp.text()
-                    if "createAccountAlreadyExist" not in text:
-                        raise Exception(f"Friendbot funding failed: {text[:200]}")
+        session = await get_session()
+        async with session.get(
+            f"https://friendbot.stellar.org?addr={user_public_key}"
+        ) as resp:
+            if resp.status != 200:
+                text = await resp.text()
+                if "createAccountAlreadyExist" not in text:
+                    raise Exception(f"Friendbot funding failed: {text[:200]}")
         # Wait for ledger close
-        import asyncio as _asyncio
-        await _asyncio.sleep(5)
+        await asyncio.sleep(5)
         logger.info(f"Funded {user_public_key[:8]}... via Friendbot.")
 
     # Reload account (now it should exist)
@@ -288,30 +302,12 @@ async def build_approve_tx_xdr(
 
     # Check if account has SHX trustline; add it if missing (testnet only)
     balance = await get_shx_balance(user_public_key)
-    if balance is None or balance == 0.0:
-        # Check more precisely: balance==0.0 could mean trustline exists with 0
-        has_trustline = False
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    f"{HORIZON_URL}/accounts/{user_public_key}",
-                    timeout=aiohttp.ClientTimeout(total=10),
-                ) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        for bal in data.get("balances", []):
-                            if (bal.get("asset_code") == SHX_ASSET_CODE
-                                    and bal.get("asset_issuer") == SHX_ISSUER):
-                                has_trustline = True
-                                break
-        except Exception:
-            pass
+    has_trustline = balance is not None and balance >= 0.0
 
-        if not has_trustline and STELLAR_NETWORK == "testnet":
-            logger.info(f"Adding SHX trustline for {user_public_key[:8]}... (will be included in approve tx)")
+    if not has_trustline and STELLAR_NETWORK == "testnet":
+        logger.info(f"Adding SHX trustline for {user_public_key[:8]}... (will be included in approve tx)")
 
     allowance_stroops = _to_stroops(allowance_amount)
-    # ~6 months of ledgers at ~5 s / ledger (must be within network max)
     expiration_ledger = 3_000_000
 
     builder = TransactionBuilder(
@@ -321,7 +317,7 @@ async def build_approve_tx_xdr(
     )
 
     # If on testnet and no trustline, add the change_trust op first
-    if STELLAR_NETWORK == "testnet":
+    if not has_trustline and STELLAR_NETWORK == "testnet":
         shx_asset = Asset(SHX_ASSET_CODE, SHX_ISSUER)
         builder.append_change_trust_op(asset=shx_asset)
 

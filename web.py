@@ -9,7 +9,8 @@ import logging
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 
 import database as db
 import stellar_utils as stellar
@@ -20,6 +21,27 @@ logger = logging.getLogger("shx_tip_bot.web")
 
 app = FastAPI(title="SHx Tip Bot — Wallet Linking", docs_url=None, redoc_url=None)
 
+# ── Security Middleware ──────────────────────────────────────────────────────
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Adjust in production to specific domains if needed
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"],
+)
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' https: data:;"
+        return response
+
+app.add_middleware(SecurityHeadersMiddleware)
+
 # Serve static files (index.html, etc.)
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "web_static")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
@@ -28,7 +50,14 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 @app.on_event("startup")
 async def startup():
     await db.init_db()
+    await stellar.get_session()
     logger.info("Web application started.")
+
+@app.on_event("shutdown")
+async def shutdown():
+    await db.close_db()
+    await stellar.close_session()
+    logger.info("Web application stopped.")
 
 
 # ── Registration Page ─────────────────────────────────────────────────────────

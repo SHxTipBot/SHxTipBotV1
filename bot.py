@@ -152,7 +152,10 @@ def _footer(embed: discord.Embed) -> discord.Embed:
 async def on_ready():
     logger.info(f"Bot online as {bot.user} (ID: {bot.user.id})")
     logger.info(f"Guild: {DISCORD_GUILD_ID} | Network: {stellar.STELLAR_NETWORK}")
+    
+    # Initialize persistent DB and Session
     await db.init_db()
+    await stellar.get_session()
     
     # Register persistent views
     bot.add_view(AirdropView())
@@ -163,6 +166,15 @@ async def on_ready():
         logger.info(f"Synced {len(synced)} slash commands.")
     except Exception as e:
         logger.error(f"Command sync failed: {e}")
+
+# Cleanup on shutdown
+_original_close = bot.close
+async def patched_close():
+    logger.info("Closing bot and cleaning up resources...")
+    await stellar.close_session()
+    await db.close_db()
+    await _original_close()
+bot.close = patched_close
 
 
 # ── /link ─────────────────────────────────────────────────────────────────────
