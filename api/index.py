@@ -10,4 +10,4 @@ if root_dir not in sys.path:
 from web import app
 
 # Export for Vercel
-main = app
+app = app
