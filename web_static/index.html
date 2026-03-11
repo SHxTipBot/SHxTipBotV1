@@ -92,6 +92,7 @@
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius);
+      -webkit-backdrop-filter: blur(24px);
       backdrop-filter: blur(24px);
       padding: 40px 32px;
       margin-top: 80px;
@@ -357,6 +358,15 @@
       border-radius: 6px;
       object-fit: contain;
     }
+
+    .mt-12 { margin-top: 12px; }
+    .step-desc-small { font-size: 0.88rem; color: var(--text-muted); margin-bottom: 12px; }
+    .step-instructions { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 20px; line-height: 1.5; }
+    .btn-back { margin-top: 8px; font-size: 0.82rem; }
+    .done-header { text-align: center; padding: 20px 0; }
+    .done-icon { font-size: 3rem; margin-bottom: 16px; }
+    .done-title { font-size: 1.3rem; margin-bottom: 8px; }
+    .done-desc { color: var(--text-muted); font-size: 0.9rem; }
   </style>
 </head>
 
@@ -393,7 +403,7 @@
         <input type="text" id="manual-key" placeholder="G..." maxlength="56">
       </div>
 
-      <button class="btn" onclick="useManualKey()" style="margin-top: 12px;">
+      <button class="btn mt-12" onclick="useManualKey()">
         Use This Key
       </button>
 
@@ -404,12 +414,12 @@
     <div class="step" id="step-approve">
       <div class="step-label">Step 2 — Approve & Link</div>
 
-      <p style="font-size:0.88rem; color:var(--text-muted); margin-bottom:12px;">
+      <p class="step-desc-small">
         Connected wallet:
       </p>
       <div class="connected-addr" id="display-key"></div>
 
-      <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:20px; line-height:1.5;">
+      <p class="step-instructions">
         Sign the approval transaction to allow the SHx Tip Bot contract to transfer SHx on
         your behalf when you use <code>/tip</code> in Discord.
       </p>
@@ -418,7 +428,7 @@
         Sign & Link Wallet
       </button>
 
-      <button class="btn" onclick="goBack()" style="margin-top:8px; font-size:0.82rem;">
+      <button class="btn btn-back" onclick="goBack()">
         ← Choose a different wallet
       </button>
 
@@ -427,10 +437,10 @@
 
     <!-- ── Step 3: Done ── -->
     <div class="step" id="step-done">
-      <div style="text-align:center; padding:20px 0;">
-        <div style="font-size:3rem; margin-bottom:16px;">🎉</div>
-        <h2 style="font-size:1.3rem; margin-bottom:8px;">Wallet Linked!</h2>
-        <p style="color:var(--text-muted); font-size:0.9rem;">
+      <div class="done-header">
+        <div class="done-icon">🎉</div>
+        <h2 class="done-title">Wallet Linked!</h2>
+        <p class="done-desc">
           Return to Discord and start tipping with <code>/tip</code>.
         </p>
       </div>
