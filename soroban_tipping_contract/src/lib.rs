@@ -97,7 +97,7 @@ mod tests {
 
     fn setup_test() -> (
         Env,
-        TippingContractClient<'static>,
+        Address,
         Address,
         Address,
         Address,
@@ -106,7 +106,7 @@ mod tests {
         let env = Env::default();
         env.mock_all_auths();
 
-        let contract_id = env.register(TippingContract, ());
+        let contract_id = env.register_contract(None, crate::TippingContract);
         let client = TippingContractClient::new(&env, &contract_id);
 
         let admin = Address::generate(&env);
@@ -128,13 +128,9 @@ mod tests {
         let shx_token = token::TokenClient::new(&env, &shx_contract.address());
         shx_token.approve(&sender, &contract_id, &100_000_000_000_i128, &6_300_000);
 
-        // Leak env so references are valid
-        let env = Box::leak(Box::new(env));
-        let client = TippingContractClient::new(env, &contract_id);
-
         (
-            env.clone(),
-            client,
+            env,
+            contract_id,
             shx_contract.address(),
             sender,
             recipient,
@@ -144,7 +140,8 @@ mod tests {
 
     #[test]
     fn test_tip_with_fee() {
-        let (env, client, shx_addr, sender, recipient, treasury) = setup_test();
+        let (env, contract_id, shx_addr, sender, recipient, treasury) = setup_test();
+        let client = TippingContractClient::new(&env, &contract_id);
         let shx = token::TokenClient::new(&env, &shx_addr);
 
         // Tip 5 SHx with 1 SHx fee
@@ -156,7 +153,8 @@ mod tests {
 
     #[test]
     fn test_tip_zero_fee() {
-        let (env, client, shx_addr, sender, recipient, _treasury) = setup_test();
+        let (env, contract_id, shx_addr, sender, recipient, _treasury) = setup_test();
+        let client = TippingContractClient::new(&env, &contract_id);
         let shx = token::TokenClient::new(&env, &shx_addr);
 
         client.tip(&sender, &recipient, &50_000_000, &0);
@@ -166,7 +164,8 @@ mod tests {
     #[test]
     #[should_panic(expected = "amount must be > 0")]
     fn test_tip_zero_amount() {
-        let (_env, client, _shx_addr, sender, recipient, _treasury) = setup_test();
+        let (env, contract_id, _shx_addr, sender, recipient, _treasury) = setup_test();
+        let client = TippingContractClient::new(&env, &contract_id);
         client.tip(&sender, &recipient, &0, &10_000_000);
     }
 }
