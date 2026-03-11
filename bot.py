@@ -194,6 +194,7 @@ async def link_command(interaction: Interaction):
 
     token = await db.create_link_token(discord_id)
     link_url = f"{WEB_BASE_URL}/register?token={token}"
+    logger.info(f"Generated link for {interaction.user} ({discord_id}): {link_url}")
 
     embed = _footer(discord.Embed(
         title="🔗 Link Your Stellar Wallet",
