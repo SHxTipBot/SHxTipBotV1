@@ -95,14 +95,7 @@ mod tests {
     use super::*;
     use soroban_sdk::{testutils::Address as _, token::StellarAssetClient, Address, Env};
 
-    fn setup_test() -> (
-        Env,
-        Address,
-        Address,
-        Address,
-        Address,
-        Address,
-    ) {
+    fn setup_test() -> (Env, Address, Address, Address, Address, Address) {
         let env = Env::default();
         env.mock_all_auths();
 
