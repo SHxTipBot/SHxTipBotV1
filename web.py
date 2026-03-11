@@ -61,14 +61,14 @@ async def shutdown():
     logger.info("Web application stopped.")
 
 
-@app.get("/api")
+@app.get("/")
 async def root():
-    return {"status": "SHx Tip Bot API is active (Vercel Functions Backend)", "docs": "/api/health"}
+    return {"status": "SHx Tip Bot API is active (Vercel Backend)", "docs": "/health"}
 
 
 # ── Registration Page ─────────────────────────────────────────────────────────
 
-@app.get("/api/register", response_class=HTMLResponse)
+@app.get("/register", response_class=HTMLResponse)
 async def register_page(token: str = ""):
     """Serve the wallet-linking HTML page."""
     if not token:
@@ -168,7 +168,7 @@ async def api_approve_tx(request: Request):
 
 # ── Health Check ──────────────────────────────────────────────────────────────
 
-@app.get("/api/health")
+@app.get("/health")
 async def health():
     return {"status": "ok", "network": stellar.STELLAR_NETWORK}
 
