@@ -1,4 +1,7 @@
-from web import app
+import os
+import sys
 
-# This is the entry point for Vercel
-# Vercel looks for a file like index.py and an 'app' object.
+# Add the root directory to the python path so root modules like 'web' can be imported
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from web import app
