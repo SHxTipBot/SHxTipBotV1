@@ -61,6 +61,11 @@ async def shutdown():
     logger.info("Web application stopped.")
 
 
+@app.get("/")
+async def root():
+    return {"status": "SHx Tip Bot API is active", "docs": "/health"}
+
+
 # ── Registration Page ─────────────────────────────────────────────────────────
 
 @app.get("/register", response_class=HTMLResponse)
