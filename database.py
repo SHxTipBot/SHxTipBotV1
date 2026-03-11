@@ -19,12 +19,17 @@ DB_PATH = os.getenv("DB_PATH", "shx_tip_bot.db")
 _db: aiosqlite.Connection | None = None
 
 async def get_db() -> aiosqlite.Connection:
-    """Get or create a global persistent database connection."""
+    """Get or create a global persistent database connection. Falls back to in-memory if disk is readonly."""
     global _db
     if _db is None:
-        _db = await aiosqlite.connect(DB_PATH)
+        try:
+            _db = await aiosqlite.connect(DB_PATH)
+        except aiosqlite.OperationalError as e:
+            logger.error(f"Failed to open database {DB_PATH}: {e}. Falling back to in-memory DB for serverless environment.")
+            _db = await aiosqlite.connect(":memory:")
         _db.row_factory = aiosqlite.Row
     return _db
+
 
 async def close_db():
     """Close the global database connection."""
