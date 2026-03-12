@@ -169,7 +169,8 @@ async def api_unlink(request: Request):
 
     # Unlink the user
     await db.unlink_user(discord_id)
-    await db.mark_token_used(token)
+    # Note: We do NOT mark the token as used here, so the user can immediately 
+    # link a different wallet using the same session/token.
 
     logger.info(f"Unlinked Discord {discord_id} via web interface.")
 
