@@ -382,6 +382,16 @@
     <div class="step active" id="step-connect">
       <div class="step-label">Step 1 — Connect Wallet</div>
 
+      <!-- Existing Link Section -->
+      <div id="existing-link-section" style="display: none; margin-bottom: 24px; padding: 18px; background: rgba(0, 201, 255, 0.05); border: 1px solid rgba(0, 201, 255, 0.15); border-radius: 12px; text-align: center;">
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 8px;">Current linked wallet:</p>
+        <code id="existing-key-display" style="font-size: 0.8rem; word-break: break-all; color: var(--accent); display: block; margin-bottom: 16px;"></code>
+        <button class="btn" style="border-color: rgba(255, 76, 76, 0.3); color: var(--error); padding: 10px;" onclick="confirmUnlink()">
+          Unlink Current Wallet
+        </button>
+        <div class="divider" style="margin: 20px 0 10px 0;">or link a new one</div>
+      </div>
+
       <button class="btn btn-freighter" onclick="connectFreighter()">
         <img class="wallet-logo"
           src="https://lh3.googleusercontent.com/_IWkBPJYpuslJcxNCIxeoJqmKJ8WOek43XeEsE_EiDrMzawR31KTAVweF-oyGVKJjW9kbDkxByD6mpYoV7H8uGQA=s240"
@@ -439,8 +449,8 @@
     <div class="step" id="step-done">
       <div class="done-header">
         <div class="done-icon">🎉</div>
-        <h2 class="done-title">Wallet Linked!</h2>
-        <p class="done-desc">
+        <h2 class="done-title" id="done-title">Wallet Linked!</h2>
+        <p class="done-desc" id="done-desc">
           Return to Discord and start tipping with <code>/tip</code>.
         </p>
       </div>
@@ -461,7 +471,15 @@
     const TOKEN = "{{TOKEN}}";
     const NETWORK = "{{NETWORK}}";
     const NETWORK_PASSPHRASE = "{{NETWORK_PASSPHRASE}}";
+    const EXISTING_KEY = "{{EXISTING_KEY}}";
     const API_BASE = window.location.origin;
+
+    window.onload = () => {
+      if (EXISTING_KEY && EXISTING_KEY !== "") {
+        document.getElementById('existing-link-section').style.display = 'block';
+        document.getElementById('existing-key-display').textContent = EXISTING_KEY;
+      }
+    };
 
     let connectedKey = null;
     let walletType = null; // "freighter" | "lobstr" | "manual"
@@ -669,6 +687,42 @@
         setStatus(status, 'Network error: ' + e.message, 'error');
         btn.disabled = false;
         btn.textContent = 'Sign & Link Wallet';
+      }
+    }
+
+    // ── Unlink ──
+    async function confirmUnlink() {
+      if (!confirm("Are you sure you want to unlink your wallet from this Discord account? This will prevent you from tipping until you relink.")) {
+        return;
+      }
+      
+      const btn = document.getElementById('btn-unlink');
+      const status = 'approve-status';
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Unlinking...';
+
+      try {
+        const res = await fetch(API_BASE + '/api/unlink', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: TOKEN }),
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          document.getElementById('done-title').textContent = "Wallet Unlinked";
+          document.getElementById('done-desc').textContent = "Your Stellar wallet has been successfully unlinked.";
+          document.getElementById('done-trustline-warning').innerHTML = "";
+          showStep('step-done');
+        } else {
+          setStatus(status, data.detail || data.message || 'Unlinking failed.', 'error');
+          btn.disabled = false;
+          btn.innerHTML = 'Unlink Current Wallet';
+        }
+      } catch (e) {
+        setStatus(status, 'Network error: ' + e.message, 'error');
+        btn.disabled = false;
+        btn.innerHTML = 'Unlink Current Wallet';
       }
     }
   </script>

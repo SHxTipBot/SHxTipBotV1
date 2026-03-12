@@ -166,6 +166,18 @@ async def on_ready():
         logger.info(f"Synced {len(synced)} slash commands.")
     except Exception as e:
         logger.error(f"Command sync failed: {e}")
+    
+    # Start heartbeat task
+    bot.loop.create_task(heartbeat())
+
+async def heartbeat():
+    """Background task to log bot health every 15 minutes."""
+    while True:
+        try:
+            logger.info(f"HEARTBEAT | Bot Healthy | Latency: {bot.latency*1000:.2f}ms")
+        except Exception as e:
+            logger.error(f"Heartbeat error: {e}")
+        await asyncio.sleep(900) # 15 minutes
 
 # Cleanup on shutdown
 _original_close = bot.close
@@ -181,6 +193,7 @@ bot.close = patched_close
 
 @bot.tree.command(name="link", description="Link your Stellar wallet to your Discord account")
 async def link_command(interaction: Interaction):
+    logger.info(f"COMMAND RECEIVED | /link | User: {interaction.user} ({interaction.user.id})")
     await interaction.response.defer(ephemeral=True)
     discord_id = str(interaction.user.id)
 

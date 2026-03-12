@@ -82,6 +82,9 @@ async def register_page(token: str = ""):
             status_code=400,
         )
 
+    # Check if user already has a linked wallet
+    existing_key = await db.get_user_stellar_key(discord_id)
+
     # Read and serve the HTML file, injecting the token
     html_path = os.path.join(STATIC_DIR, "index.html")
     with open(html_path, "r", encoding="utf-8") as f:
@@ -93,6 +96,7 @@ async def register_page(token: str = ""):
     html = html.replace("{{NETWORK_PASSPHRASE}}", stellar.NETWORK_PASSPHRASE)
     html = html.replace("{{SHX_SAC_CONTRACT_ID}}", stellar.SHX_SAC_CONTRACT_ID)
     html = html.replace("{{SOROBAN_CONTRACT_ID}}", stellar.SOROBAN_CONTRACT_ID)
+    html = html.replace("{{EXISTING_KEY}}", existing_key or "")
 
     return HTMLResponse(html)
 
@@ -137,6 +141,41 @@ async def api_link(request: Request):
         "success": True,
         "message": "Wallet linked successfully!",
         "has_shx_trustline": has_trustline,
+        "discord_id": discord_id,
+    })
+
+
+# ── API: Unlink Wallet ────────────────────────────────────────────────────────
+
+@app.post("/api/unlink")
+async def api_unlink(request: Request):
+    """
+    Unlink a Stellar public key from a Discord account.
+    Body: { "token": "..." }
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Invalid JSON body.")
+
+    token = body.get("token", "").strip()
+    if not token:
+        raise HTTPException(400, "Missing token.")
+
+    # Validate token
+    discord_id = await db.validate_link_token(token)
+    if not discord_id:
+        raise HTTPException(400, "Invalid or expired token. Use /link in Discord again.")
+
+    # Unlink the user
+    await db.unlink_user(discord_id)
+    await db.mark_token_used(token)
+
+    logger.info(f"Unlinked Discord {discord_id} via web interface.")
+
+    return JSONResponse({
+        "success": True,
+        "message": "Wallet unlinked successfully!",
         "discord_id": discord_id,
     })
 

@@ -15,8 +15,8 @@ A production-ready Discord tipping bot for the **Stronghold Community** that let
 └─────────────┘     └──────┬───────┘     └─────────┬───────────┘
                            │                       │
                     ┌──────┴───────┐     ┌─────────▼───────────┐
-                    │  SQLite DB   │     │  Stellar Network     │
-                    │  (mappings)  │     │  (SHx SAC + Horizon) │
+                    │  Neon DB     │     │  Stellar Network     │
+                    │  (Postgres)  │     │  (SHx SAC + Horizon) │
                     └──────────────┘     └─────────────────────┘
                            │
                     ┌──────┴───────┐
@@ -39,6 +39,7 @@ A production-ready Discord tipping bot for the **Stronghold Community** that let
 - Python 3.11+
 - A Discord bot token ([Discord Developer Portal](https://discord.com/developers))
 - A Stellar account with XLM (house account — pays network fees)
+- A **Neon Postgres** account (for shared database between Bot and Web)
 - Rust + `soroban-cli` (for deploying the contract)
 
 ### 2. Clone & Install
@@ -89,10 +90,14 @@ Set the deployed contract ID as `SOROBAN_CONTRACT_ID` in `.env`.
 ### 5. Run
 
 ```bash
-python run.py
+# Start the production bot (automatically connects to Postgres)
+python bot.py
 ```
 
-This starts both the Discord bot and the web server (default port 8080).
+For local web testing, you can run:
+```bash
+python web.py
+```
 
 ## Deployment
 
@@ -116,7 +121,8 @@ The web component is configured for **Vercel**.
 
 - Connect your GitHub repo to Vercel.
 - Vercel will detect `vercel.json` and `api/index.py`.
-- **Environment Variables**: In Vercel, add all the variables from your `.env` file (except the bot-only ones if you prefer, but adding all is safest).
+- **Database**: Use **Neon Postgres**. Add `DATABASE_URL` to your Vercel Environment Variables.
+- **Environment Variables**: In Vercel, add all the variables from your `.env` file.
 - Once deployed, update `WEB_BASE_URL` in your bot's `.env` to your Vercel production URL.
 
 ### 3. Bot Hosting (Continuous)
@@ -153,7 +159,7 @@ The Discord bot needs a persistent server (Vercel is serverless and won't keep t
 1. User types `/link` in Discord → gets a unique URL (expires in 15 min).
 2. User opens the URL → connects Freighter, Lobstr, or pastes their public key.
 3. User signs an `approve` transaction granting the tipping contract an allowance.
-4. Backend stores `discord_id → public_key` in SQLite.
+4. Backend stores `discord_id → public_key` in Postgres (Neon).
 5. User can now send and receive tips via `/tip`.
 
 ---
@@ -175,10 +181,10 @@ The Discord bot needs a persistent server (Vercel is serverless and won't keep t
 | `HOUSE_ACCOUNT_SECRET` | House account secret key (pays XLM fees) | ✅ |
 | `HOUSE_ACCOUNT_PUBLIC` | House account public key | ✅ |
 | `WEB_BASE_URL` | Public URL of the web app (e.g. Vercel URL) | ✅ |
+| `DATABASE_URL` | Neon Postgres Connection String | ✅ |
 | `FALLBACK_GAS_SHX` | Fallback gas reimbursement in SHx | |
 | `ESTIMATED_XLM_FEE` | Estimated XLM cost per Soroban invoke | |
 | `RATE_LIMIT_TIPS_PER_MINUTE` | Max tips per user per minute | |
-| `DB_PATH` | SQLite database path | |
 | `LOG_FILE` | Log file path | |
 | `LOG_LEVEL` | Logging level | |
 
@@ -190,18 +196,15 @@ The Discord bot needs a persistent server (Vercel is serverless and won't keep t
 SHx Tip Bot/
 ├── .env.example                 # Environment template
 ├── requirements.txt             # Python dependencies
-├── run.py                       # Entry point (bot + web)
 ├── bot.py                       # Discord bot + slash commands
 ├── web.py                       # FastAPI web server
-├── database.py                  # SQLite database layer
+├── database.py                  # Neon Postgres database layer
 ├── stellar_utils.py             # Stellar/Soroban utilities
-├── Dockerfile                   # Container deployment
-├── web_static/
-│   └── index.html               # Wallet linking page
-└── soroban_tipping_contract/
-    ├── Cargo.toml               # Rust manifest
-    └── src/
-        └── lib.rs               # Soroban tipping contract
+├── api/                         # Vercel entry points
+├── scripts/                     # Utility and setup scripts
+├── tests/                       # E2E and unit tests
+├── web_static/                  # Wallet linking page (HTML/JS)
+└── soroban_tipping_contract/    # Rust Soroban contract
 ```
 
 ---
@@ -220,14 +223,13 @@ SHx Tip Bot/
 
 ## Mainnet Checklist
 
-- [ ] Set `STELLAR_NETWORK=public` in `.env`
-- [ ] Update `HORIZON_URL` and `SOROBAN_RPC_URL` to mainnet endpoints
-- [ ] Deploy contract to mainnet
-- [ ] Fund house account with XLM on mainnet
-- [ ] Configure a real `WEB_BASE_URL` with HTTPS
+- [ ] Refer to [MAINNET_GUIDE.md](MAINNET_GUIDE.md) for full instructions.
+- [ ] Set `STELLAR_NETWORK=public`
+- [ ] Update all environment variables for Mainnet
+- [ ] Deploy contract to Mainnet
+- [ ] Fund house account with XLM on Mainnet
 - [ ] Security audit of all contract and bot code
-- [ ] Set up monitoring and alerting
-- [ ] Back up the SQLite database regularly
+- [ ] Back up the Postgres database regularly
 
 ---
 

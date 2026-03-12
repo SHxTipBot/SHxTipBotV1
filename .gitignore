@@ -132,3 +132,4 @@ testnet_accounts.json
 testnet_secrets.env
 shx_tip_bot.log
 .DS_Store
+.vercel
