@@ -13,4 +13,4 @@ COPY . .
 EXPOSE 8080
 
 # Run both bot + web server
-CMD ["python", "run.py"]
+CMD ["python", "run_all.py"]
