@@ -17,6 +17,7 @@ Complete setup guide for the Stronghold team to deploy and manage the SHx Tip Bo
 9. [How Tipping Works](#how-tipping-works)
 10. [Security Best Practices](#security-best-practices)
 11. [Troubleshooting](#troubleshooting)
+12. [Deploying on Railway.app](#deploying-on-railwayapp)
 
 ---
 
@@ -61,6 +62,7 @@ Discord User  ──/link──►  Web App (web.py + index.html)
 | Web App | `web.py`, `web_static/index.html` | Wallet linking page served via FastAPI |
 | Stellar Utils | `stellar_utils.py` | Balance queries, fee calc, transaction execution |
 | Database | `database.py`, `shx_tip_bot.db` | SQLite DB linking Discord IDs to Stellar keys |
+| Unified Runner | `run_all.py` | Starts both Bot and Web server for 24/7 hosting |
 | Soroban Contract | `soroban_tipping_contract/` | On-chain tipping logic |
 
 ---
@@ -244,8 +246,37 @@ The Discord bot needs to run persistently. Options:
 - **PM2** (Node process manager):
 
   ```bash
-  pm2 start "python run.py" --name shx-tip-bot
+  pm2 start "python run_all.py" --name shx-tip-bot
   ```
+
+---
+
+## Deploying on Railway.app
+
+Railway is our **recommended** platform for 24/7 persistent hosting. It handles Docker deployments automatically from GitHub.
+
+### Step 1: Prepare Repository
+Ensure your latest code (including `Dockerfile` and `run_all.py`) is pushed to GitHub.
+
+### Step 2: Create Railway Project
+1. Log in to [Railway.app](https://railway.app).
+2. Click **New Project** → **Deploy from GitHub repo**.
+3. Select your `SHxTipBotV1` repository.
+
+### Step 3: Configure Environment Variables
+1. Go to the **Variables** tab in your Railway service.
+2. Click **Bulk Import** and paste the contents of your `.env` file.
+3. Ensure `WEB_PORT` is set to `8080` (Railway will automatically map this to a public URL).
+
+### Step 4: Health Checks (Optional but Recommended)
+1. Go to **Settings** → **Healthchecks**.
+2. Set the path to `/health`.
+3. Railway will now monitor your bot and restart it automatically if it becomes unresponsive.
+
+### Step 5: Network (Public URL)
+1. Go to **Settings** → **Networking**.
+2. Click **Generate Domain**. This will be your new `WEB_BASE_URL`.
+3. Important: Update the `WEB_BASE_URL` variable in Railway to match this new domain.
 
 ---
 
@@ -337,12 +368,12 @@ SHx Tip Bot/
 │   └── index.html          # Wallet linking page
 ├── stellar_utils.py        # Stellar/Soroban transaction logic
 ├── database.py             # SQLite database operations
-├── run.py                  # Entry point (starts bot + web)
+├── run_all.py              # Entry point (starts bot + web)
 ├── setup_testnet.py        # Testnet account setup
 ├── test_e2e.py             # E2E testnet preparation
 ├── approve_contract.py     # Submit approve TX for a user
 ├── create_test_account.py  # Generate & fund a test account
-├── Dockerfile              # Docker deployment
+├── Dockerfile              # Docker deployment (optimized for Railway)
 ├── requirements.txt        # Python dependencies
 └── soroban_tipping_contract/
     └── ...                 # Rust Soroban smart contract
