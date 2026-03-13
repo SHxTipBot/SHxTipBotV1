@@ -98,12 +98,12 @@ async def register_page(token: str = ""):
         html = f.read()
 
     # Inject runtime values into the page
-    html = html.replace("{{TOKEN}}", token)
-    html = html.replace("{{NETWORK}}", stellar.STELLAR_NETWORK)
-    html = html.replace("{{NETWORK_PASSPHRASE}}", stellar.NETWORK_PASSPHRASE)
-    html = html.replace("{{SHX_SAC_CONTRACT_ID}}", stellar.SHX_SAC_CONTRACT_ID)
-    html = html.replace("{{SOROBAN_CONTRACT_ID}}", stellar.SOROBAN_CONTRACT_ID)
-    html = html.replace("{{EXISTING_KEY}}", existing_key or "")
+    html = html.replace("{{TOKEN}}", token.strip())
+    html = html.replace("{{NETWORK}}", stellar.STELLAR_NETWORK.strip())
+    html = html.replace("{{NETWORK_PASSPHRASE}}", stellar.NETWORK_PASSPHRASE.strip())
+    html = html.replace("{{SHX_SAC_CONTRACT_ID}}", stellar.SHX_SAC_CONTRACT_ID.strip())
+    html = html.replace("{{SOROBAN_CONTRACT_ID}}", stellar.SOROBAN_CONTRACT_ID.strip())
+    html = html.replace("{{EXISTING_KEY}}", (existing_key or "").strip())
 
     return HTMLResponse(html)
 
