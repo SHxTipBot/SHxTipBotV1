@@ -17,15 +17,15 @@ logger = logging.getLogger("shx_tip_bot.stellar")
 
 # ── Configuration (loaded from environment) ──────────────────────────────────
 
-STELLAR_NETWORK = os.getenv("STELLAR_NETWORK", "testnet")
-HORIZON_URL = os.getenv("HORIZON_URL", "https://horizon-testnet.stellar.org")
-SOROBAN_RPC_URL = os.getenv("SOROBAN_RPC_URL", "https://soroban-testnet.stellar.org")
-SHX_ASSET_CODE = os.getenv("SHX_ASSET_CODE", "SHX")
-SHX_ISSUER = os.getenv("SHX_ISSUER", "GDSTRSHXHGJ7ZIVRBXEYE5Q74XUVCUSEKEBR7UCHEUUEK72N7I7KJ6JH")
-SHX_SAC_CONTRACT_ID = os.getenv("SHX_SAC_CONTRACT_ID", "")
-SOROBAN_CONTRACT_ID = os.getenv("SOROBAN_CONTRACT_ID", "")
-HOUSE_ACCOUNT_SECRET = os.getenv("HOUSE_ACCOUNT_SECRET", "")
-HOUSE_ACCOUNT_PUBLIC = os.getenv("HOUSE_ACCOUNT_PUBLIC", "")
+STELLAR_NETWORK = os.getenv("STELLAR_NETWORK", "testnet").strip()
+HORIZON_URL = os.getenv("HORIZON_URL", "https://horizon-testnet.stellar.org").strip()
+SOROBAN_RPC_URL = os.getenv("SOROBAN_RPC_URL", "https://soroban-testnet.stellar.org").strip()
+SHX_ASSET_CODE = os.getenv("SHX_ASSET_CODE", "SHX").strip()
+SHX_ISSUER = os.getenv("SHX_ISSUER", "GDSTRSHXHGJ7ZIVRBXEYE5Q74XUVCUSEKEBR7UCHEUUEK72N7I7KJ6JH").strip()
+SHX_SAC_CONTRACT_ID = os.getenv("SHX_SAC_CONTRACT_ID", "").strip()
+SOROBAN_CONTRACT_ID = os.getenv("SOROBAN_CONTRACT_ID", "").strip()
+HOUSE_ACCOUNT_SECRET = os.getenv("HOUSE_ACCOUNT_SECRET", "").strip()
+HOUSE_ACCOUNT_PUBLIC = os.getenv("HOUSE_ACCOUNT_PUBLIC", "").strip()
 ESTIMATED_XLM_FEE = float(os.getenv("ESTIMATED_XLM_FEE", "0.05"))
 GAS_BUFFER_PERCENT = 15  # safety margin on gas estimate
 FALLBACK_GAS_SHX = float(os.getenv("FALLBACK_GAS_SHX", "0.5"))  # fallback if DEX price unavailable
