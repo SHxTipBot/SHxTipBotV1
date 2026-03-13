@@ -505,29 +505,43 @@
 
     // ── Freighter ──
     async function connectFreighter() {
+      console.log("Freighter connection attempt started");
       const status = 'connect-status';
       try {
-        if (typeof window.freighterApi === 'undefined' && typeof window.freighter === 'undefined') {
+        const freighter = window.freighterApi || window.freighter;
+        if (!freighter) {
+          console.error("Freighter extension not detected");
           setStatus(status, 'Freighter extension not detected. <a href="https://freighter.app" target="_blank" style="color:var(--accent);">Install Freighter</a>', 'error');
           return;
         }
-        const api = window.freighterApi || window.freighter;
 
-        // Request access
-        const allowed = await api.requestAccess();
-        if (!allowed || allowed === "denied") {
+        console.log("Requesting Freighter access...");
+        const allowed = await freighter.requestAccess();
+        console.log("Freighter access response:", allowed);
+        
+        if (!allowed || allowed === "denied" || (typeof allowed === 'object' && allowed.error)) {
           setStatus(status, 'Access denied by Freighter.', 'error');
           return;
         }
 
-        const { publicKey } = await api.getAddress();
+        console.log("Fetching address...");
+        const { publicKey, error } = await freighter.getAddress();
+        if (error) {
+          console.error("Freighter getAddress error:", error);
+          setStatus(status, 'Could not retrieve public key: ' + error, 'error');
+          return;
+        }
+        
         if (!publicKey) {
           setStatus(status, 'Could not retrieve public key.', 'error');
           return;
         }
+        console.log("Connected Key:", publicKey);
 
-        // Verify correct network
-        const network = await api.getNetwork();
+        console.log("Checking network...");
+        const network = await freighter.getNetwork();
+        console.log("Freighter network:", network);
+        
         const expectedNetwork = NETWORK === 'testnet' ? 'TESTNET' : 'PUBLIC';
         if (network && network.toUpperCase() !== expectedNetwork) {
           setStatus(status, `Please switch Freighter to <strong>${NETWORK}</strong> network.`, 'error');
@@ -538,28 +552,30 @@
         walletType = 'freighter';
         proceedToApprove();
       } catch (e) {
+        console.error("Freighter Crash:", e);
         setStatus(status, 'Freighter error: ' + e.message, 'error');
       }
     }
 
     // ── Lobstr ──
     async function connectLobstr() {
+      console.log("Lobstr connection attempt started");
       const status = 'connect-status';
       try {
-        // Check for Lobstr's in-app browser injected API
-        if (typeof window.lobstrSignTransaction !== 'undefined' ||
-          typeof window.lobstr !== 'undefined') {
-          // Running inside Lobstr's in-app browser
+        const lobstr = window.lobstrSignTransaction || window.lobstr;
+        if (lobstr) {
+          console.log("Lobstr detected");
           const api = window.lobstr || {};
           if (api.getPublicKey) {
             connectedKey = await api.getPublicKey();
+            console.log("Lobstr Key:", connectedKey);
             walletType = 'lobstr';
             proceedToApprove();
             return;
           }
         }
 
-        // Fallback: prompt user to paste key and open Lobstr deep link for signing
+        console.log("Lobstr not detected directly, showing manual fallback");
         setStatus(status,
           '<strong>Lobstr Wallet</strong><br>' +
           'Option A: Open this page in Lobstr\'s in-app browser.<br>' +
@@ -567,12 +583,14 @@
           'info');
         walletType = 'lobstr';
       } catch (e) {
+        console.error("Lobstr Crash:", e);
         setStatus(status, 'Lobstr error: ' + e.message, 'error');
       }
     }
 
     // ── Manual Key Entry ──
     function useManualKey() {
+      console.log("Using manual key");
       const key = document.getElementById('manual-key').value.trim();
       if (!key.startsWith('G') || key.length !== 56) {
         setStatus('connect-status', 'Invalid Stellar public key. Must start with G and be 56 characters.', 'error');
@@ -584,6 +602,7 @@
     }
 
     function proceedToApprove() {
+      console.log("Proceeding to Step 2 with key:", connectedKey);
       document.getElementById('display-key').textContent = connectedKey;
       showStep('step-approve');
     }
