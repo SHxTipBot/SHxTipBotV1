@@ -268,6 +268,11 @@ async def build_approve_tx_xdr(
     """
     Build an *unsigned* transaction XDR that calls `approve` on the SHx SAC.
     """
+    if not SHX_SAC_CONTRACT_ID:
+        raise Exception("Environment variable SHX_SAC_CONTRACT_ID is missing or empty.")
+    if not SOROBAN_CONTRACT_ID:
+        raise Exception("Environment variable SOROBAN_CONTRACT_ID is missing or empty.")
+
     horizon_server = Server(HORIZON_URL)
 
     # Check if the account exists; on testnet, auto-fund if not
