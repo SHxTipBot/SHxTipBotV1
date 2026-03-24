@@ -57,98 +57,14 @@ EMBED_COLOR = 0x00C9FF
 ERROR_COLOR = 0xFF4C4C
 SUCCESS_COLOR = 0x00FF88
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
 def _footer(embed: discord.Embed) -> discord.Embed:
     embed.set_footer(text="SHx Tip Bot • Stronghold Community")
     return embed
 
 
-# ── Events ────────────────────────────────────────────────────────────────────
-
-@bot.event
-async def on_ready():
-    logger.info(f"Bot online as {bot.user} (ID: {bot.user.id})")
-    logger.info(f"Guild: {DISCORD_GUILD_ID} | Network: {stellar.STELLAR_NETWORK}")
-    
-    # Initialize DB and HTTP session
-    await db.init_db()
-    await stellar.get_session()
-    
-    try:
-        # Clear ALL old guild commands, then re-sync only what's defined
-        bot.tree.clear_commands(guild=guild_obj)
-        bot.tree.copy_global_to(guild=guild_obj)
-        synced = await bot.tree.sync(guild=guild_obj)
-        logger.info(f"Synced {len(synced)} slash commands (old commands cleared).")
-    except Exception as e:
-        logger.error(f"Command sync failed: {e}", exc_info=True)
-    
-    # Start background tasks
-    bot.loop.create_task(heartbeat())
-    bot.loop.create_task(start_deposit_monitor())
-
-async def start_deposit_monitor():
-    """Starts the Stellar deposit polling monitor."""
-    async def handle_deposit(memo_val: str, tx_hash: str, amount_shx: float, memo_type: str):
-        try:
-            target_discord_id = None
-            
-            # Case A: Numeric Memo ID (Standard Custodial)
-            if memo_type == "id":
-                target_discord_id = str(memo_val)
-            
-            # Case B: Text Memo (Moderator Funding)
-            elif memo_type == "text" and memo_val:
-                import re
-                id_match = re.search(r'(\d{17,20})', str(memo_val))
-                if id_match:
-                    target_discord_id = id_match.group(1)
-                else:
-                    logger.warning(f"DEPOSIT | Could not parse target user from text memo: '{memo_val}'")
-
-            if not target_discord_id:
-                logger.warning(f"DEPOSIT | Ignored tx {tx_hash} | No valid target user in memo ({memo_type}: {memo_val})")
-                return
-
-            # Credit the user
-            await db.add_deposit(target_discord_id, tx_hash, amount_shx)
-            
-            # Notify user
-            user = bot.get_user(int(target_discord_id))
-            if user:
-                embed = _footer(discord.Embed(
-                    title="💰 Deposit Confirmed",
-                    description=f"Your account has been credited with **{amount_shx:,.2f} SHx**.",
-                    color=SUCCESS_COLOR
-                ))
-                embed.add_field(name="Transaction", value=f"[View]({stellar.get_explorer_url(tx_hash)})")
-                try:
-                    await user.send(embed=embed)
-                except:
-                    pass
-        except Exception as e:
-            logger.error(f"Error processing deposit {tx_hash}: {e}")
-
-    await stellar.stream_deposits(cursor="now", callback=handle_deposit)
-
-async def heartbeat():
-    """Background task to log bot health every 15 minutes."""
-    while True:
-        try:
-            logger.info(f"HEARTBEAT | Bot Healthy | Latency: {bot.latency*1000:.2f}ms")
-        except Exception as e:
-            logger.error(f"Heartbeat error: {e}")
-        await asyncio.sleep(900)
-
-# Cleanup on shutdown
-_original_close = bot.close
-async def patched_close():
-    logger.info("Closing bot and cleaning up resources...")
-    await stellar.close_session()
-    await db.close_db()
-    await _original_close()
-bot.close = patched_close
+# ══════════════════════════════════════════════════════════════════════════════
+# COMMANDS — define ALL 5 commands BEFORE on_ready so they exist in the tree
+# ══════════════════════════════════════════════════════════════════════════════
 
 
 # ── /link ─────────────────────────────────────────────────────────────────────
@@ -161,7 +77,7 @@ async def link_command(interaction: Interaction):
 
     user_data = await db.get_or_create_user(discord_id)
     existing = user_data.get("stellar_public_key")
-    
+
     relink_note = ""
     if existing:
         relink_note = (
@@ -177,8 +93,8 @@ async def link_command(interaction: Interaction):
         description=(
             "To withdraw your tips, you must verify your Stellar address.\n\n"
             f"**[→ Click here to Verify]({link_url})**\n\n"
-            "⏰ Verification link expires in **15 minutes**.{relink}"
-        ).replace("{relink}", relink_note),
+            f"⏰ Verification link expires in **15 minutes**.{relink_note}"
+        ),
         color=EMBED_COLOR,
     ))
 
@@ -192,7 +108,7 @@ async def balance_command(interaction: Interaction):
     logger.info(f"COMMAND | /balance | User: {interaction.user} ({interaction.user.id})")
     await interaction.response.defer(ephemeral=True)
     discord_id = str(interaction.user.id)
-    
+
     try:
         await db.get_or_create_user(discord_id)
         balance = await db.get_internal_balance(discord_id)
@@ -207,7 +123,7 @@ async def balance_command(interaction: Interaction):
         await interaction.followup.send(embed=embed, ephemeral=True)
     except Exception as e:
         logger.error(f"Balance command error: {e}", exc_info=True)
-        await interaction.followup.send("❌ Failed to fetch balance. Please try again.", ephemeral=True)
+        await interaction.followup.send("❌ Failed to fetch balance. Please try again later.", ephemeral=True)
 
 
 # ── /deposit ──────────────────────────────────────────────────────────────────
@@ -217,10 +133,10 @@ async def deposit_command(interaction: Interaction):
     logger.info(f"COMMAND | /deposit | User: {interaction.user} ({interaction.user.id})")
     await interaction.response.defer(ephemeral=True)
     discord_id = str(interaction.user.id)
-    
+
     user_data = await db.get_or_create_user(discord_id)
-    memo_id = user_data["memo_id"]
-    
+    memo_id = user_data.get("memo_id", discord_id)
+
     embed = _footer(discord.Embed(
         title="📥 Deposit SHx",
         description=(
@@ -229,18 +145,17 @@ async def deposit_command(interaction: Interaction):
         ),
         color=EMBED_COLOR
     ))
-    
+
     embed.add_field(name="Bot Deposit Address", value=f"`{stellar.HOUSE_ACCOUNT_PUBLIC}`", inline=False)
     embed.add_field(name="Required Memo ID", value=f"`{memo_id}`", inline=False)
     embed.add_field(name="Asset", value=f"SHX (Issuer: `{stellar.SHX_ISSUER[:8]}...`)", inline=False)
-    
+
     embed.set_image(url=f"https://api.qrserver.com/v1/create-qr-code/?size=150x150&data={stellar.HOUSE_ACCOUNT_PUBLIC}")
-    
-    note = (
-        "⚠️ **IMPORTANT**: You MUST include the Memo ID or your deposit will be lost. "
-        "Funds are usually credited within 10-30 seconds after confirmation."
+
+    await interaction.followup.send(
+        content="⚠️ **IMPORTANT**: You MUST include the Memo ID or your deposit will be lost.",
+        embed=embed, ephemeral=True
     )
-    await interaction.followup.send(content=note, embed=embed, ephemeral=True)
 
 
 # ── /withdraw ─────────────────────────────────────────────────────────────────
@@ -251,31 +166,25 @@ async def withdraw_command(interaction: Interaction, amount: float, destination:
     logger.info(f"COMMAND | /withdraw | User: {interaction.user} ({interaction.user.id}) | Amount: {amount}")
     await interaction.response.defer(ephemeral=True)
     discord_id = str(interaction.user.id)
-    
-    # Validation
+
     if amount <= 0:
         await interaction.followup.send("❌ Amount must be greater than 0.", ephemeral=True)
         return
-        
+
     if not destination.startswith("G") or len(destination) != 56:
         await interaction.followup.send("❌ Invalid Stellar address.", ephemeral=True)
         return
 
-    # Check internal balance
     current_bal = await db.get_internal_balance(discord_id)
     if amount > current_bal:
         await interaction.followup.send(f"❌ Insufficient balance. You have **{current_bal:,.2f} SHx**.", ephemeral=True)
         return
 
-    # Process withdrawal
-    await interaction.followup.send(f"⏳ Processing withdrawal of **{amount:,.2f} SHx**...", ephemeral=True)
-    
-    withdrawal_memo = f"Withdrawal ({interaction.user.name})"
-    result = await stellar.send_withdrawal(destination, amount, memo=withdrawal_memo)
-    
+    result = await stellar.send_withdrawal(destination, amount, memo=f"Withdraw-{interaction.user.name}")
+
     if result["success"]:
         await db.add_deposit(discord_id, result["hash"], -amount)
-        
+
         embed = _footer(discord.Embed(
             title="✅ Withdrawal Successful",
             description=f"Sent **{amount:,.2f} SHx** to `{destination[:8]}...`",
@@ -307,7 +216,6 @@ async def tip_command(
     recipient_id = str(user.id)
     is_admin = sender_id in ADMIN_DISCORD_IDS
 
-    # Validation
     if user.bot:
         await interaction.followup.send("❌ Cannot tip bots.", ephemeral=True)
         return
@@ -324,16 +232,17 @@ async def tip_command(
         if not recipient_key:
             await interaction.followup.send(f"❌ {user.mention} hasn't linked a wallet yet.", ephemeral=True)
             return
-            
+
         if not await stellar.check_shx_trustline(recipient_key):
             await interaction.followup.send(f"❌ {user.mention} lacks an SHx trustline.", ephemeral=True)
             return
 
         memo_text = reason if reason else f"Tip from {interaction.user.name}"
-        if len(memo_text) > 28: memo_text = memo_text[:25] + "..."
+        if len(memo_text) > 28:
+            memo_text = memo_text[:25] + "..."
 
         result = await stellar.execute_tip(stellar.HOUSE_ACCOUNT_PUBLIC, recipient_key, amount, 0.0, memo=memo_text)
-        
+
         if result["success"]:
             embed = _footer(discord.Embed(title="🎁 Reward Sent!", color=SUCCESS_COLOR))
             embed.add_field(name="From", value=interaction.user.mention, inline=True)
@@ -348,8 +257,11 @@ async def tip_command(
         return
 
     # ── CASE 2: User Tip (Internal Transfer) ─────────────────────────────
-    fee_shx = 1.0 
+    fee_shx = 1.0
     total_needed = amount + fee_shx
+
+    # Ensure recipient exists in DB
+    await db.get_or_create_user(recipient_id)
 
     success = await db.transfer_internal(sender_id, recipient_id, amount, fee_shx, reason)
 
@@ -361,7 +273,6 @@ async def tip_command(
         embed.add_field(name="Fee", value=f"{fee_shx:,.2f} SHx", inline=True)
         if reason:
             embed.add_field(name="Reason", value=reason, inline=False)
-        
         await interaction.followup.send(embed=embed)
         logger.info(f"INTERNAL TIP OK | {sender_id}→{recipient_id} | {amount} SHx")
     else:
@@ -372,6 +283,108 @@ async def tip_command(
             f"Have: **{current_bal:,.2f} SHx**",
             ephemeral=True
         )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# EVENTS & BACKGROUND TASKS
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+@bot.event
+async def on_ready():
+    logger.info(f"Bot online as {bot.user} (ID: {bot.user.id})")
+    logger.info(f"Guild: {DISCORD_GUILD_ID} | Network: {stellar.STELLAR_NETWORK}")
+
+    # Initialize DB and HTTP session
+    await db.init_db()
+    await stellar.get_session()
+
+    # ── NUKE ALL OLD COMMANDS ──────────────────────────────────────────────
+    # 1. Clear global commands (previously synced to global scope)
+    bot.tree.clear_commands(guild=None)
+    try:
+        await bot.tree.sync()  # sync empty global → removes old global commands
+        logger.info("Cleared global slash commands.")
+    except Exception as e:
+        logger.warning(f"Could not clear global commands: {e}")
+
+    # 2. Clear guild commands and re-sync only our 5
+    bot.tree.clear_commands(guild=guild_obj)
+    # Re-add our 5 commands to the guild
+    bot.tree.add_command(link_command, guild=guild_obj)
+    bot.tree.add_command(balance_command, guild=guild_obj)
+    bot.tree.add_command(deposit_command, guild=guild_obj)
+    bot.tree.add_command(withdraw_command, guild=guild_obj)
+    bot.tree.add_command(tip_command, guild=guild_obj)
+
+    try:
+        synced = await bot.tree.sync(guild=guild_obj)
+        logger.info(f"Synced {len(synced)} guild slash commands (old commands nuked).")
+    except Exception as e:
+        logger.error(f"Guild command sync failed: {e}", exc_info=True)
+
+    # Start background tasks
+    bot.loop.create_task(heartbeat())
+    bot.loop.create_task(start_deposit_monitor())
+
+
+async def start_deposit_monitor():
+    """Start the Stellar deposit polling monitor."""
+    import re
+
+    async def handle_deposit(memo_val, tx_hash, amount_shx, memo_type):
+        try:
+            target_discord_id = None
+
+            if memo_type == "id":
+                target_discord_id = str(memo_val)
+            elif memo_type == "text" and memo_val:
+                id_match = re.search(r'(\d{17,20})', str(memo_val))
+                if id_match:
+                    target_discord_id = id_match.group(1)
+
+            if not target_discord_id:
+                logger.warning(f"DEPOSIT | Ignored tx {tx_hash} | No valid memo ({memo_type}: {memo_val})")
+                return
+
+            await db.add_deposit(target_discord_id, tx_hash, amount_shx)
+            logger.info(f"DEPOSIT | Credited {amount_shx} SHx to {target_discord_id}")
+
+            user = bot.get_user(int(target_discord_id))
+            if user:
+                embed = _footer(discord.Embed(
+                    title="💰 Deposit Confirmed",
+                    description=f"Your account has been credited with **{amount_shx:,.2f} SHx**.",
+                    color=SUCCESS_COLOR
+                ))
+                try:
+                    await user.send(embed=embed)
+                except Exception:
+                    pass
+        except Exception as e:
+            logger.error(f"Error processing deposit {tx_hash}: {e}")
+
+    await stellar.stream_deposits(cursor="now", callback=handle_deposit)
+
+
+async def heartbeat():
+    """Log bot health every 15 minutes."""
+    while True:
+        try:
+            logger.info(f"HEARTBEAT | Bot Healthy | Latency: {bot.latency * 1000:.2f}ms")
+        except Exception as e:
+            logger.error(f"Heartbeat error: {e}")
+        await asyncio.sleep(900)
+
+
+# Cleanup on shutdown
+_original_close = bot.close
+async def patched_close():
+    logger.info("Closing bot and cleaning up resources...")
+    await stellar.close_session()
+    await db.close_db()
+    await _original_close()
+bot.close = patched_close
 
 
 # ── Entry Point ───────────────────────────────────────────────────────────────
