@@ -8,7 +8,7 @@ import asyncio
 import logging
 import aiohttp
 from stellar_sdk import (
-    Keypair, Network, Server, TransactionBuilder, Asset,
+    Keypair, Network, Server, ServerAsync, AiohttpClient, TransactionBuilder, Asset,
     SorobanServer, scval,
 )
 from stellar_sdk.soroban_rpc import GetTransactionStatus, SendTransactionStatus
@@ -592,53 +592,53 @@ async def build_approve_tx_xdr(
 
 async def stream_deposits(cursor: str = "now", callback=None):
     """
-    Continually stream payments to the House account.
-    If a payment is SHX and has a valid Memo ID, call the callback.
+    Continually poll for payments to the House account using ServerAsync with an explicit AiohttpClient.
     """
-    server = Server(HORIZON_URL)
-    logger.info(f"Starting deposit stream for {HOUSE_ACCOUNT_PUBLIC[:8]}... from cursor {cursor}")
+    logger.info(f"Starting deposit monitor for {HOUSE_ACCOUNT_PUBLIC[:8]}... from cursor {cursor}")
     
-    # We use a loop with a small sleep to handle connection drops
     while True:
         try:
-            async for payment in server.payments().for_account(HOUSE_ACCOUNT_PUBLIC).cursor(cursor).stream():
-                # We only care about 'payment' (type 1) or 'path_payment_strict_receive' (type 13)
-                if payment.get("type") not in ("payment", "path_payment_strict_receive"):
-                    cursor = payment.get("paging_token", cursor)
-                    continue
-                
-                # Check asset
-                if (payment.get("asset_code") != SHX_ASSET_CODE or 
-                    payment.get("asset_issuer") != SHX_ISSUER):
-                    cursor = payment.get("paging_token", cursor)
-                    continue
-                
-                # Check destination (must be our House account)
-                if payment.get("to") != HOUSE_ACCOUNT_PUBLIC:
-                    cursor = payment.get("paging_token", cursor)
-                    continue
-
-                tx_hash = payment.get("transaction_hash")
-                amount_str = payment.get("amount")
-                amount_shx = float(amount_str)
-                
-                # Fetch transaction to get Memo
-                try:
-                    # Use a session-based approach if possible, but Server.transactions() is fine
-                    tx = server.transactions().transaction(tx_hash).call()
-                    memo_type = tx.get("memo_type")
-                    memo_val = tx.get("memo") # Could be string or int
+            # Explicit AiohttpClient() to bypass internal HAS_AIOHTTP check issues
+            async with ServerAsync(HORIZON_URL, client=AiohttpClient()) as server:
+                while True:
+                    # Polling 10 at a time
+                    response = await server.payments().for_account(HOUSE_ACCOUNT_PUBLIC).cursor(cursor).limit(10).call()
+                    records = response.get("_embedded", {}).get("records", [])
                     
-                    if callback:
-                        # We pass the raw memo value and type to the bot for parsing
-                        # It could be a numeric ID or a @username string
-                        await callback(memo_val, tx_hash, amount_shx, memo_type)
-                except Exception as e:
-                    logger.error(f"Error fetching tx details for {tx_hash}: {e}")
-                
-                cursor = payment.get("paging_token", cursor)
+                    if not records:
+                        # No new records, wait 10 seconds
+                        await asyncio.sleep(10)
+                        continue
+
+                    for r in records:
+                        # Update cursor
+                        cursor = r.get("paging_token", cursor)
+                        
+                        if r.get("type") not in ("payment", "path_payment_strict_receive"):
+                            continue
+                        
+                        if (r.get("asset_code") != SHX_ASSET_CODE or 
+                            r.get("asset_issuer") != SHX_ISSUER):
+                            continue
+                        
+                        if r.get("to") != HOUSE_ACCOUNT_PUBLIC:
+                            continue
+
+                        tx_hash = r.get("transaction_hash")
+                        amount_shx = float(r.get("amount"))
+                        
+                        try:
+                            tx = await server.transactions().transaction(tx_hash).call()
+                            memo_type = tx.get("memo_type")
+                            memo_val = tx.get("memo")
+                            
+                            if callback:
+                                await callback(memo_val, tx_hash, amount_shx, memo_type)
+                        except Exception as ex:
+                            logger.error(f"Error fetching tx details for {tx_hash}: {ex}")
+
         except Exception as e:
-            logger.error(f"Stream encountered error: {e}. Retrying in 5s...")
+            logger.error(f"Deposit monitor encountered error: {e}. Retrying in 5s...")
             await asyncio.sleep(5)
 
 async def send_withdrawal(destination: str, amount_shx: float, memo: str = None) -> dict:

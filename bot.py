@@ -76,9 +76,11 @@ async def on_ready():
     await stellar.get_session()
     
     try:
+        # Clear ALL old guild commands, then re-sync only what's defined
+        bot.tree.clear_commands(guild=guild_obj)
         bot.tree.copy_global_to(guild=guild_obj)
         synced = await bot.tree.sync(guild=guild_obj)
-        logger.info(f"Synced {len(synced)} slash commands.")
+        logger.info(f"Synced {len(synced)} slash commands (old commands cleared).")
     except Exception as e:
         logger.error(f"Command sync failed: {e}", exc_info=True)
     

@@ -113,6 +113,19 @@ async def init_db():
                 )
             """)
     logger.info("Database initialized successfully.")
+    
+    # Migration: ensure internal_balance column exists (may be missing on older DBs)
+    async with pool.acquire() as conn:
+        try:
+            await conn.execute("""
+                ALTER TABLE users ADD COLUMN IF NOT EXISTS internal_balance REAL DEFAULT 0.0
+            """)
+            await conn.execute("""
+                ALTER TABLE users ADD COLUMN IF NOT EXISTS memo_id BIGINT
+            """)
+            logger.info("Database migration check complete.")
+        except Exception as e:
+            logger.warning(f"Migration note: {e}")
 
 # ── Helper for param conversion ───────────────────────────────────────────────
 
