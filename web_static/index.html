@@ -1,23 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SHx Tip Bot — Link Wallet</title>
-  <meta name="description"
-    content="Connect your Stellar wallet to the SHx Tip Bot for the Stronghold Discord community.">
+  <title>SHx Tip Bot — Dashboard</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/stellar-sdk/10.4.1/stellar-sdk.js"></script>
   <style>
-    *,
-    *::before,
-    *::after {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-
     :root {
       --bg: #0a0e1a;
       --surface: rgba(255, 255, 255, 0.04);
@@ -26,725 +16,245 @@
       --text: #e4e8f1;
       --text-muted: #8892a8;
       --accent: #00c9ff;
-      --accent-glow: rgba(0, 201, 255, 0.25);
       --success: #00ff88;
       --error: #ff4c4c;
-      --lobstr: #6c63ff;
-      --freighter: #00c9ff;
-      --radius: 14px;
+      --radius: 16px;
     }
 
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: 'Inter', system-ui, sans-serif;
       background: var(--bg);
       color: var(--text);
       min-height: 100vh;
       display: flex;
+      flex-direction: column;
       align-items: center;
-      justify-content: center;
-      padding: 24px;
-      background-image:
-        radial-gradient(ellipse 60% 50% at 50% 0%, rgba(0, 201, 255, 0.08), transparent),
-        radial-gradient(ellipse 40% 40% at 80% 90%, rgba(108, 99, 255, 0.06), transparent);
-      position: relative;
-      overflow: hidden;
+      padding: 40px 20px;
+      overflow-x: hidden;
     }
 
-    /* Stronghold castle logo watermark */
+    /* Background Castle Watermark */
     body::before {
       content: '';
       position: fixed;
-      top: 50%;
-      left: 50%;
+      top: 50%; left: 50%;
       transform: translate(-50%, -50%);
-      width: 90vmin;
-      height: 90vmin;
-      background-image: url('https://cdn.prod.website-files.com/5e9a1cde22bbc0a89dba7f5b/60c9649cf8fb48e5c883950e_Stronghold%20Logo%20Mark%20Blue.png');
+      width: 80vmin; height: 80vmin;
+      background: url('https://cdn.prod.website-files.com/5e9a1cde22bbc0a89dba7f5b/60c9649cf8fb48e5c883950e_Stronghold%20Logo%20Mark%20Blue.png') no-repeat center;
       background-size: contain;
-      background-repeat: no-repeat;
-      background-position: center;
-      opacity: 0.18;
+      opacity: 0.12;
+      z-index: -1;
       pointer-events: none;
-      z-index: 0;
-      animation: floatLogo 20s ease-in-out infinite;
     }
 
-    @keyframes floatLogo {
-
-      0%,
-      100% {
-        transform: translate(-50%, -50%) scale(1);
-      }
-
-      50% {
-        transform: translate(-50%, -50%) scale(1.05);
-      }
-    }
-
-    .card {
-      position: relative;
-      z-index: 1;
-    }
-
-    .card {
+    .container {
       width: 100%;
-      max-width: 480px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      -webkit-backdrop-filter: blur(24px);
-      backdrop-filter: blur(24px);
-      padding: 40px 32px;
-      margin-top: 80px;
-      /* Shift down to reveal castle top */
-      animation: fadeUp 0.5s ease-out;
+      max-width: 500px;
+      animation: fadeUp 0.6s ease-out;
     }
 
     @keyframes fadeUp {
-      from {
-        opacity: 0;
-        transform: translateY(16px);
-      }
-
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
     }
 
-    .logo {
-      text-align: center;
-      margin-bottom: 28px;
-    }
-
-    .logo h1 {
-      font-size: 1.5rem;
-      font-weight: 700;
-      background: linear-gradient(135deg, var(--accent), var(--lobstr));
+    .header { text-align: center; margin-bottom: 32px; }
+    .header h1 { 
+      font-size: 1.8rem; 
+      margin-bottom: 4px; 
+      background: linear-gradient(135deg, var(--accent), #6c63ff);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
+    .header p { color: var(--text-muted); font-size: 0.95rem; }
 
-    .logo p {
-      color: var(--text-muted);
-      font-size: 0.85rem;
-      margin-top: 6px;
-    }
-
-    .network-badge {
-      display: inline-block;
-      font-size: 0.7rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      padding: 3px 10px;
-      border-radius: 99px;
-      margin-top: 10px;
-    }
-
-    .network-badge.testnet {
-      background: rgba(255, 170, 0, 0.15);
-      color: #ffaa00;
-    }
-
-    .network-badge.public {
-      background: rgba(0, 255, 136, 0.15);
-      color: var(--success);
-    }
-
-    /* Steps */
-    .step {
-      display: none;
-    }
-
-    .step.active {
-      display: block;
-      animation: fadeUp 0.35s ease-out;
-    }
-
-    .step-label {
-      font-size: 0.75rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      color: var(--text-muted);
-      margin-bottom: 16px;
-    }
-
-    /* Buttons */
-    .btn {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-      width: 100%;
-      padding: 14px 20px;
+    .card {
+      background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 10px;
+      border-radius: var(--radius);
+      backdrop-filter: blur(20px);
+      padding: 32px;
+      margin-bottom: 20px;
+    }
+
+    .balance-label { font-size: 0.85rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    .balance-val { font-size: 2.4rem; font-weight: 700; margin: 8px 0; color: var(--accent); }
+    .balance-sub { font-size: 0.9rem; color: var(--text-muted); }
+
+    .section-title { font-size: 1rem; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+    
+    .info-box {
+      background: rgba(0,0,0,0.2);
+      border: 1px dashed var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+      position: relative;
+    }
+    .info-box label { display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px; }
+    .info-box span { font-family: monospace; font-size: 0.95rem; word-break: break-all; color: var(--text); }
+    .copy-btn { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); cursor: pointer; opacity: 0.6; transition: 0.2s; }
+    .copy-btn:hover { opacity: 1; color: var(--accent); }
+
+    .memo-highlight { border-color: var(--accent); background: rgba(0, 201, 255, 0.05); }
+    .memo-val { font-size: 1.4rem !important; font-weight: 700; color: var(--accent) !important; }
+
+    .qr-container { text-align: center; margin: 24px 0; }
+    .qr-container img { border-radius: 12px; border: 4px solid #fff; width: 140px; }
+
+    .btn {
+      width: 100%;
+      padding: 14px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
       font-family: inherit;
       font-size: 0.95rem;
       font-weight: 600;
       cursor: pointer;
-      transition: all 0.2s;
-      color: var(--text);
-      background: var(--surface);
-    }
-
-    .btn:hover {
+      transition: 0.2s;
       background: var(--surface-hover);
-      border-color: var(--accent);
-    }
-
-    .btn:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-
-    .btn-freighter {
-      border-color: rgba(0, 201, 255, 0.3);
-    }
-
-    .btn-freighter:hover {
-      box-shadow: 0 0 20px var(--accent-glow);
-    }
-
-    .btn-lobstr {
-      border-color: rgba(108, 99, 255, 0.3);
-    }
-
-    .btn-lobstr:hover {
-      box-shadow: 0 0 20px rgba(108, 99, 255, 0.25);
-    }
-
-    .btn-primary {
-      background: linear-gradient(135deg, var(--accent), #0090cc);
-      border: none;
-      color: #fff;
-    }
-
-    .btn-primary:hover {
-      filter: brightness(1.15);
-    }
-
-    .btn+.btn {
-      margin-top: 12px;
-    }
-
-    .divider {
+      color: var(--text);
       display: flex;
-      align-items: center;
-      gap: 12px;
-      margin: 20px 0;
-      color: var(--text-muted);
-      font-size: 0.8rem;
+      items-center: center;
+      justify-content: center;
+      gap: 10px;
     }
+    .btn:hover { border-color: var(--accent); background: rgba(0,201,255,0.1); }
+    .btn-primary { background: var(--accent); color: #000; border: none; }
+    .btn-primary:hover { filter: brightness(1.1); }
 
-    .divider::before,
-    .divider::after {
-      content: '';
-      flex: 1;
-      height: 1px;
-      background: var(--border);
-    }
+    .status { margin-top: 12px; padding: 12px; border-radius: 8px; font-size: 0.85rem; text-align: center; display: none; }
+    .status.success { display: block; background: rgba(0, 255, 136, 0.1); color: var(--success); border: 1px solid rgba(0, 255, 136, 0.2); }
+    .status.error { display: block; background: rgba(255, 76, 76, 0.1); color: var(--error); border: 1px solid rgba(255, 76, 76, 0.2); }
 
-    /* Manual input */
-    .input-group {
-      margin-top: 16px;
-    }
+    .instructions { font-size: 0.85rem; color: var(--text-muted); line-height: 1.6; }
+    .instructions strong { color: var(--text); }
 
-    .input-group label {
-      display: block;
-      font-size: 0.8rem;
-      font-weight: 500;
-      color: var(--text-muted);
-      margin-bottom: 6px;
-    }
-
-    .input-group input {
-      width: 100%;
-      padding: 12px 14px;
-      background: rgba(0, 0, 0, 0.3);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      color: var(--text);
-      font-family: 'Inter', monospace;
-      font-size: 0.85rem;
-      outline: none;
-      transition: border-color 0.2s;
-    }
-
-    .input-group input:focus {
-      border-color: var(--accent);
-    }
-
-    .input-group input::placeholder {
-      color: rgba(255, 255, 255, 0.2);
-    }
-
-    /* Status */
-    .status {
-      margin-top: 16px;
-      padding: 12px 16px;
-      border-radius: 8px;
-      font-size: 0.85rem;
-      line-height: 1.5;
-    }
-
-    .status.error {
-      background: rgba(255, 76, 76, 0.12);
-      color: var(--error);
-    }
-
-    .status.success {
-      background: rgba(0, 255, 136, 0.12);
-      color: var(--success);
-    }
-
-    .status.info {
-      background: rgba(0, 201, 255, 0.12);
-      color: var(--accent);
-    }
-
-    .connected-addr {
-      margin: 16px 0;
-      padding: 12px 16px;
-      background: rgba(0, 201, 255, 0.06);
-      border: 1px solid rgba(0, 201, 255, 0.15);
-      border-radius: 8px;
-      font-family: monospace;
-      font-size: 0.8rem;
-      word-break: break-all;
-      color: var(--accent);
-    }
-
-    .instructions {
-      margin-top: 20px;
-      padding: 16px;
-      background: var(--surface);
-      border-radius: 8px;
-      font-size: 0.82rem;
-      line-height: 1.6;
-      color: var(--text-muted);
-    }
-
-    .instructions strong {
-      color: var(--text);
-    }
-
-    .spinner {
-      display: inline-block;
-      width: 16px;
-      height: 16px;
-      border: 2px solid rgba(255, 255, 255, 0.2);
-      border-top-color: var(--accent);
-      border-radius: 50%;
-      animation: spin 0.6s linear infinite;
-    }
-
-    @keyframes spin {
-      to {
-        transform: rotate(360deg);
-      }
-    }
-
-    .icon {
-      width: 22px;
-      height: 22px;
-    }
-
-    .wallet-logo {
-      width: 24px;
-      height: 24px;
-      border-radius: 6px;
-      object-fit: contain;
-    }
-
-    .mt-12 { margin-top: 12px; }
-    .step-desc-small { font-size: 0.88rem; color: var(--text-muted); margin-bottom: 12px; }
-    .step-instructions { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 20px; line-height: 1.5; }
-    .btn-back { margin-top: 8px; font-size: 0.82rem; }
-    .done-header { text-align: center; padding: 20px 0; }
-    .done-icon { font-size: 3rem; margin-bottom: 16px; }
-    .done-title { font-size: 1.3rem; margin-bottom: 8px; }
-    .done-desc { color: var(--text-muted); font-size: 0.9rem; }
+    .badge { font-size: 0.65rem; background: rgba(255,170,0,0.15); color: #ffaa00; padding: 2px 8px; border-radius: 10px; margin-left: 8px; vertical-align: middle; }
   </style>
 </head>
-
 <body>
 
-  <div class="card">
-    <div class="logo">
+  <div class="container">
+    <div class="header">
       <h1>SHx Tip Bot</h1>
-      <p>Stronghold Discord Community</p>
+      <p>Custodial Wallet Dashboard</p>
     </div>
 
-    <!-- ── Step 1: Choose Wallet ── -->
-    <div class="step active" id="step-connect">
-      <div class="step-label">Step 1 — Connect Wallet</div>
+    <!-- Balance Card -->
+    <div class="card">
+      <div class="balance-label">Current Tipping Balance</div>
+      <div class="balance-val">{{INTERNAL_BALANCE}} SHX</div>
+      <div class="balance-sub">Ready for tipping in Discord!</div>
+    </div>
 
-      <!-- Existing Link Section -->
-      <div id="existing-link-section" style="display: none; margin-bottom: 24px; padding: 18px; background: rgba(0, 201, 255, 0.05); border: 1px solid rgba(0, 201, 255, 0.15); border-radius: 12px; text-align: center;">
-        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 8px;">Current linked wallet:</p>
-        <code id="existing-key-display" style="font-size: 0.8rem; word-break: break-all; color: var(--accent); display: block; margin-bottom: 16px;"></code>
-        <button class="btn" id="btn-unlink" style="border-color: rgba(255, 76, 76, 0.3); color: var(--error); padding: 10px;" onclick="confirmUnlink()">
-          Unlink Current Wallet
+    <!-- Deposit Card -->
+    <div class="card">
+      <div class="section-title">
+        <span>📥 Deposit Funds</span>
+        <span class="badge">{{NETWORK}}</span>
+      </div>
+      
+      <p class="instructions" style="margin-bottom: 20px;">
+        Send SHX to the address below. **Memo ID is mandatory** to credit your account.
+      </p>
+
+      <div class="info-box">
+        <label>Deposit Address</label>
+        <span id="addr-text">{{HOUSE_ACCOUNT_PUBLIC}}</span>
+        <div class="copy-btn" onclick="copy('addr-text')">📋</div>
+      </div>
+
+      <div class="info-box memo-highlight">
+        <label>Required Memo ID (MEMO_ID)</label>
+        <span class="memo-val" id="memo-text">{{MEMO_ID}}</span>
+        <div class="copy-btn" onclick="copy('memo-text')">📋</div>
+      </div>
+
+      <div class="qr-container">
+        <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data={{HOUSE_ACCOUNT_PUBLIC}}" alt="QR Code">
+        <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 8px;">Scan to copy address</p>
+      </div>
+    </div>
+
+    <!-- Verification Card -->
+    <div class="card">
+      <div class="section-title">🔗 Withdrawal Verification</div>
+      <p class="instructions" style="margin-bottom: 20px;">
+        Verify your external Stellar wallet to enable secure withdrawals.
+      </p>
+
+      <div id="verify-section">
+        <button class="btn" onclick="verifyWallet()" id="btn-verify">
+          Verify with Wallet Extension
         </button>
-        <div class="divider" style="margin: 20px 0 10px 0;">or link a new one</div>
       </div>
 
-      <button class="btn btn-freighter" onclick="connectFreighter()">
-        <img class="wallet-logo"
-          src="https://lh3.googleusercontent.com/_IWkBPJYpuslJcxNCIxeoJqmKJ8WOek43XeEsE_EiDrMzawR31KTAVweF-oyGVKJjW9kbDkxByD6mpYoV7H8uGQA=s240"
-          alt="Freighter">
-        Connect with Freighter
-      </button>
-
-      <button class="btn btn-lobstr" onclick="connectLobstr()">
-        <img class="wallet-logo"
-          src="https://play-lh.googleusercontent.com/BFTQEU3Eb_H2362blCcI-mkGMkBayGm3R-rGlj1D1qZzbDJDKA0nvW45Nr8IgltVpdo=s240-rw"
-          alt="LOBSTR">
-        Connect with Lobstr
-      </button>
-
-      <div class="divider">or enter manually</div>
-
-      <div class="input-group">
-        <label for="manual-key">Stellar Public Key</label>
-        <input type="text" id="manual-key" placeholder="G..." maxlength="56">
+      <div id="status-box" class="status"></div>
+      
+      <div class="instructions" style="margin-top: 20px;">
+        Linked Address: <br>
+        <strong id="linked-addr">{{EXISTING_KEY or 'None linked yet'}}</strong>
       </div>
-
-      <button class="btn mt-12" onclick="useManualKey()">
-        Use This Key
-      </button>
-
-      <div id="connect-status"></div>
     </div>
 
-    <!-- ── Step 2: Approve & Link ── -->
-    <div class="step" id="step-approve">
-      <div class="step-label">Step 2 — Approve & Link</div>
-
-      <p class="step-desc-small">
-        Connected wallet:
-      </p>
-      <div class="connected-addr" id="display-key"></div>
-
-      <p class="step-instructions">
-        Sign the approval transaction to allow the SHx Tip Bot contract to transfer SHx on
-        your behalf when you use <code>/tip</code> in Discord.
-      </p>
-
-      <button class="btn btn-primary" id="btn-approve" onclick="approveAndLink()">
-        Sign & Link Wallet
-      </button>
-
-      <button class="btn btn-back" onclick="goBack()">
-        ← Choose a different wallet
-      </button>
-
-      <div id="approve-status"></div>
-    </div>
-
-    <!-- ── Step 3: Done ── -->
-    <div class="step" id="step-done">
-      <div class="done-header">
-        <div class="done-icon">🎉</div>
-        <h2 class="done-title" id="done-title">Wallet Linked!</h2>
-        <p class="done-desc" id="done-desc">
-          Return to Discord and start tipping with <code>/tip</code>.
-        </p>
-      </div>
-
-      <div class="instructions">
-        <strong>Quick Start:</strong><br>
-        • <code>/tip @user 10 Great work!</code> — send 10 SHx<br>
-        • <code>/balance</code> — check your SHx balance<br>
-        • A small dynamic fee (based on network costs) is charged per tip.
-      </div>
-
-      <div id="done-trustline-warning"></div>
-    </div>
+    <p style="text-align: center; font-size: 0.75rem; color: var(--text-muted); opacity: 0.5;">
+      SHx Tip Bot • v2.0 Custodial Architecture
+    </p>
   </div>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/stellar-sdk/10.4.1/stellar-sdk.js"></script>
   <script>
-    // ── Injected Config ──
     const TOKEN = "{{TOKEN}}";
-    const NETWORK = "{{NETWORK}}";
-    const NETWORK_PASSPHRASE = "{{NETWORK_PASSPHRASE}}";
-    const EXISTING_KEY = "{{EXISTING_KEY}}";
     const API_BASE = window.location.origin;
 
-    window.onload = () => {
-      if (EXISTING_KEY && EXISTING_KEY !== "") {
-        document.getElementById('existing-link-section').style.display = 'block';
-        document.getElementById('existing-key-display').textContent = EXISTING_KEY;
-      }
-    };
-
-    let connectedKey = null;
-    let walletType = null; // "freighter" | "lobstr" | "manual"
-
-    // ── Step Navigation ──
-    function showStep(id) {
-      document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
-      document.getElementById(id).classList.add('active');
+    function copy(id) {
+      const text = document.getElementById(id).innerText;
+      navigator.clipboard.writeText(text);
+      alert("Copied to clipboard!");
     }
 
-    function goBack() {
-      connectedKey = null;
-      walletType = null;
-      showStep('step-connect');
-    }
-
-    function setStatus(elId, msg, type) {
-      const el = document.getElementById(elId);
-      el.className = 'status ' + type;
-      el.innerHTML = msg;
-      el.style.display = 'block';
-    }
-
-    // ── Freighter ──
-    async function connectFreighter() {
-      console.log("Freighter connection attempt started");
-      const status = 'connect-status';
+    async function verifyWallet() {
+      const btn = document.getElementById('btn-verify');
+      const status = document.getElementById('status-box');
+      
       try {
-        const freighter = window.freighterApi || window.freighter;
-        if (!freighter) {
-          console.error("Freighter extension not detected");
-          setStatus(status, 'Freighter extension not detected. <a href="https://freighter.app" target="_blank" style="color:var(--accent);">Install Freighter</a>', 'error');
-          return;
+        if (typeof window.freighterApi === 'undefined') {
+          throw new Error("Freighter not detected. Please install Freighter extension.");
         }
 
-        console.log("Requesting Freighter access...");
-        const allowed = await freighter.requestAccess();
-        console.log("Freighter access response:", allowed);
-        
-        if (!allowed || allowed === "denied" || (typeof allowed === 'object' && allowed.error)) {
-          setStatus(status, 'Access denied by Freighter.', 'error');
-          return;
-        }
+        btn.disabled = true;
+        btn.innerText = "Connecting...";
 
-        console.log("Fetching address...");
-        const { publicKey, error } = await freighter.getAddress();
-        if (error) {
-          console.error("Freighter getAddress error:", error);
-          setStatus(status, 'Could not retrieve public key: ' + error, 'error');
-          return;
-        }
-        
-        if (!publicKey) {
-          setStatus(status, 'Could not retrieve public key.', 'error');
-          return;
-        }
-        console.log("Connected Key:", publicKey);
+        const { publicKey } = await window.freighterApi.getAddress();
+        if (!publicKey) throw new Error("Could not get address.");
 
-        console.log("Checking network...");
-        const network = await freighter.getNetwork();
-        console.log("Freighter network:", network);
-        
-        const expectedNetwork = NETWORK === 'testnet' ? 'TESTNET' : 'PUBLIC';
-        if (network && network.toUpperCase() !== expectedNetwork) {
-          setStatus(status, `Please switch Freighter to <strong>${NETWORK}</strong> network.`, 'error');
-          return;
-        }
-
-        connectedKey = publicKey;
-        walletType = 'freighter';
-        proceedToApprove();
-      } catch (e) {
-        console.error("Freighter Crash:", e);
-        setStatus(status, 'Freighter error: ' + e.message, 'error');
-      }
-    }
-
-    // ── Lobstr ──
-    async function connectLobstr() {
-      console.log("Lobstr connection attempt started");
-      const status = 'connect-status';
-      try {
-        const lobstr = window.lobstrSignTransaction || window.lobstr;
-        if (lobstr) {
-          console.log("Lobstr detected");
-          const api = window.lobstr || {};
-          if (api.getPublicKey) {
-            connectedKey = await api.getPublicKey();
-            console.log("Lobstr Key:", connectedKey);
-            walletType = 'lobstr';
-            proceedToApprove();
-            return;
-          }
-        }
-
-        console.log("Lobstr not detected directly, showing manual fallback");
-        setStatus(status,
-          '<strong>Lobstr Wallet</strong><br>' +
-          'Option A: Open this page in Lobstr\'s in-app browser.<br>' +
-          'Option B: Enter your public key below, then sign the approval in Lobstr when prompted.',
-          'info');
-        walletType = 'lobstr';
-      } catch (e) {
-        console.error("Lobstr Crash:", e);
-        setStatus(status, 'Lobstr error: ' + e.message, 'error');
-      }
-    }
-
-    // ── Manual Key Entry ──
-    function useManualKey() {
-      console.log("Using manual key");
-      const key = document.getElementById('manual-key').value.trim();
-      if (!key.startsWith('G') || key.length !== 56) {
-        setStatus('connect-status', 'Invalid Stellar public key. Must start with G and be 56 characters.', 'error');
-        return;
-      }
-      connectedKey = key;
-      walletType = 'manual';
-      proceedToApprove();
-    }
-
-    function proceedToApprove() {
-      console.log("Proceeding to Step 2 with key:", connectedKey);
-      document.getElementById('display-key').textContent = connectedKey;
-      showStep('step-approve');
-    }
-
-    // ── Approve & Link ──
-    async function approveAndLink() {
-      const btn = document.getElementById('btn-approve');
-      const status = 'approve-status';
-      btn.disabled = true;
-      btn.innerHTML = '<span class="spinner"></span> Processing...';
-
-      try {
-        // 1. Get the unsigned approve TX from the server
-        const txRes = await fetch(API_BASE + '/api/approve-tx', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ public_key: connectedKey }),
-        });
-        const txData = await txRes.json();
-
-        if (!txData.success) {
-          setStatus(status, 'Failed to build approval TX: ' + (txData.detail || 'Unknown error'), 'error');
-          btn.disabled = false;
-          btn.textContent = 'Sign & Link Wallet';
-          return;
-        }
-
-        const xdr = txData.xdr;
-
-        // 2. Sign the transaction with the user's wallet
-        let signedXdr = null;
-
-        if (walletType === 'freighter') {
-          const api = window.freighterApi || window.freighter;
-          const result = await api.signTransaction(xdr, { networkPassphrase: NETWORK_PASSPHRASE });
-          signedXdr = typeof result === 'string' ? result : result.signedTxXdr;
-        } else if (walletType === 'lobstr' && window.lobstrSignTransaction) {
-          signedXdr = await window.lobstrSignTransaction(xdr);
-        } else {
-          // For manual / lobstr fallback: show XDR and instructions
-          // Create a SEP-0007 deep link for Lobstr
-          const sep7 = 'web+stellar:tx?xdr=' + encodeURIComponent(xdr)
-            + '&network_passphrase=' + encodeURIComponent(NETWORK_PASSPHRASE);
-
-          setStatus(status,
-            '<strong>Sign this transaction in your wallet:</strong><br><br>' +
-            '<a href="' + sep7 + '" style="color:var(--lobstr); word-break:break-all;">Open in Lobstr / Wallet</a><br><br>' +
-            'After signing and submitting the transaction in your wallet app, ' +
-            'click "Complete Link" below.',
-            'info');
-
-          btn.textContent = 'Complete Link (skip signing)';
-          btn.disabled = false;
-          btn.onclick = () => linkOnly();
-          return;
-        }
-
-        // 3. TODO: Submit signed TX to Horizon (or the wallet may auto-submit)
-        // For Freighter, the signed TX is returned but not submitted.
-        // We could submit it via the backend, but for simplicity we assume
-        // the wallet handles submission or we submit here.
-
-        // 4. Link the wallet
-        await linkOnly();
-
-      } catch (e) {
-        setStatus(status, 'Error: ' + e.message, 'error');
-        btn.disabled = false;
-        btn.textContent = 'Sign & Link Wallet';
-      }
-    }
-
-    async function linkOnly() {
-      const status = 'approve-status';
-      const btn = document.getElementById('btn-approve');
-      btn.disabled = true;
-      btn.innerHTML = '<span class="spinner"></span> Linking...';
-
-      try {
         const res = await fetch(API_BASE + '/api/link', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: TOKEN, public_key: connectedKey }),
+          body: JSON.stringify({ token: TOKEN, public_key: publicKey })
         });
+        
         const data = await res.json();
-
         if (data.success) {
-          // Show trustline warning if needed
-          if (!data.has_shx_trustline) {
-            document.getElementById('done-trustline-warning').innerHTML =
-              '<div class="status error" style="margin-top:16px;">⚠️ Your wallet does not have an SHx trustline yet. ' +
-              'You must add a trustline for SHx before you can receive tips.</div>';
-          }
-          showStep('step-done');
+          status.className = "status success";
+          status.innerText = "Wallet verified successfully!";
+          document.getElementById('linked-addr').innerText = publicKey;
         } else {
-          setStatus(status, data.detail || data.message || 'Linking failed.', 'error');
-          btn.disabled = false;
-          btn.textContent = 'Sign & Link Wallet';
+          throw new Error(data.detail || "Verification failed.");
         }
       } catch (e) {
-        setStatus(status, 'Network error: ' + e.message, 'error');
+        status.className = "status error";
+        status.innerText = e.message;
         btn.disabled = false;
-        btn.textContent = 'Sign & Link Wallet';
+        btn.innerText = "Retry Verification";
       }
     }
-
-    // ── Unlink ──
-    async function confirmUnlink() {
-      if (!confirm("Are you sure you want to unlink your wallet from this Discord account? This will prevent you from tipping until you relink.")) {
-        return;
-      }
-      
-      const btn = document.getElementById('btn-unlink');
-      const status = 'approve-status';
-      btn.disabled = true;
-      btn.innerHTML = '<span class="spinner"></span> Unlinking...';
-
-      try {
-        const res = await fetch(API_BASE + '/api/unlink', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: TOKEN }),
-        });
-        const data = await res.json();
-
-        if (data.success) {
-          // Success! Hide the existing section and show success status
-          document.getElementById('existing-link-section').style.display = 'none';
-          setStatus('connect-status', '✅ Wallet unlinked successfully. You can now link a new one below.', 'success');
-          
-          // Reset button
-          btn.disabled = false;
-          btn.innerHTML = 'Unlink Current Wallet';
-        } else {
-          setStatus(status, data.detail || data.message || 'Unlinking failed.', 'error');
-          btn.disabled = false;
-          btn.innerHTML = 'Unlink Current Wallet';
-        }
-      } catch (e) {
-        setStatus(status, 'Network error: ' + e.message, 'error');
-        btn.disabled = false;
-        btn.innerHTML = 'Unlink Current Wallet';
+  </script>
+</body>
+</html>
+L = 'Link Wallet';
       }
     }
   </script>

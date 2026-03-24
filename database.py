@@ -52,9 +52,14 @@ async def init_db():
             await conn.execute("""
                 CREATE TABLE IF NOT EXISTS users (
                     discord_id TEXT PRIMARY KEY,
-                    stellar_public_key TEXT NOT NULL,
-                    linked_at DOUBLE PRECISION NOT NULL,
-                    updated_at DOUBLE PRECISION
+                    stellar_public_key TEXT,
+                    internal_balance REAL DEFAULT 0.0,
+                    memo_id INTEGER,
+                    is_approved BOOLEAN NOT NULL DEFAULT FALSE,
+                    linked_at DOUBLE PRECISION,
+                    updated_at DOUBLE PRECISION,
+                    last_active TEXT,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
                 )
             """)
             await conn.execute("""
@@ -67,13 +72,20 @@ async def init_db():
                 )
             """)
             await conn.execute("""
-                CREATE TABLE IF NOT EXISTS tip_history (
+                CREATE TABLE IF NOT EXISTS deposits (
+                    tx_hash TEXT PRIMARY KEY,
+                    discord_id TEXT NOT NULL,
+                    amount REAL NOT NULL,
+                    created_at DOUBLE PRECISION NOT NULL
+                )
+            """)
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS internal_tips (
                     id SERIAL PRIMARY KEY,
                     sender_discord_id TEXT NOT NULL,
                     recipient_discord_id TEXT NOT NULL,
-                    amount DOUBLE PRECISION NOT NULL,
-                    fee DOUBLE PRECISION NOT NULL,
-                    tx_hash TEXT,
+                    amount REAL NOT NULL,
+                    fee REAL NOT NULL,
                     reason TEXT,
                     created_at DOUBLE PRECISION NOT NULL
                 )
@@ -140,38 +152,123 @@ async def validate_link_token(token: str) -> Optional[str]:
     now = time.time()
     pool = await get_pool()
     row = await pool.fetchrow(
-        "SELECT discord_id FROM link_tokens WHERE token = $1 AND used = 0 AND expires_at > $2",
-        token, now
+        "SELECT discord_id, expires_at, used FROM link_tokens WHERE token = $1",
+        token
     )
-    return row["discord_id"] if row else None
+    if not row:
+        logger.warning(f"Token validation failed: Token not found in database. Token: {token[:8]}...")
+        return None
+    
+    if row["used"] == 1:
+        logger.warning(f"Token validation failed: Token already used. Token: {token[:8]}...")
+        return None
+        
+    if row["expires_at"] <= now:
+        logger.warning(f"Token validation failed: Token expired. now={now}, expires_at={row['expires_at']}. Token: {token[:8]}...")
+        return None
+    
+    return row["discord_id"]
 
 async def mark_token_used(token: str):
     """Mark a link token as used."""
     pool = await get_pool()
     await pool.execute("UPDATE link_tokens SET used = 1 WHERE token = $1", token)
 
-async def link_user(discord_id: str, stellar_public_key: str):
+async def get_or_create_user(discord_id: str) -> Dict[str, Any]:
+    """Get a user or create them (assigning a memo_id)."""
+    pool = await get_pool()
+    # Memo ID is just the numeric part of the Discord ID if possible, 
+    # but Discord IDs can be 64-bit, and Stellar Memo ID is 64-bit.
+    memo_id = int(discord_id)
+    
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("SELECT * FROM users WHERE discord_id = $1", discord_id)
+        if not row:
+            await conn.execute(
+                "INSERT INTO users (discord_id, memo_id, internal_balance) VALUES ($1, $2, 0.0)",
+                discord_id, memo_id
+            )
+            row = await conn.fetchrow("SELECT * FROM users WHERE discord_id = $1", discord_id)
+        return dict(row)
+
+async def link_user(discord_id: str, stellar_public_key: str, is_approved: bool = False):
     """Link a Discord user to a Stellar public key (upserts)."""
     now = time.time()
     pool = await get_pool()
     await pool.execute(
-        """INSERT INTO users (discord_id, stellar_public_key, linked_at, updated_at)
-            VALUES ($1, $2, $3, $4)
+        """INSERT INTO users (discord_id, stellar_public_key, is_approved, linked_at, updated_at, memo_id)
+            VALUES ($1, $2, $3, $4, $5, $6)
             ON CONFLICT(discord_id) DO UPDATE SET
                 stellar_public_key = EXCLUDED.stellar_public_key,
+                is_approved = EXCLUDED.is_approved,
                 updated_at = EXCLUDED.updated_at""",
-        discord_id, stellar_public_key, now, now
+        discord_id, stellar_public_key, is_approved, now, now, int(discord_id)
     )
     logger.info(f"Linked Discord user {discord_id} to Stellar key {stellar_public_key[:8]}...")
 
-async def get_user_stellar_key(discord_id: str) -> Optional[str]:
-    """Get the Stellar public key for a Discord user."""
+async def get_internal_balance(discord_id: str) -> float:
+    """Get the user's internal SHx balance (converted from stroops)."""
+    pool = await get_pool()
+    val = await pool.fetchval("SELECT internal_balance FROM users WHERE discord_id = $1", discord_id)
+    if val is None:
+        return 0.0
+    return float(val)
+
+async def add_deposit(discord_id: str, tx_hash: str, amount_shx: float):
+    """Credit internal balance from an on-chain deposit (amount in SHx)."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            # 1. Update balance
+            await conn.execute(
+                "UPDATE users SET internal_balance = internal_balance + $1 WHERE discord_id = $2",
+                amount_shx, discord_id
+            )
+            # 2. Add deposit record
+            await conn.execute(
+                "INSERT INTO deposits (tx_hash, discord_id, amount, created_at) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
+                tx_hash, discord_id, amount_shx, time.time()
+            )
+            logger.info(f"Credited {amount_shx} SHx to user {discord_id} for tx {tx_hash}")
+
+async def transfer_internal(sender_id: str, recipient_id: str, amount_shx: float, fee_shx: float, reason: Optional[str] = None) -> bool:
+    """Move SHx internally between users. Returns True if successful."""
+    total_needed = amount_shx + fee_shx
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        # Simple atomicity check
+        sender_bal = await conn.fetchval("SELECT internal_balance FROM users WHERE discord_id = $1", sender_id)
+        if sender_bal is None or sender_bal < total_needed:
+            return False
+            
+        async with conn.transaction():
+            # Deduct from sender
+            await conn.execute("UPDATE users SET internal_balance = internal_balance - $1 WHERE discord_id = $2", total_needed, sender_id)
+            # Credit recipient
+            await conn.execute("UPDATE users SET internal_balance = internal_balance + $1 WHERE discord_id = $2", amount_shx, recipient_id)
+            # Record tip
+            await conn.execute(
+                """INSERT INTO internal_tips 
+                   (sender_discord_id, recipient_discord_id, amount, fee, reason, created_at)
+                   VALUES ($1, $2, $3, $4, $5, $6)""",
+                sender_id, recipient_id, amount_shx, fee_shx, reason, time.time()
+            )
+        return True
+
+async def get_user_link_details(discord_id: str) -> Optional[Dict[str, Any]]:
+    """Get the link details (key and approval status) for a Discord user."""
     pool = await get_pool()
     row = await pool.fetchrow(
-        "SELECT stellar_public_key FROM users WHERE discord_id = $1",
+        "SELECT stellar_public_key, is_approved FROM users WHERE discord_id = $1",
         discord_id
     )
-    return row["stellar_public_key"] if row else None
+    return dict(row) if row else None
+
+
+async def get_user_stellar_key(discord_id: str) -> Optional[str]:
+    """Get just the Stellar public key for a Discord user (legacy helper)."""
+    details = await get_user_link_details(discord_id)
+    return details["stellar_public_key"] if details else None
 
 async def record_tip(
     sender_id: str,

@@ -12,6 +12,7 @@ from stellar_sdk import (
     SorobanServer, scval,
 )
 from stellar_sdk.soroban_rpc import GetTransactionStatus, SendTransactionStatus
+from stellar_sdk.exceptions import NotFoundError
 
 logger = logging.getLogger("shx_tip_bot.stellar")
 
@@ -103,6 +104,103 @@ async def get_shx_balance(public_key: str) -> float | None:
         return None
 
 
+async def check_shx_allowance(owner_public_key: str, spender_contract_id: str) -> float:
+    """Check the current SHx allowance for a spender on an owner's account."""
+    try:
+        soroban_server = SorobanServer(SOROBAN_RPC_URL)
+        # Call SHx SAC 'allowance' function
+        # allowance(owner: Address, spender: Address) -> i128
+        result = await _invoke_sac_read_only(
+            SHX_SAC_CONTRACT_ID,
+            "allowance",
+            [
+                scval.to_address(owner_public_key),
+                scval.to_address(spender_contract_id),
+            ]
+        )
+        if result is None:
+            return 0.0
+        # Convert scval i128 to float
+        stroops = int(result.i128.lo) + (int(result.i128.hi) << 64)
+        return stroops / 10_000_000
+    except Exception as e:
+        logger.error(f"Error checking allowance for {owner_public_key[:8]}: {e}")
+        return 0.0
+
+async def _invoke_sac_read_only(contract_id: str, function_name: str, parameters: list):
+    """Internal helper to call a read-only SAC function."""
+    try:
+        soroban_server = SorobanServer(SOROBAN_RPC_URL)
+        builder = TransactionBuilder(
+            source_account=await get_dummy_account(), # Just need a placeholder
+            network_passphrase=NETWORK_PASSPHRASE,
+        )
+        builder.append_invoke_contract_function_op(
+            contract_id=contract_id,
+            function_name=function_name,
+            parameters=parameters,
+        )
+        tx = builder.build()
+        sim = soroban_server.simulate_transaction(tx)
+        if sim.error:
+            return None
+        return sim.results[0].xdr
+    except Exception:
+        return None
+
+async def get_dummy_account():
+    """Returns a dummy Account object for simulation purposes."""
+    return Server(HORIZON_URL).load_account("GAHO2LQHLZHYRRUE4CNT7QHWFDXJWK322XPUWO6RSFGB3FMI4H67OH5J") # House account is fine
+
+async def approve_shx(secret: str, amount: float = 1_000_000):
+    """
+    Submit an 'approve' transaction for the tipping contract.
+    Returns dict with success/error.
+    """
+    try:
+        keypair = Keypair.from_secret(secret)
+        public_key = keypair.public_key
+        horizon_server = Server(HORIZON_URL)
+        soroban_server = SorobanServer(SOROBAN_RPC_URL)
+        
+        account = horizon_server.load_account(public_key)
+        stroops = _to_stroops(amount)
+        
+        builder = TransactionBuilder(
+            source_account=account,
+            network_passphrase=NETWORK_PASSPHRASE,
+            base_fee=100_000,
+        )
+        builder.append_invoke_contract_function_op(
+            contract_id=SHX_SAC_CONTRACT_ID,
+            function_name="approve",
+            parameters=[
+                scval.to_address(public_key),
+                scval.to_address(SOROBAN_CONTRACT_ID),
+                scval.to_int128(stroops),
+                scval.to_uint32(3_000_000), # expiration
+            ],
+        )
+        builder.set_timeout(300)
+        tx = builder.build()
+        sim = soroban_server.simulate_transaction(tx)
+        if sim.error:
+            return {"success": False, "error": f"Approve simulation failed: {sim.error}"}
+        
+        tx = soroban_server.prepare_transaction(tx, sim)
+        tx.sign(keypair)
+        
+        resp = soroban_server.send_transaction(tx)
+        if resp.status == SendTransactionStatus.ERROR:
+             return {"success": False, "error": f"Approve submit error (XDR): {resp.error_result_xdr}"}
+             
+        # Just return success without waiting for ledger for speed, 
+        # as next tx might still fail if too fast, but usually fine.
+        return {"success": True, "hash": resp.hash}
+    except Exception as e:
+        logger.error(f"approve_shx error: {e}")
+        return {"success": False, "error": str(e)}
+
 async def check_shx_trustline(public_key: str) -> bool:
     """Check if a Stellar account has an active SHx trustline."""
     balance = await get_shx_balance(public_key)
@@ -155,6 +253,49 @@ async def calculate_gas_shx() -> float:
         return FALLBACK_GAS_SHX
 
 
+async def get_shx_usd_price() -> float | None:
+    """
+    Get the current price of SHx in USD (via USDC) from the Stellar DEX.
+    If on Testnet, returns a mock value of $0.001 unless a pair exists.
+    """
+    if STELLAR_NETWORK == "testnet":
+        return 0.001 # Mock for testnet
+        
+    try:
+        session = await get_session()
+        # USDC (Centre) on Stellar Mainnet
+        USDC_CODE = "USDC"
+        USDC_ISSUER = "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335XOP3IA2M6GKP5V7SUCTS6XY"
+        
+        url = (
+            f"{HORIZON_URL}/order_book"
+            f"?selling_asset_type=credit_alphanum4"
+            f"&selling_asset_code={SHX_ASSET_CODE}"
+            f"&selling_asset_issuer={SHX_ISSUER}"
+            f"&buying_asset_type=credit_alphanum4"
+            f"&buying_asset_code={USDC_CODE}"
+            f"&buying_asset_issuer={USDC_ISSUER}"
+            f"&limit=1"
+        )
+        async with session.get(url) as resp:
+            if resp.status != 200:
+                return None
+            data = await resp.json()
+            if data.get("bids"):
+                return float(data["bids"][0]["price"])
+            return None
+    except Exception as e:
+        logger.error(f"Error fetching SHx/USD price: {e}")
+        return None
+
+
+def usd_to_shx(usd_amount: float, shx_price_usd: float) -> float:
+    """Convert USD amount to SHx amount based on current price."""
+    if shx_price_usd <= 0:
+        return 0.0
+    return round(usd_amount / shx_price_usd, 7)
+
+
 # ── Soroban Contract Invocation ──────────────────────────────────────────────
 
 async def execute_tip(
@@ -182,6 +323,15 @@ async def execute_tip(
 
         # Load house account (source that pays XLM fees)
         house_account = horizon_server.load_account(house_keypair.public_key)
+
+        # AUTO-APPROVE for House Account:
+        # If the sender is the house account, it can sign its own approval.
+        if sender_public_key == HOUSE_ACCOUNT_PUBLIC:
+            allowance = await check_shx_allowance(sender_public_key, SOROBAN_CONTRACT_ID)
+            if allowance < (amount + fee):
+                logger.info(f"Auto-approving House Account ({sender_public_key[:8]}) for Soroban tipping...")
+                await approve_shx(HOUSE_ACCOUNT_SECRET, amount=1_000_000)
+                await asyncio.sleep(5) # Wait for approval to clear
 
         amount_i128 = _to_stroops(amount)
         fee_i128 = _to_stroops(fee)
@@ -222,8 +372,8 @@ async def execute_tip(
         # Submit
         response = soroban_server.send_transaction(tx)
         if response.status == SendTransactionStatus.ERROR:
-            logger.error(f"Soroban Submit Error: {response.error}")
-            return _fail(f"Submit error: {response.error}")
+            logger.error(f"Soroban Submit Error: {response.error_result_xdr}")
+            return _fail(f"Submit error (XDR): {response.error_result_xdr}")
 
         tx_hash = response.hash
 
@@ -238,7 +388,7 @@ async def execute_tip(
                     "error": None,
                 }
             if result.status == GetTransactionStatus.FAILED:
-                logger.error(f"Transaction failed on-chain: {result.error_result_xdr if hasattr(result, 'error_result_xdr') else 'Unknown'}")
+                logger.error(f"Transaction failed on-chain: {result.result_xdr if hasattr(result, 'result_xdr') else 'Unknown'}")
                 return _fail("Transaction failed on-chain.", tx_hash)
             await asyncio.sleep(1)
 
@@ -246,6 +396,94 @@ async def execute_tip(
 
     except Exception as e:
         logger.error(f"execute_tip error: {e}", exc_info=True)
+        return _fail(str(e))
+
+
+async def execute_batch_tip(
+    sender_public_key: str,
+    recipients: list, # List of dicts: {"public_key": str, "amount": float, "fee": float}
+) -> dict:
+    """
+    Execute multiple tips in a single Soroban transaction.
+    """
+    try:
+        house_keypair = Keypair.from_secret(HOUSE_ACCOUNT_SECRET)
+        soroban_server = SorobanServer(SOROBAN_RPC_URL)
+        horizon_server = Server(HORIZON_URL)
+
+        # Load house account (source that pays XLM fees)
+        house_account = horizon_server.load_account(house_keypair.public_key)
+
+        # AUTO-APPROVE for House Account in batch:
+        if sender_public_key == HOUSE_ACCOUNT_PUBLIC:
+             total_needed = sum(r["amount"] + r["fee"] for r in recipients)
+             allowance = await check_shx_allowance(sender_public_key, SOROBAN_CONTRACT_ID)
+             if allowance < total_needed:
+                logger.info(f"Auto-approving House Account ({sender_public_key[:8]}) for batch tips...")
+                await approve_shx(HOUSE_ACCOUNT_SECRET, amount=max(1_000_000, total_needed + 100))
+                await asyncio.sleep(5)
+
+        # Build Soroban invoke transaction
+        builder = TransactionBuilder(
+            source_account=house_account,
+            network_passphrase=NETWORK_PASSPHRASE,
+            base_fee=100_000,
+        )
+
+        for rec in recipients:
+            amount_i128 = _to_stroops(rec["amount"])
+            fee_i128 = _to_stroops(rec["fee"])
+
+            builder.append_invoke_contract_function_op(
+                contract_id=SOROBAN_CONTRACT_ID,
+                function_name="tip",
+                parameters=[
+                    scval.to_address(sender_public_key),
+                    scval.to_address(rec["public_key"]),
+                    scval.to_int128(amount_i128),
+                    scval.to_int128(fee_i128),
+                ],
+            )
+
+        builder.set_timeout(300)
+        tx = builder.build()
+
+        # Simulate
+        sim = soroban_server.simulate_transaction(tx)
+        if sim.error:
+            logger.error(f"Soroban Batch Simulation Error: {sim.error}")
+            return _fail(f"Batch simulation failed: {sim.error}")
+
+        # Prepare (attach resource footprint, adjust fees)
+        tx = soroban_server.prepare_transaction(tx, sim)
+        tx.sign(house_keypair)
+
+        # Submit
+        response = soroban_server.send_transaction(tx)
+        if response.status == SendTransactionStatus.ERROR:
+            logger.error(f"Soroban Batch Submit Error: {response.error_result_xdr}")
+            return _fail(f"Batch submit error (XDR): {response.error_result_xdr}")
+
+        tx_hash = response.hash
+
+        # Poll for confirmation
+        for _ in range(60):
+            result = soroban_server.get_transaction(tx_hash)
+            if result.status == GetTransactionStatus.SUCCESS:
+                return {
+                    "success": True,
+                    "tx_hash": tx_hash,
+                    "tx_url": get_explorer_url(tx_hash),
+                    "error": None,
+                }
+            if result.status == GetTransactionStatus.FAILED:
+                return _fail("Batch transaction failed on-chain.", tx_hash)
+            await asyncio.sleep(1)
+
+        return _fail("Batch transaction timed out.", tx_hash)
+
+    except Exception as e:
+        logger.error(f"execute_batch_tip error: {e}", exc_info=True)
         return _fail(str(e))
 
 
@@ -275,35 +513,44 @@ async def build_approve_tx_xdr(
 
     horizon_server = Server(HORIZON_URL)
 
-    # Check if the account exists; on testnet, auto-fund if not
-    account_exists = True
+    # Reload account (now it should exist)
     try:
-        horizon_server.load_account(user_public_key)
-    except Exception:
-        account_exists = False
+        user_account = horizon_server.load_account(user_public_key)
+    except Exception as e:
+        if STELLAR_NETWORK == "testnet":
+            # Auto-fund via Friendbot on testnet
+            logger.info(f"Account {user_public_key[:8]}... not found on testnet, funding via Friendbot...")
+            session = await get_session()
+            
+            # Retry up to 3 times for friendbot
+            funded = False
+            for attempt in range(3):
+                try:
+                    async with session.get(
+                        f"https://friendbot.stellar.org?addr={user_public_key}"
+                    ) as resp:
+                        text = await resp.text()
+                        if resp.status == 200 or "createAccountAlreadyExist" in text:
+                            funded = True
+                            break
+                        logger.warning(f"Friendbot attempt {attempt+1} failed: {text[:100]}")
+                except Exception as fe:
+                    logger.warning(f"Friendbot attempt {attempt+1} exception: {fe}")
+                
+                await asyncio.sleep(2)
 
-    if not account_exists:
-        if STELLAR_NETWORK != "testnet":
+            if not funded:
+                raise Exception("Friendbot funding failed after multiple attempts.")
+            
+            # Wait for ledger close
+            await asyncio.sleep(5)
+            logger.info(f"Funded {user_public_key[:8]}... via Friendbot.")
+            user_account = horizon_server.load_account(user_public_key)
+        else:
             raise Exception(
                 "Account does not exist on the Stellar public network. "
                 "Please fund it with at least 2 XLM first."
-            )
-        # Auto-fund via Friendbot on testnet
-        logger.info(f"Account {user_public_key[:8]}... not found on testnet, funding via Friendbot...")
-        session = await get_session()
-        async with session.get(
-            f"https://friendbot.stellar.org?addr={user_public_key}"
-        ) as resp:
-            if resp.status != 200:
-                text = await resp.text()
-                if "createAccountAlreadyExist" not in text:
-                    raise Exception(f"Friendbot funding failed: {text[:200]}")
-        # Wait for ledger close
-        await asyncio.sleep(5)
-        logger.info(f"Funded {user_public_key[:8]}... via Friendbot.")
-
-    # Reload account (now it should exist)
-    user_account = horizon_server.load_account(user_public_key)
+            ) from e
 
     # Check if account has SHX trustline; add it if missing (testnet only)
     balance = await get_shx_balance(user_public_key)
@@ -340,4 +587,93 @@ async def build_approve_tx_xdr(
     builder.set_timeout(300)
     tx = builder.build()
     return tx.to_xdr()
+
+# ── Custodial Operations ─────────────────────────────────────────────────────
+
+async def stream_deposits(cursor: str = "now", callback=None):
+    """
+    Continually stream payments to the House account.
+    If a payment is SHX and has a valid Memo ID, call the callback.
+    """
+    server = Server(HORIZON_URL)
+    logger.info(f"Starting deposit stream for {HOUSE_ACCOUNT_PUBLIC[:8]}... from cursor {cursor}")
+    
+    # We use a loop with a small sleep to handle connection drops
+    while True:
+        try:
+            async for payment in server.payments().for_account(HOUSE_ACCOUNT_PUBLIC).cursor(cursor).stream():
+                # We only care about 'payment' (type 1) or 'path_payment_strict_receive' (type 13)
+                if payment.get("type") not in ("payment", "path_payment_strict_receive"):
+                    cursor = payment.get("paging_token", cursor)
+                    continue
+                
+                # Check asset
+                if (payment.get("asset_code") != SHX_ASSET_CODE or 
+                    payment.get("asset_issuer") != SHX_ISSUER):
+                    cursor = payment.get("paging_token", cursor)
+                    continue
+                
+                # Check destination (must be our House account)
+                if payment.get("to") != HOUSE_ACCOUNT_PUBLIC:
+                    cursor = payment.get("paging_token", cursor)
+                    continue
+
+                tx_hash = payment.get("transaction_hash")
+                amount_str = payment.get("amount")
+                amount_shx = float(amount_str)
+                
+                # Fetch transaction to get Memo
+                try:
+                    # Use a session-based approach if possible, but Server.transactions() is fine
+                    tx = server.transactions().transaction(tx_hash).call()
+                    memo_type = tx.get("memo_type")
+                    memo_val = tx.get("memo") # Could be string or int
+                    
+                    if callback:
+                        # We pass the raw memo value and type to the bot for parsing
+                        # It could be a numeric ID or a @username string
+                        await callback(memo_val, tx_hash, amount_shx, memo_type)
+                except Exception as e:
+                    logger.error(f"Error fetching tx details for {tx_hash}: {e}")
+                
+                cursor = payment.get("paging_token", cursor)
+        except Exception as e:
+            logger.error(f"Stream encountered error: {e}. Retrying in 5s...")
+            await asyncio.sleep(5)
+
+async def send_withdrawal(destination: str, amount_shx: float, memo: str = None) -> dict:
+    """
+    Send SHX from the House account to a user's destination address.
+    """
+    try:
+        house_kp = Keypair.from_secret(HOUSE_ACCOUNT_SECRET)
+        server = Server(HORIZON_URL)
+        house_account = server.load_account(house_kp.public_key)
+        
+        shx_asset = get_shx_asset()
+        
+        builder = TransactionBuilder(
+            source_account=house_account,
+            network_passphrase=NETWORK_PASSPHRASE,
+            base_fee=100_000,
+        )
+        builder.append_payment_op(
+            destination=destination,
+            asset=shx_asset,
+            amount=str(amount_shx)
+        )
+        if memo:
+            # Stewardship for the user's request: "in the memo is where the description... will go"
+            builder.add_text_memo(memo[:28])
+            
+        tx = builder.set_timeout(300).build()
+        tx.sign(house_kp)
+        
+        resp = server.submit_transaction(tx)
+        logger.info(f"Withdrawal of {amount_shx} SHX to {destination[:8]}... successful. TX: {resp['hash']}")
+        return {"success": True, "hash": resp["hash"]}
+    except Exception as e:
+        logger.error(f"Withdrawal failed to {destination[:8]}...: {e}")
+        return {"success": False, "error": str(e)}
+
 

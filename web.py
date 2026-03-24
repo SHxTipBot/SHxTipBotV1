@@ -40,7 +40,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com; "
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
             "font-src 'self' https://fonts.gstatic.com; "
             "img-src 'self' https: data:; "
@@ -92,7 +92,12 @@ async def register_page(token: str = ""):
     # Check if user already has a linked wallet
     existing_key = await db.get_user_stellar_key(discord_id)
 
-    # Read and serve the HTML file, injecting the token
+    # Get user details for custodial dashboard
+    user_data = await db.get_or_create_user(discord_id)
+    memo_id = user_data["memo_id"]
+    internal_balance = await db.get_internal_balance(discord_id)
+
+    # Read and serve the HTML file, injecting variables
     html_path = os.path.join(STATIC_DIR, "index.html")
     with open(html_path, "r", encoding="utf-8") as f:
         html = f.read()
@@ -101,9 +106,13 @@ async def register_page(token: str = ""):
     html = html.replace("{{TOKEN}}", token.strip())
     html = html.replace("{{NETWORK}}", stellar.STELLAR_NETWORK.strip())
     html = html.replace("{{NETWORK_PASSPHRASE}}", stellar.NETWORK_PASSPHRASE.strip())
+    html = html.replace("{{HOUSE_ACCOUNT_PUBLIC}}", stellar.HOUSE_ACCOUNT_PUBLIC.strip())
+    html = html.replace("{{MEMO_ID}}", str(memo_id))
+    html = html.replace("{{INTERNAL_BALANCE}}", f"{internal_balance:,.2f}")
+    html = html.replace("{{EXISTING_KEY}}", (existing_key or "").strip())
+    html = html.replace("{{SHX_ISSUER}}", stellar.SHX_ISSUER.strip())
     html = html.replace("{{SHX_SAC_CONTRACT_ID}}", stellar.SHX_SAC_CONTRACT_ID.strip())
     html = html.replace("{{SOROBAN_CONTRACT_ID}}", stellar.SOROBAN_CONTRACT_ID.strip())
-    html = html.replace("{{EXISTING_KEY}}", (existing_key or "").strip())
 
     return HTMLResponse(html)
 
@@ -123,6 +132,7 @@ async def api_link(request: Request):
 
     token = body.get("token", "").strip()
     public_key = body.get("public_key", "").strip()
+    is_approved = body.get("is_approved", False)
 
     if not token or not public_key:
         raise HTTPException(400, "Missing token or public_key.")
@@ -135,20 +145,22 @@ async def api_link(request: Request):
     if not discord_id:
         raise HTTPException(400, "Invalid or expired token. Use /link in Discord again.")
 
-    # Optional: verify the account exists and has an SHx trustline
-    has_trustline = await stellar.check_shx_trustline(public_key)
-
     # Link the user
-    await db.link_user(discord_id, public_key)
-    await db.mark_token_used(token)
+    try:
+        await db.link_user(discord_id, public_key, is_approved) # Pass is_approved
+        await db.mark_token_used(token)
+        logger.info(f"LINK SUCCESS | Discord {discord_id} → {public_key[:8]}... (approved: {is_approved})")
+    except Exception as e:
+        logger.error(f"LINK FAIL | Discord {discord_id} → {public_key[:8]}... | Error: {e}")
+        raise HTTPException(500, "Internal error linking wallet.")
 
-    logger.info(f"Linked Discord {discord_id} → {public_key[:8]}...")
+    # Check trustline for the frontend warning
+    has_trustline = await stellar.check_shx_trustline(public_key)
 
     return JSONResponse({
         "success": True,
         "message": "Wallet linked successfully!",
-        "has_shx_trustline": has_trustline,
-        "discord_id": discord_id,
+        "has_shx_trustline": has_trustline
     })
 
 
@@ -206,10 +218,11 @@ async def api_approve_tx(request: Request):
         raise HTTPException(400, "Invalid public key.")
 
     try:
+        logger.info(f"APPROVE-TX REQUEST | Key: {public_key[:8]}...")
         xdr = await stellar.build_approve_tx_xdr(public_key)
         return JSONResponse({"success": True, "xdr": xdr})
     except Exception as e:
-        logger.error(f"Error building approve TX: {e}")
+        logger.error(f"APPROVE-TX FAIL | Key: {public_key[:8]}... | Error: {e}")
         raise HTTPException(500, f"Failed to build transaction: {str(e)}")
 
 
