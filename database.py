@@ -94,13 +94,25 @@ async def init_db():
             )
         """)
     
-    # Run migrations: add columns that may be missing on older databases
+    # Run migrations: comprehensively sanitize all legacy NOT NULL constraints for Tip.cc zero-friction architecture
+    migration_queries = [
+        "ALTER TABLE users ALTER COLUMN stellar_public_key DROP NOT NULL",
+        "ALTER TABLE users ALTER COLUMN linked_at DROP NOT NULL",
+        "ALTER TABLE users ALTER COLUMN updated_at DROP NOT NULL",
+        "ALTER TABLE users ALTER COLUMN memo_id DROP NOT NULL",
+        "ALTER TABLE users ALTER COLUMN internal_balance DROP NOT NULL",
+        "ALTER TABLE internal_tips ALTER COLUMN tx_hash DROP NOT NULL",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS internal_balance REAL DEFAULT 0.0",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS memo_id BIGINT",
+        "ALTER TABLE airdrops ADD COLUMN IF NOT EXISTS expires_at DOUBLE PRECISION"
+    ]
+    
     async with pool.acquire() as conn:
-        try:
-            await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS internal_balance REAL DEFAULT 0.0")
-            await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS memo_id BIGINT")
-        except Exception as e:
-            logger.warning(f"Migration note (safe to ignore): {e}")
+        for query in migration_queries:
+            try:
+                await conn.execute(query)
+            except Exception as e:
+                logger.debug(f"Migration note (safe to ignore): {e}")
 
     logger.info("Database initialized successfully.")
 
@@ -239,3 +251,72 @@ async def get_user_link_details(discord_id: str) -> Optional[Dict[str, Any]]:
         discord_id
     )
     return dict(row) if row else None
+
+async def create_airdrop(
+    airdrop_id: str,
+    creator_id: str,
+    total_amount: float,
+    amount_per_claim: float,
+    max_claims: int,
+    reason: Optional[str] = None,
+    duration_minutes: Optional[int] = None
+):
+    """Create a new airdrop entry."""
+    pool = await get_pool()
+    expires_at = time.time() + (duration_minutes * 60) if duration_minutes else None
+    await pool.execute(
+        """INSERT INTO airdrops
+            (id, creator_discord_id, total_amount, amount_per_claim, max_claims, reason, created_at, expires_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)""",
+        airdrop_id, creator_id, total_amount, amount_per_claim, max_claims, reason, time.time(), expires_at
+    )
+
+async def get_airdrop(airdrop_id: str) -> Optional[Dict[str, Any]]:
+    """Get active airdrop details, bypassing if expired."""
+    pool = await get_pool()
+    row = await pool.fetchrow(
+        "SELECT * FROM airdrops WHERE id = $1 AND active = 1",
+        airdrop_id
+    )
+    if row:
+        expires_at = row.get("expires_at")
+        if expires_at and time.time() > expires_at:
+            return None
+        return dict(row)
+    return None
+
+async def has_user_claimed(airdrop_id: str, discord_id: str) -> bool:
+    """Check if a user has already claimed from this airdrop."""
+    pool = await get_pool()
+    row = await pool.fetchrow(
+        "SELECT 1 FROM airdrop_claims WHERE airdrop_id = $1 AND user_discord_id = $2",
+        airdrop_id, discord_id
+    )
+    return row is not None
+
+async def add_airdrop_claim(airdrop_id: str, discord_id: str):
+    """Record an internal claim and update counts."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            await conn.execute(
+                "INSERT INTO airdrop_claims (airdrop_id, user_discord_id, tx_hash, created_at) VALUES ($1, $2, $3, $4)",
+                airdrop_id, discord_id, "internal_custodial", time.time()
+            )
+            await conn.execute(
+                "UPDATE airdrops SET claims_count = claims_count + 1 WHERE id = $1",
+                airdrop_id
+            )
+            await conn.execute(
+                "UPDATE airdrops SET active = 0 WHERE id = $1 AND claims_count >= max_claims",
+                airdrop_id
+            )
+
+async def admin_fund_internal(discord_id: str, amount_shx: float):
+    """Admin function to literally mint/fund SHx into a user's internal balance, no on-chain tx required."""
+    pool = await get_pool()
+    await pool.execute(
+        "UPDATE users SET internal_balance = internal_balance + $1 WHERE discord_id = $2",
+        amount_shx, discord_id
+    )
+

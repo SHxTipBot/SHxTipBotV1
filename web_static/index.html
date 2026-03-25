@@ -186,8 +186,9 @@
       </p>
 
       <div id="verify-section">
+        <input type="text" id="g-address" placeholder="Enter your Stellar G-Address..." style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border); background: rgba(0,0,0,0.2); color: var(--text); margin-bottom: 12px; font-family: monospace;">
         <button class="btn" onclick="verifyWallet()" id="btn-verify">
-          Verify with Wallet Extension
+          Save Wallet Address
         </button>
       </div>
 
@@ -218,17 +219,16 @@
     async function verifyWallet() {
       const btn = document.getElementById('btn-verify');
       const status = document.getElementById('status-box');
+      const input = document.getElementById('g-address');
       
       try {
-        if (typeof window.freighterApi === 'undefined') {
-          throw new Error("Freighter not detected. Please install Freighter extension.");
+        const publicKey = input.value.trim();
+        if (!publicKey.startsWith('G') || publicKey.length !== 56) {
+          throw new Error("Invalid Stellar address. Must start with G and be 56 characters.");
         }
 
         btn.disabled = true;
-        btn.innerText = "Connecting...";
-
-        const { publicKey } = await window.freighterApi.getAddress();
-        if (!publicKey) throw new Error("Could not get address.");
+        btn.innerText = "Saving...";
 
         const res = await fetch(API_BASE + '/api/link', {
           method: 'POST',
@@ -239,16 +239,18 @@
         const data = await res.json();
         if (data.success) {
           status.className = "status success";
-          status.innerText = "Wallet verified successfully!";
+          status.innerText = "Wallet saved successfully!";
           document.getElementById('linked-addr').innerText = publicKey;
+          input.value = "";
         } else {
           throw new Error(data.detail || "Verification failed.");
         }
       } catch (e) {
         status.className = "status error";
         status.innerText = e.message;
+      } finally {
         btn.disabled = false;
-        btn.innerText = "Retry Verification";
+        btn.innerText = "Save Wallet Address";
       }
     }
   </script>

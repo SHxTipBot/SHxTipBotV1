@@ -1,0 +1,9 @@
+Traceback (most recent call last):
+  File "C:\Users\Naugl\OneDrive\Desktop\SHx Tip Bot\venv\Lib\site-packages\discord\app_commands\tree.py", line 1302, in _call
+    await command._invoke_with_namespace(interaction, namespace)
+  File "C:\Users\Naugl\OneDrive\Desktop\SHx Tip Bot\venv\Lib\site-packages\discord\app_commands\commands.py", line 884, in _invoke_with_namespace
+    return await self._do_call(interaction, transformed_values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Naugl\OneDrive\Desktop\SHx Tip Bot\venv\Lib\site-packages\discord\app_commands\commands.py", line 877, in _do_call
+    raise CommandInvokeError(self, e) from e
+discord.app_commands.errors.CommandInvokeError: Command 'airdrop' raised an exception: UndefinedColumnError: column "expires_at" of relation "airdrops" does not exist

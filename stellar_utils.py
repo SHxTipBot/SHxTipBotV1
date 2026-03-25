@@ -208,7 +208,35 @@ async def check_shx_trustline(public_key: str) -> bool:
     return balance is not None
 
 
-# ── Dynamic Fee Calculation ──────────────────────────────────────────────────
+# ── Dynamic Fee Calculation & Oracles ────────────────────────────────────────
+
+_usd_price_cache = {"price": 0.0, "timestamp": 0.0}
+
+async def get_shx_usd_price() -> float | None:
+    """
+    Get the current price of SHx in USD from CoinGecko.
+    Caches the result for 5 minutes to prevent rate limiting.
+    """
+    now = time.time()
+    if now - _usd_price_cache["timestamp"] < 300:
+        if _usd_price_cache["price"] > 0:
+            return _usd_price_cache["price"]
+            
+    try:
+        session = await get_session()
+        url = "https://api.coingecko.com/api/v3/simple/price?ids=stronghold-token&vs_currencies=usd"
+        async with session.get(url) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                price = float(data.get("stronghold-token", {}).get("usd", 0.0))
+                if price > 0:
+                    _usd_price_cache["price"] = price
+                    _usd_price_cache["timestamp"] = now
+                    return price
+            return _usd_price_cache["price"] if _usd_price_cache["price"] > 0 else None
+    except Exception as e:
+        logger.error(f"Error fetching SHx/USD price: {e}")
+        return _usd_price_cache["price"] if _usd_price_cache["price"] > 0 else None
 
 async def get_shx_xlm_price() -> float | None:
     """
@@ -303,6 +331,7 @@ async def execute_tip(
     recipient_public_key: str,
     amount: float,
     fee: float,
+    memo: str = None,
 ) -> dict:
     """
     Execute a tip via the Soroban tipping contract.
@@ -353,6 +382,9 @@ async def execute_tip(
                 scval.to_int128(fee_i128),
             ],
         )
+
+        if memo:
+            builder.add_text_memo(memo[:28])
 
         builder.set_timeout(300)
         tx = builder.build()
