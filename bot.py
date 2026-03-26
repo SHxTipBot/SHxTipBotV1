@@ -231,11 +231,10 @@ async def withdraw_command(interaction: Interaction, amount: str, destination: s
         await interaction.followup.send(f"❌ Insufficient balance. You have **{current_bal:,.2f} SHx**.", ephemeral=True)
         return
 
-    result = await stellar.execute_tip(
-        sender_public_key=stellar.HOUSE_ACCOUNT_PUBLIC,
-        recipient_public_key=destination,
-        amount=amount_f,
-        fee=0.0
+    result = await stellar.send_withdrawal(
+        destination=destination,
+        amount_shx=amount_f,
+        memo="Withdrawal"
     )
 
     if result["success"]:
@@ -475,14 +474,13 @@ async def airdrop_command(
     )
     
     expires_str = ""
-    if total_mins:
-        if total_mins >= 1440 and total_mins % 1440 == 0:
-            expires_str = f"Expires in {total_mins // 1440} day(s)"
-        elif total_mins >= 60 and total_mins % 60 == 0:
-            expires_str = f"Expires in {total_mins // 60} hour(s)"
-        else:
-            expires_str = f"Expires in {total_mins} minute(s)"
-        expires_str = f"\n⏳ *{expires_str}*"
+    expires_parts = []
+    if duration_days: expires_parts.append(f"{duration_days} day(s)")
+    if duration_hours: expires_parts.append(f"{duration_hours} hour(s)")
+    if duration_minutes: expires_parts.append(f"{duration_minutes} minute(s)")
+    
+    if expires_parts:
+        expires_str = f"\n⏳ *Expires in {', '.join(expires_parts)}*"
     
     embed = _footer(discord.Embed(
         title="🪂 SHx Airdrop!",
