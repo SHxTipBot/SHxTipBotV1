@@ -17,13 +17,13 @@ Complete setup guide for the Stronghold team to deploy and manage the SHx Tip Bo
 9. [How Tipping Works](#how-tipping-works)
 10. [Security Best Practices](#security-best-practices)
 11. [Troubleshooting](#troubleshooting)
-12. [Deploying on Railway.app](#deploying-on-railwayapp)
+12. [Deploying on Railway](#deploying-on-railway)
 
 ---
 
 ## Architecture Overview
 
-```
+```text
 Stronghold  ──/distribute──►  Mod Wallets (SHX supply)
                                     │
                                     ▼
@@ -57,7 +57,7 @@ Discord User  ──/link──►  Web App (web.py + index.html)
 ### Components
 
 | Component | File(s) | Purpose |
-|-----------|---------|---------|
+| --------- | ------- | ------- |
 | Discord Bot | `bot.py` | Slash commands: /tip, /link, /balance, etc. |
 | Web App | `web.py`, `web_static/index.html` | Wallet linking page served via FastAPI |
 | Stellar Utils | `stellar_utils.py` | Balance queries, fee calc, transaction execution |
@@ -251,48 +251,79 @@ The Discord bot needs to run persistently. Options:
 
 ---
 
-## Deploying on Railway.app
+## Deploying on Railway
 
 Railway is our **recommended** platform for 24/7 persistent hosting. It handles Docker deployments automatically from GitHub.
 
 ### Step 1: Prepare Repository
+
 Ensure your latest code (including `Dockerfile` and `run_all.py`) is pushed to GitHub.
 
 ### Step 2: Create Railway Project
+
 1. Log in to [Railway.app](https://railway.app).
 2. Click **New Project** → **Deploy from GitHub repo**.
 3. Select your `SHxTipBotV1` repository.
 
 ### Step 3: Configure Environment Variables
+
 1. Go to the **Variables** tab in your Railway service.
 2. Click **Bulk Import** and paste the contents of your `.env` file.
 3. Ensure `WEB_PORT` is set to `8080` (Railway will automatically map this to a public URL).
 
 ### Step 4: Health Checks (Optional but Recommended)
+
 1. Go to **Settings** → **Healthchecks**.
 2. Set the path to `/health`.
 3. Railway will now monitor your bot and restart it automatically if it becomes unresponsive.
 
 ### Step 5: Network (Public URL)
+
 1. Go to **Settings** → **Networking**.
 2. Click **Generate Domain**. This will be your new `WEB_BASE_URL`.
 3. Important: Update the `WEB_BASE_URL` variable in Railway to match this new domain.
+
+
+---
+
+## House Account and Role-Based Funding
+
+To prepare for mainnet and maintain a strict 1:1 custodial backing of SHx, the bot uses a "House Account" model.
+- The **House Account** is simply any Discord user designated as an Admin (`ADMIN_DISCORD_IDS` in `.env`).
+- To fund the House Account, you must make a real Stellar deposit to the bot's deposit address (obtainable via the `/deposit` command) using the Admin's Discord ID as the memo. This credits the Admin's internal balance with real SHx.
+- Once funded, the House Account can distribute SHx to other Discord members (usually "Tippers") so they have a balance to tip regular users.
+
+### Linking Profiles to Roles & Tipping
+
+You can manage roles natively via Discord Server Settings, or use the bot's built-in commands:
+
+1. Use `/create-role` to create a new role (e.g., "Tippers").
+2. Use `/assign-role` to give this role to specific Discord profiles.
+3. Once users are assigned to a role, they unlock the ability to run `/tip-role`. Any user with an assigned role can tip **every** member of another configured role, using their own SHx balance!
+
 
 ---
 
 ## Admin Commands
 
-| Command | Description |
-|---------|-------------|
-| `/tip @user amount reason` | Distribute SHx to a user (mod-only or open to all) |
-| `/distribute @user amount` | Admin: send SHx from supply wallet to a mod/user |
-| `/airdrop total max reason` | Create an airdrop message with a "Claim" button |
-| `/tip-group amount users` | Tip multiple users/mentions or an entire role |
-| `/set-treasury G...` | Update the treasury account address (runtime only) |
+| Command                     | Description                                            |
+| --------------------------- | ------------------------------------------------------ |
+| `/create-role name hex_color`| Create a new Discord role (Admin only).                |
+| `/assign-role @user @role` | Assign a role to a Discord user (Admin only). |
+| `/airdrop total max mins` | Create an airdrop message with a "Claim SHx" button. |
 
-Only users whose Discord IDs are in `ADMIN_DISCORD_IDS` can use admin commands.
+*Note: Only users whose Discord IDs are in `ADMIN_DISCORD_IDS` can use the admin commands listed above (except airdrop if configured otherwise).*
 
 ---
+
+## House Account Tipping Commands
+
+Any Discord user that is a **House Account** or **Tipper** (meaning they are assigned to any Discord role) can use:
+
+| Command                  | Description                                            |
+| ------------------------ | ------------------------------------------------------ |
+| `/tip-role @role amount` | Tip a specific amount of SHx to *each* member of a role. |
+
 
 ## How Tipping Works
 
@@ -344,9 +375,9 @@ Only users whose Discord IDs are in `ADMIN_DISCORD_IDS` can use admin commands.
 
 ## Troubleshooting
 
-| Issue | Solution |
-|-------|----------|
-| Slash commands don't appear | Restart bot — commands sync on startup |
+| Issue                       | Solution                                                   |
+| --------------------------- | ---------------------------------------------------------- |
+| Slash commands don't appear | Restart bot — commands sync on startup                     |
 | "Wallet not linked" | User needs to use `/link` and complete the web flow |
 | "Not enough allowance" | Run `approve_contract.py <USER_SECRET_KEY>` |
 | "Transaction timed out" | Testnet can be slow — check Stellar Expert for the TX hash |
@@ -358,7 +389,7 @@ Only users whose Discord IDs are in `ADMIN_DISCORD_IDS` can use admin commands.
 
 ## File Reference
 
-```
+```text
 SHx Tip Bot/
 ├── .env                    # Configuration (DO NOT COMMIT)
 ├── .env.example            # Template for .env

@@ -5,203 +5,307 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SHx Tip Bot — Dashboard</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/stellar-sdk/10.4.1/stellar-sdk.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #0a0e1a;
-      --surface: rgba(255, 255, 255, 0.04);
-      --surface-hover: rgba(255, 255, 255, 0.08);
-      --border: rgba(255, 255, 255, 0.08);
-      --text: #e4e8f1;
-      --text-muted: #8892a8;
+      --bg: #050b14;
+      --surface: rgba(16, 24, 48, 0.7);
+      --surface-hover: rgba(16, 24, 48, 0.9);
+      --border: rgba(0, 201, 255, 0.15);
+      --border-hover: rgba(0, 201, 255, 0.4);
+      --text: #f0f4f8;
+      --text-muted: #94a3b8;
       --accent: #00c9ff;
-      --success: #00ff88;
-      --error: #ff4c4c;
+      --accent-glow: rgba(0, 201, 255, 0.2);
+      --success: #10b981;
+      --error: #ef4444;
       --radius: 16px;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: 'Inter', system-ui, sans-serif;
+      font-family: 'Outfit', sans-serif;
       background: var(--bg);
       color: var(--text);
       min-height: 100vh;
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 40px 20px;
+      padding: 60px 20px;
       overflow-x: hidden;
+      position: relative;
     }
 
-    /* Background Castle Watermark */
-    body::before {
+    /* Dynamic glowing background blobs */
+    body::before, body::after {
       content: '';
       position: fixed;
-      top: 50%; left: 50%;
-      transform: translate(-50%, -50%);
-      width: 80vmin; height: 80vmin;
-      background: url('https://cdn.prod.website-files.com/5e9a1cde22bbc0a89dba7f5b/60c9649cf8fb48e5c883950e_Stronghold%20Logo%20Mark%20Blue.png') no-repeat center;
-      background-size: contain;
-      opacity: 0.12;
+      width: 400px;
+      height: 400px;
+      border-radius: 50%;
+      filter: blur(100px);
       z-index: -1;
+      opacity: 0.15;
       pointer-events: none;
+      animation: float 10s infinite alternate ease-in-out;
+    }
+    body::before {
+      top: 10%;
+      left: -10%;
+      background: var(--accent);
+    }
+    body::after {
+      bottom: 10%;
+      right: -10%;
+      background: #6c63ff;
+      animation-delay: -5s;
+    }
+
+    @keyframes float {
+      0% { transform: translate(0, 0) scale(1); }
+      100% { transform: translate(30px, -50px) scale(1.1); }
     }
 
     .container {
       width: 100%;
-      max-width: 500px;
-      animation: fadeUp 0.6s ease-out;
+      max-width: 540px;
+      z-index: 1;
+      animation: fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      opacity: 0;
+      transform: translateY(20px);
     }
 
     @keyframes fadeUp {
-      from { opacity: 0; transform: translateY(20px); }
       to { opacity: 1; transform: translateY(0); }
     }
 
-    .header { text-align: center; margin-bottom: 32px; }
+    .header { text-align: center; margin-bottom: 40px; }
     .header h1 { 
-      font-size: 1.8rem; 
-      margin-bottom: 4px; 
-      background: linear-gradient(135deg, var(--accent), #6c63ff);
+      font-size: 2.2rem; 
+      font-weight: 700;
+      margin-bottom: 8px; 
+      background: linear-gradient(135deg, #fff, var(--accent));
       -webkit-background-clip: text;
+      background-clip: text;
       -webkit-text-fill-color: transparent;
+      letter-spacing: -0.5px;
     }
-    .header p { color: var(--text-muted); font-size: 0.95rem; }
+    .header p { color: var(--text-muted); font-size: 1.05rem; }
 
     .card {
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(24px);
+      backdrop-filter: blur(24px);
       padding: 32px;
-      margin-bottom: 20px;
+      margin-bottom: 24px;
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .card:hover {
+      transform: translateY(-4px);
+      border-color: var(--border-hover);
+      box-shadow: 0 10px 40px rgba(0,0,0,0.5), 0 0 20px var(--accent-glow);
     }
 
-    .balance-label { font-size: 0.85rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
-    .balance-val { font-size: 2.4rem; font-weight: 700; margin: 8px 0; color: var(--accent); }
-    .balance-sub { font-size: 0.9rem; color: var(--text-muted); }
-
-    .section-title { font-size: 1rem; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      padding-bottom: 16px;
+    }
     
+    .card-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: rgba(0, 201, 255, 0.1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+      border: 1px solid rgba(0, 201, 255, 0.2);
+    }
+
+    .card-title {
+      font-size: 1.15rem;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .card-desc {
+      font-size: 0.9rem;
+      line-height: 1.6;
+      color: var(--text-muted);
+      margin-bottom: 24px;
+    }
+
+    .balance-val { 
+      font-size: 2.8rem; 
+      font-weight: 700; 
+      color: var(--accent); 
+      text-align: center;
+      margin: 10px 0;
+      text-shadow: 0 0 15px rgba(0,201,255,0.3);
+    }
+
     .info-box {
-      background: rgba(0,0,0,0.2);
-      border: 1px dashed var(--border);
+      background: rgba(0,0,0,0.3);
+      border: 1px solid var(--border);
       border-radius: 12px;
       padding: 16px;
       margin-bottom: 16px;
       position: relative;
+      transition: all 0.2s ease;
     }
-    .info-box label { display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px; }
-    .info-box span { font-family: monospace; font-size: 0.95rem; word-break: break-all; color: var(--text); }
-    .copy-btn { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); cursor: pointer; opacity: 0.6; transition: 0.2s; }
-    .copy-btn:hover { opacity: 1; color: var(--accent); }
+    .info-box:hover { border-color: rgba(255,255,255,0.2); }
+    
+    .info-box label { display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .info-box span { font-family: 'Courier New', Courier, monospace; font-size: 0.95rem; word-break: break-all; color: var(--text); font-weight: 500;}
+    
+    .copy-btn { 
+      position: absolute; right: 12px; top: 50%; transform: translateY(-50%); 
+      background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 6px; padding: 6px 10px; font-size: 0.8rem;
+      cursor: pointer; transition: all 0.2s; color: var(--text-muted);
+    }
+    .copy-btn:hover { background: var(--accent); color: #000; border-color: var(--accent); }
 
     .memo-highlight { border-color: var(--accent); background: rgba(0, 201, 255, 0.05); }
-    .memo-val { font-size: 1.4rem !important; font-weight: 700; color: var(--accent) !important; }
+    .memo-highlight label { color: var(--accent); }
+    .memo-val { font-size: 1.4rem !important; font-weight: 700; color: #fff !important; }
 
-    .qr-container { text-align: center; margin: 24px 0; }
-    .qr-container img { border-radius: 12px; border: 4px solid #fff; width: 140px; }
+    .qr-container { text-align: center; margin-top: 24px; }
+    .qr-container img { border-radius: 16px; border: 2px solid rgba(255,255,255,0.1); width: 130px; padding: 8px; background: #fff; transition: transform 0.3s ease; }
+    .qr-container img:hover { transform: scale(1.05); }
+
+    .wallet-input { 
+      width: 100%; padding: 16px; border-radius: 12px; 
+      border: 1px solid var(--border); background: rgba(0,0,0,0.3); 
+      color: var(--text); margin-bottom: 16px; font-family: monospace; 
+      font-size: 0.95rem; outline: none; transition: border-color 0.2s;
+    }
+    .wallet-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0,201,255,0.1); }
 
     .btn {
       width: 100%;
-      padding: 14px;
+      padding: 16px;
       border-radius: 12px;
-      border: 1px solid var(--border);
+      border: none;
       font-family: inherit;
-      font-size: 0.95rem;
+      font-size: 1rem;
       font-weight: 600;
       cursor: pointer;
-      transition: 0.2s;
-      background: var(--surface-hover);
-      color: var(--text);
-      display: flex;
-      items-center: center;
-      justify-content: center;
-      gap: 10px;
+      transition: all 0.2s;
+      background: var(--accent);
+      color: #000;
+      box-shadow: 0 4px 15px rgba(0,201,255,0.2);
     }
-    .btn:hover { border-color: var(--accent); background: rgba(0,201,255,0.1); }
-    .btn-primary { background: var(--accent); color: #000; border: none; }
-    .btn-primary:hover { filter: brightness(1.1); }
+    .btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,201,255,0.4); filter: brightness(1.1); }
+    .btn:active { transform: translateY(0); }
+    .btn:disabled { opacity: 0.7; cursor: not-allowed; transform: none; }
 
-    .status { margin-top: 12px; padding: 12px; border-radius: 8px; font-size: 0.85rem; text-align: center; display: none; }
-    .status.success { display: block; background: rgba(0, 255, 136, 0.1); color: var(--success); border: 1px solid rgba(0, 255, 136, 0.2); }
-    .status.error { display: block; background: rgba(255, 76, 76, 0.1); color: var(--error); border: 1px solid rgba(255, 76, 76, 0.2); }
+    .status { margin-top: 16px; padding: 14px; border-radius: 10px; font-size: 0.9rem; text-align: center; display: none; font-weight: 500; }
+    .status.success { display: block; background: rgba(16, 185, 129, 0.1); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.2); }
+    .status.error { display: block; background: rgba(239, 68, 68, 0.1); color: var(--error); border: 1px solid rgba(239, 68, 68, 0.2); }
 
-    .instructions { font-size: 0.85rem; color: var(--text-muted); line-height: 1.6; }
-    .instructions strong { color: var(--text); }
+    .linked-badge {
+      display: inline-block; padding: 6px 12px; background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; font-family: monospace;
+      color: var(--accent); margin-top: 8px; font-size: 0.9rem; font-weight: 500;
+    }
 
-    .badge { font-size: 0.65rem; background: rgba(255,170,0,0.15); color: #ffaa00; padding: 2px 8px; border-radius: 10px; margin-left: 8px; vertical-align: middle; }
+    .network-badge { font-size: 0.7rem; background: rgba(255,170,0,0.15); color: #ffaa00; padding: 4px 10px; border-radius: 20px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase;}
+    .qr-text { font-size: 0.8rem; color: var(--text-muted); margin-top: 12px; font-weight: 500; }
+    .footer-text { text-align: center; font-size: 0.8rem; color: var(--text-muted); opacity: 0.5; margin-top: 20px; font-weight: 500; }
+    
+    .card-header-split { justify-content: space-between; }
+    .card-header-left { display: flex; align-items: center; gap: 12px; }
+    .linked-section { margin-top: 24px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.05); }
+    .linked-label { font-size: 0.8rem; color: var(--text-muted); display: block; margin-bottom: 4px; }
   </style>
 </head>
 <body>
 
   <div class="container">
     <div class="header">
-      <h1>SHx Tip Bot</h1>
-      <p>Custodial Wallet Dashboard</p>
+      <h1>SHx Dashboard</h1>
+      <p>Manage your tips, deposits, and withdrawals securely.</p>
     </div>
 
     <!-- Balance Card -->
     <div class="card">
-      <div class="balance-label">Current Tipping Balance</div>
+      <div class="card-header">
+        <div class="card-icon">💰</div>
+        <div class="card-title">Available Balance</div>
+      </div>
+      <p class="card-desc">
+        This is your internal tipping balance representing SHx currently held by the bot. You can use this balance immediately in Discord to tip other users via the <code>/tip</code> command.
+      </p>
       <div class="balance-val">{{INTERNAL_BALANCE}} SHX</div>
-      <div class="balance-sub">Ready for tipping in Discord!</div>
     </div>
 
     <!-- Deposit Card -->
     <div class="card">
-      <div class="section-title">
-        <span>📥 Deposit Funds</span>
-        <span class="badge">{{NETWORK}}</span>
+      <div class="card-header card-header-split">
+        <div class="card-header-left">
+          <div class="card-icon">📥</div>
+          <div class="card-title">Deposit to Balance</div>
+        </div>
+        <span class="network-badge">{{NETWORK}}</span>
       </div>
-      
-      <p class="instructions" style="margin-bottom: 20px;">
-        Send SHX to the address below. **Memo ID is mandatory** to credit your account.
+      <p class="card-desc">
+        To increase your tipping balance, send SHx from your personal Stellar wallet to the bot's secure House Account. <strong>You MUST include your unique Memo ID in the transaction</strong> so the bot knows to credit your account.
       </p>
 
-      <div class="info-box">
-        <label>Deposit Address</label>
-        <span id="addr-text">{{HOUSE_ACCOUNT_PUBLIC}}</span>
-        <div class="copy-btn" onclick="copy('addr-text')">📋</div>
+      <div class="info-box memo-highlight">
+        <label>Your Unique Memo ID</label>
+        <span class="memo-val" id="memo-text">{{MEMO_ID}}</span>
+        <button class="copy-btn" onclick="copy('memo-text')">Copy</button>
       </div>
 
-      <div class="info-box memo-highlight">
-        <label>Required Memo ID (MEMO_ID)</label>
-        <span class="memo-val" id="memo-text">{{MEMO_ID}}</span>
-        <div class="copy-btn" onclick="copy('memo-text')">📋</div>
+      <div class="info-box">
+        <label>Bot Deposit Address</label>
+        <span id="addr-text">{{HOUSE_ACCOUNT_PUBLIC}}</span>
+        <button class="copy-btn" onclick="copy('addr-text')">Copy</button>
       </div>
 
       <div class="qr-container">
         <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data={{HOUSE_ACCOUNT_PUBLIC}}" alt="QR Code">
-        <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 8px;">Scan to copy address</p>
+        <p class="qr-text">Scan to copy deposit address</p>
       </div>
     </div>
 
     <!-- Verification Card -->
     <div class="card">
-      <div class="section-title">🔗 Withdrawal Verification</div>
-      <p class="instructions" style="margin-bottom: 20px;">
-        Verify your external Stellar wallet to enable secure withdrawals.
+      <div class="card-header">
+        <div class="card-icon">🔗</div>
+        <div class="card-title">Withdrawal Setup</div>
+      </div>
+      <p class="card-desc">
+        Link your personal Stellar wallet address to your Discord profile. This allows you to securely withdraw your internal SHx balance back to your own wallet at any time using the <code>/withdraw</code> command in Discord.
       </p>
 
       <div id="verify-section">
-        <input type="text" id="g-address" placeholder="Enter your Stellar G-Address..." style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border); background: rgba(0,0,0,0.2); color: var(--text); margin-bottom: 12px; font-family: monospace;">
-        <button class="btn" onclick="verifyWallet()" id="btn-verify">
-          Save Wallet Address
-        </button>
+        <input type="text" id="g-address" class="wallet-input" placeholder="e.g. GABC123...">
+        <button class="btn" onclick="verifyWallet()" id="btn-verify">Link Wallet Address</button>
       </div>
 
       <div id="status-box" class="status"></div>
       
-      <div class="instructions" style="margin-top: 20px;">
-        Linked Address: <br>
-        <strong id="linked-addr">{{EXISTING_KEY or 'None linked yet'}}</strong>
+      <div class="linked-section">
+        <label class="linked-label">Currently Linked Address:</label>
+        <div class="linked-badge" id="linked-addr">{{EXISTING_KEY or 'None linked yet'}}</div>
       </div>
     </div>
 
-    <p style="text-align: center; font-size: 0.75rem; color: var(--text-muted); opacity: 0.5;">
-      SHx Tip Bot • v2.0 Custodial Architecture
+    <p class="footer-text">
+      SHx Tip Bot • v2.0
     </p>
   </div>
 
@@ -213,7 +317,18 @@
     function copy(id) {
       const text = document.getElementById(id).innerText;
       navigator.clipboard.writeText(text);
-      alert("Copied to clipboard!");
+      const btn = document.querySelector(`#${id} + .copy-btn`);
+      const originalText = btn.innerText;
+      btn.innerText = "Copied!";
+      btn.style.background = "var(--success)";
+      btn.style.color = "#000";
+      btn.style.borderColor = "var(--success)";
+      setTimeout(() => {
+        btn.innerText = originalText;
+        btn.style.background = "";
+        btn.style.color = "";
+        btn.style.borderColor = "";
+      }, 2000);
     }
 
     async function verifyWallet() {
@@ -229,6 +344,7 @@
 
         btn.disabled = true;
         btn.innerText = "Saving...";
+        status.className = "status";
 
         const res = await fetch(API_BASE + '/api/link', {
           method: 'POST',
@@ -239,7 +355,7 @@
         const data = await res.json();
         if (data.success) {
           status.className = "status success";
-          status.innerText = "Wallet saved successfully!";
+          status.innerText = "Wallet linked successfully! You can now use /withdraw in Discord.";
           document.getElementById('linked-addr').innerText = publicKey;
           input.value = "";
         } else {
@@ -250,17 +366,9 @@
         status.innerText = e.message;
       } finally {
         btn.disabled = false;
-        btn.innerText = "Save Wallet Address";
+        btn.innerText = "Link Wallet Address";
       }
     }
   </script>
 </body>
-</html>
-L = 'Link Wallet';
-      }
-    }
-  </script>
-
-</body>
-
 </html>

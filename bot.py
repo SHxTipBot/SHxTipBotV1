@@ -292,11 +292,6 @@ async def tip_command(
     # Ensure recipient exists in DB
     await db.get_or_create_user(recipient_id)
 
-    # QoL for Admins: Auto-fund them instantly if their personal internal balance is too low
-    if is_admin:
-        admin_bal = await db.get_internal_balance(sender_id)
-        if admin_bal < total_needed:
-            await db.admin_fund_internal(sender_id, total_needed + 5000.0)
 
     success = await db.transfer_internal(sender_id, recipient_id, parsed_amount, fee_shx, actual_reason)
 
@@ -319,36 +314,136 @@ async def tip_command(
         )
 
 
-# ── /fund ─────────────────────────────────────────────────────────────────────
+# ── /create-role ──────────────────────────────────────────────────────────────
 
-@bot.tree.command(name="fund", description="[Admin] Fund a user's internal SHx balance")
-@app_commands.describe(user="User to fund", amount="Amount of SHx or USD (e.g. 1000 or $50)")
-async def fund_command(interaction: Interaction, user: discord.User, amount: str):
-    logger.info(f"COMMAND | /fund | User: {interaction.user} Target: {user.id} Amount: {amount}")
-    await interaction.response.defer()
+@bot.tree.command(name="create-role", description="[Admin] Create a new Discord role")
+@app_commands.describe(name="Name of the role", hex_color="Hex color code (e.g. 0x5865F2)")
+async def create_role_command(interaction: Interaction, name: str, hex_color: str):
+    logger.info(f"COMMAND | /create-role | User: {interaction.user} Name: {name} Color: {hex_color}")
+    await interaction.response.defer(ephemeral=True)
+    if str(interaction.user.id) not in ADMIN_DISCORD_IDS:
+        await interaction.followup.send("❌ You do not have permission to use this command.", ephemeral=True)
+        return
+    
+    try:
+        color_int = int(hex_color.replace("#", ""), 16)
+        role = await interaction.guild.create_role(name=name, color=discord.Color(color_int), reason="Created via bot command")
+        await interaction.followup.send(f"✅ Role {role.mention} created successfully.", ephemeral=True)
+    except ValueError:
+        await interaction.followup.send("❌ Invalid hex color. Please use format like `0x5865F2` or `#5865F2`.", ephemeral=True)
+    except discord.Forbidden:
+        await interaction.followup.send("❌ Failed to create role. The bot lacks `Manage Roles` permissions.", ephemeral=True)
+    except Exception as e:
+        logger.error(f"Failed to create role: {e}")
+        await interaction.followup.send(f"❌ Failed to create role: {str(e)}", ephemeral=True)
+
+
+# ── /assign-role ──────────────────────────────────────────────────────────────
+
+@bot.tree.command(name="assign-role", description="[Admin] Assign a role to a user")
+@app_commands.describe(user="The user to assign", role="The role to assign")
+async def assign_role_command(interaction: Interaction, user: discord.Member, role: discord.Role):
+    logger.info(f"COMMAND | /assign-role | User: {interaction.user} Target: {user} Role: {role.name}")
+    await interaction.response.defer(ephemeral=True)
     if str(interaction.user.id) not in ADMIN_DISCORD_IDS:
         await interaction.followup.send("❌ You do not have permission to use this command.", ephemeral=True)
         return
         
+    try:
+        await user.add_roles(role, reason="Assigned via bot command")
+        await interaction.followup.send(f"✅ Role {role.mention} assigned to {user.mention}.", ephemeral=True)
+    except discord.Forbidden:
+        await interaction.followup.send("❌ Failed to assign role. Ensure the bot's role is positioned *higher* than the role being assigned in server settings.", ephemeral=True)
+    except Exception as e:
+        logger.error(f"Failed to assign role: {e}")
+        await interaction.followup.send(f"❌ Failed to assign role: {str(e)}", ephemeral=True)
+
+
+# ── /tip-role ─────────────────────────────────────────────────────────────────
+
+@bot.tree.command(name="tip-role", description="Tip an amount of SHx to EACH member of a role")
+@app_commands.describe(role="The role to tip", amount="Amount to send to EACH member (e.g. 100 or $5)")
+async def tip_role_command(interaction: Interaction, role: discord.Role, amount: str):
+    logger.info(f"COMMAND | /tip-role | User: {interaction.user} Role: {role.name} Amount/User: {amount}")
+    await interaction.response.defer()
+    
+    sender_id = str(interaction.user.id)
+    
+    # Must be in a server to check roles
+    if not isinstance(interaction.user, discord.Member):
+        if sender_id not in ADMIN_DISCORD_IDS:
+            await interaction.followup.send("❌ This command must be used in a server.", ephemeral=True)
+            return
+    # Must have at least one assigned role (other than @everyone) to use /tip-role
+    elif len(interaction.user.roles) <= 1 and sender_id not in ADMIN_DISCORD_IDS:
+        await interaction.followup.send("❌ Only users with an assigned role can use `/tip-role`. Users without a role can only tip other individual users using `/tip`.", ephemeral=True)
+        return
+
     parsed_amount = await parse_amount(amount)
     if parsed_amount is None:
         await interaction.followup.send("❌ Invalid amount. Enter numbers or a fiat string (e.g. `$5`).", ephemeral=True)
         return
-        
-    await db.get_or_create_user(str(user.id))
-    await db.admin_fund_internal(str(user.id), parsed_amount)
+
+    members = role.members
+    # Fallback to fetching all members if role.members goes stale or lacks intent population
+    if not members and interaction.guild.chunked is False:
+        try:
+            await interaction.guild.chunk()
+            members = role.members
+        except Exception:
+            pass
+            
+    if not members:
+        await interaction.followup.send(f"❌ There are no members found in the {role.name} role.", ephemeral=True)
+        return
+
+    valid_members = [m for m in members if not m.bot and str(m.id) != sender_id]
+    if not valid_members:
+        await interaction.followup.send(f"❌ There are no valid recipient members in the {role.name} role (bots and yourself are excluded).", ephemeral=True)
+        return
+
+    total_needed = parsed_amount * len(valid_members)
+    sender_bal = await db.get_internal_balance(sender_id)
     
-    embed = _footer(discord.Embed(title="🏦 User Funded", color=SUCCESS_COLOR))
-    embed.add_field(name="User", value=user.mention, inline=True)
-    embed.add_field(name="Amount", value=f"**{parsed_amount:,.2f} SHx**", inline=True)
+    if sender_bal < total_needed:
+        await interaction.followup.send(f"❌ Insufficient balance. You need **{total_needed:,.2f} SHx** to tip {len(valid_members)} members **{parsed_amount:,.2f} SHx** each, but you only have **{sender_bal:,.2f} SHx**.", ephemeral=True)
+        return
+
+    success_count = 0
+    for member in valid_members:
+        recipient_id = str(member.id)
+        await db.get_or_create_user(recipient_id)
+        success = await db.transfer_internal(sender_id, recipient_id, parsed_amount, 0.0, f"Role tip: {role.name}")
+        if success:
+            success_count += 1
+            
+    embed = _footer(discord.Embed(title="🎭 Role Tip Complete!", color=SUCCESS_COLOR))
+    embed.add_field(name="Role Tipped", value=role.mention, inline=False)
+    embed.add_field(name="Amount per User", value=f"**{parsed_amount:,.2f} SHx**", inline=True)
+    embed.add_field(name="Users Tipped", value=f"**{success_count}** out of {len(valid_members)}", inline=True)
+    embed.add_field(name="Total Sent", value=f"**{(parsed_amount * success_count):,.2f} SHx**", inline=False)
+    
     await interaction.followup.send(embed=embed)
 
 # ── /airdrop ──────────────────────────────────────────────────────────────────
 
 @bot.tree.command(name="airdrop", description="Create an SHx airdrop in the current channel")
-@app_commands.describe(total_amount="Total SHx or USD (e.g. 100 or $10)", claims="Number of people who can claim", duration_minutes="Optional expiration time in minutes")
-async def airdrop_command(interaction: Interaction, total_amount: str, claims: int, duration_minutes: Optional[int] = None):
-    logger.info(f"COMMAND | /airdrop | User: {interaction.user} Total: {total_amount} Claims: {claims} Mins: {duration_minutes}")
+@app_commands.describe(
+    total_amount="Total SHx or USD (e.g. 100 or $10)", 
+    claims="Number of people who can claim", 
+    duration_minutes="Optional expiration time in minutes",
+    duration_hours="Optional expiration time in hours",
+    duration_days="Optional expiration time in days"
+)
+async def airdrop_command(
+    interaction: Interaction, 
+    total_amount: str, 
+    claims: int, 
+    duration_minutes: Optional[int] = None,
+    duration_hours: Optional[int] = None,
+    duration_days: Optional[int] = None
+):
+    logger.info(f"COMMAND | /airdrop | User: {interaction.user} Total: {total_amount} Claims: {claims} Mins: {duration_minutes} Hrs: {duration_hours} Days: {duration_days}")
     await interaction.response.defer()
     creator_id = str(interaction.user.id)
     
@@ -368,14 +463,30 @@ async def airdrop_command(interaction: Interaction, total_amount: str, claims: i
         await interaction.followup.send(f"❌ Insufficient balance. You have **{bal:,.2f} SHx**.", ephemeral=True)
         return
         
+    total_mins = 0
+    if duration_minutes: total_mins += duration_minutes
+    if duration_hours: total_mins += duration_hours * 60
+    if duration_days: total_mins += duration_days * 1440
+    total_mins = total_mins if total_mins > 0 else None
+    
     airdrop_id = secrets.token_hex(4)
     await db.create_airdrop(
-        airdrop_id, creator_id, parsed_amount, amount_per_claim, claims, "Channel Airdrop", duration_minutes
+        airdrop_id, creator_id, parsed_amount, amount_per_claim, claims, "Channel Airdrop", total_mins
     )
+    
+    expires_str = ""
+    if total_mins:
+        if total_mins >= 1440 and total_mins % 1440 == 0:
+            expires_str = f"Expires in {total_mins // 1440} day(s)"
+        elif total_mins >= 60 and total_mins % 60 == 0:
+            expires_str = f"Expires in {total_mins // 60} hour(s)"
+        else:
+            expires_str = f"Expires in {total_mins} minute(s)"
+        expires_str = f"\n⏳ *{expires_str}*"
     
     embed = _footer(discord.Embed(
         title="🪂 SHx Airdrop!",
-        description=f"{interaction.user.mention} is dropping **{parsed_amount:,.2f} SHx**!" + (f"\n⏳ *Expires in {duration_minutes} minutes*" if duration_minutes else ""),
+        description=f"{interaction.user.mention} is dropping **{parsed_amount:,.2f} SHx**!" + expires_str,
         color=0xFF00AA
     ))
     embed.add_field(name="Amount per claim", value=f"**{amount_per_claim:,.2f} SHx**", inline=True)

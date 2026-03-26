@@ -93,6 +93,29 @@ async def init_db():
                 created_at DOUBLE PRECISION NOT NULL
             )
         """)
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS airdrops (
+                id TEXT PRIMARY KEY,
+                creator_discord_id TEXT NOT NULL,
+                total_amount REAL NOT NULL,
+                amount_per_claim REAL NOT NULL,
+                max_claims INTEGER NOT NULL,
+                claims_count INTEGER DEFAULT 0,
+                active INTEGER DEFAULT 1,
+                reason TEXT,
+                created_at DOUBLE PRECISION NOT NULL,
+                expires_at DOUBLE PRECISION
+            )
+        """)
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS airdrop_claims (
+                id SERIAL PRIMARY KEY,
+                airdrop_id TEXT NOT NULL,
+                user_discord_id TEXT NOT NULL,
+                tx_hash TEXT,
+                created_at DOUBLE PRECISION NOT NULL
+            )
+        """)
     
     # Run migrations: comprehensively sanitize all legacy NOT NULL constraints for Tip.cc zero-friction architecture
     migration_queries = [
