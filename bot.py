@@ -199,7 +199,7 @@ async def deposit_command(interaction: Interaction):
     embed.add_field(name="Required Memo ID", value=f"`{memo_id}`", inline=False)
     embed.add_field(name="Asset", value=f"SHX (Issuer: `{stellar.SHX_ISSUER[:8]}...`)", inline=False)
 
-    embed.set_image(url=f"https://api.qrserver.com/v1/create-qr-code/?size=150x150&data={stellar.HOUSE_ACCOUNT_PUBLIC}")
+    embed.set_image(url=f"https://quickchart.io/qr?text={stellar.HOUSE_ACCOUNT_PUBLIC}&size=150")
 
     await interaction.followup.send(
         content="⚠️ **IMPORTANT**: You MUST include the Memo ID or your deposit will be lost.",
