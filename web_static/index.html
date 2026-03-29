@@ -91,8 +91,8 @@
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      backdrop-filter: blur(20px);
       -webkit-backdrop-filter: blur(20px);
+      backdrop-filter: blur(20px);
       padding: 32px;
       margin-bottom: 24px;
       transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
@@ -285,6 +285,13 @@
     /* Claim Specific */
     .claim-card { border-color: var(--success); background: linear-gradient(to bottom right, rgba(16, 185, 129, 0.05), var(--surface)); }
     .claim-card .card-icon { background: rgba(16, 185, 129, 0.1); color: var(--success); border-color: rgba(16, 185, 129, 0.2); }
+
+    /* New Utility Classes for Inline Style Removal */
+    .auto-detect-notice { margin-bottom: 12px; font-size: 0.85rem; }
+    .btn-danger-outline { margin-top: 12px; color: var(--error); border-color: rgba(239, 68, 68, 0.2); }
+    .info-item-accent { border-color: var(--accent); }
+    .label-accent { color: var(--accent); }
+    .value-large { font-size: 1.4rem; font-weight: 700; }
   </style>
 </head>
 <body>
@@ -321,13 +328,13 @@
                 <label>Network</label>
                 <div class="value">{{NETWORK}}</div>
             </div>
-            <div id="auto-detect-notice" class="status success hidden" style="margin-bottom: 12px; font-size: 0.85rem;">
+            <div id="auto-detect-notice" class="status success hidden auto-detect-notice">
                 ℹ️ Auto-detected withdrawal ticket
             </div>
         </div>
 
         <button class="btn" onclick="claimWithdrawal()" id="btn-claim-action" disabled>Claim SHx Tokens</button>
-        <button class="btn btn-outline" style="margin-top: 12px; color: var(--error); border-color: rgba(239,68,68,0.2);" onclick="cancelWithdrawal()" id="btn-cancel-action">Cancel Withdrawal</button>
+        <button class="btn btn-outline btn-danger-outline" onclick="cancelWithdrawal()" id="btn-cancel-action">Cancel Withdrawal</button>
         <div id="claim-status" class="status"></div>
     </div>
 
@@ -354,7 +361,7 @@
 
         <div id="link-controls">
             <button class="btn btn-secondary" id="btn-link" onclick="handleLink()" disabled>Register Connected Wallet</button>
-            <button class="btn btn-outline" style="margin-top: 12px; color: var(--error); border-color: rgba(239,68,68,0.2);" id="btn-unlink" onclick="unlinkWallet()">Unlink Wallet</button>
+            <button class="btn btn-outline btn-danger-outline" id="btn-unlink" onclick="unlinkWallet()">Unlink Wallet</button>
         </div>
         <div id="status-box" class="status"></div>
     </div>
@@ -373,9 +380,9 @@
               <div class="value" id="addr-text">{{HOUSE_ACCOUNT_PUBLIC}}</div>
               <button class="copy-btn" onclick="copy('addr-text')">Copy</button>
           </div>
-          <div class="info-item" style="border-color: var(--accent);">
-              <label style="color: var(--accent)">Your Unique Memo</label>
-              <div class="value" id="memo-text" style="font-size: 1.4rem; font-weight: 700;">{{MEMO_ID}}</div>
+          <div class="info-item info-item-accent">
+              <label class="label-accent">Your Unique Memo</label>
+              <div class="value value-large" id="memo-text">{{MEMO_ID}}</div>
               <button class="copy-btn" onclick="copy('memo-text')">Copy</button>
           </div>
       </div>
