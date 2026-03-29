@@ -250,6 +250,26 @@ async def api_approve_tx(request: Request):
         raise HTTPException(500, f"Failed to build transaction: {str(e)}")
 
 
+# ── API: User Balance ────────────────────────────────────────────────────────
+@app.get("/api/balance")
+async def api_get_balance(token: str = "", claim_id: str = ""):
+    """Fetch current internal balance for a user."""
+    discord_id = None
+    if token:
+        discord_id = await db.validate_link_token(token)
+    
+    if not discord_id and claim_id:
+        claim_data = await db.get_withdrawal(claim_id)
+        if claim_data:
+            discord_id = claim_data["discord_id"]
+            
+    if not discord_id:
+        raise HTTPException(400, "Invalid session.")
+        
+    balance = await db.get_internal_balance(discord_id)
+    return {"success": True, "balance": f"{balance:,.2f}"}
+
+
 # ── API: Withdrawals ─────────────────────────────────────────────────────────
 
 @app.get("/api/withdrawal/{withdrawal_id}")
@@ -290,6 +310,42 @@ async def api_complete_withdrawal(withdrawal_id: str, request: Request):
     await db.complete_withdrawal(withdrawal_id, tx_hash)
     logger.info(f"WITHDRAWAL COMPLETE | ID: {withdrawal_id} | Hash: {tx_hash}")
     return {"success": True}
+
+@app.post("/api/withdrawal/{withdrawal_id}/cancel")
+async def api_cancel_withdrawal(withdrawal_id: str, request: Request):
+    """Cancel a pending withdrawal and refund the user."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Invalid JSON body.")
+
+    token = body.get("token", "").strip()
+    # Note: We allow cancellation if they have a valid token OR if they originated from the bot's claim link.
+    # To be secure, we validate the token if provided.
+    
+    discord_id = None
+    if token:
+        discord_id = await db.validate_link_token(token)
+    
+    # Check the withdrawal record
+    withdrawal = await db.get_withdrawal(withdrawal_id)
+    if not withdrawal:
+        raise HTTPException(404, "Withdrawal not found.")
+        
+    # If a token was provided, ensure it matches the withdrawal owner
+    if discord_id and withdrawal["discord_id"] != discord_id:
+        raise HTTPException(403, "You do not have permission to cancel this withdrawal.")
+
+    # Perform cancellation
+    success = await db.cancel_withdrawal(withdrawal_id)
+    if not success:
+        return JSONResponse({
+            "success": False, 
+            "message": "Cancellation failed. Withdrawal may be finished or not found."
+        }, status_code=400)
+
+    logger.info(f"WITHDRAWAL CANCELLED | ID: {withdrawal_id} | User: {withdrawal['discord_id']}")
+    return {"success": True, "message": "Withdrawal cancelled. SHx refunded to Discord."}
 
 
 # ── Health Check ──────────────────────────────────────────────────────────────

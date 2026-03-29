@@ -299,10 +299,70 @@
     .qr-text { font-size: 0.8rem; color: var(--text-muted); margin-top: 12px; font-weight: 500; }
     .footer-text { text-align: center; font-size: 0.8rem; color: var(--text-muted); opacity: 0.5; margin-top: 20px; font-weight: 500; }
     
+    /* Wallet Selector Styles */
+    .wallet-selector {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 24px;
+      padding: 4px;
+      background: rgba(0,0,0,0.2);
+      border-radius: 12px;
+      border: 1px solid var(--border);
+    }
+    .wallet-btn {
+      flex: 1;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.85rem;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .wallet-btn img { width: 18px; height: 18px; filter: grayscale(1); opacity: 0.6; }
+    .wallet-btn.active {
+      background: rgba(0, 201, 255, 0.1);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .wallet-btn.active img { filter: none; opacity: 1; }
+    
+    .btn-fetch {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: var(--text);
+      font-size: 0.85rem;
+      padding: 8px 16px;
+      margin-bottom: 16px;
+      width: auto;
+      align-self: flex-start;
+      box-shadow: none;
+    }
+    .btn-fetch:hover { background: rgba(255,255,255,0.1); }
+    
     .card-header-split { justify-content: space-between; }
     .card-header-left { display: flex; align-items: center; gap: 12px; }
     .linked-section { margin-top: 24px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.05); }
     .linked-label { font-size: 0.8rem; color: var(--text-muted); display: block; margin-bottom: 4px; }
+
+    /* Utility Helpers to Replace Inline Styles */
+    .claim-info { margin-top: 10px; border-top: none; }
+    .badge-claim-dest { background: rgba(0, 255, 136, 0.1); color: #00FF88; }
+    .btn-claim-margin { margin-top: 20px; }
+    .balance-container { display: flex; align-items: center; justify-content: center; gap: 15px; margin: 10px 0; }
+    .balance-val-reset { margin: 0; }
+    .btn-refresh-sm { width: auto; margin: 0; padding: 8px 12px; font-size: 0.75rem; }
+    .verify-section-flex { display: flex; flex-direction: column; }
+    .input-group-flex { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .input-flex-fill { margin-bottom: 0; flex: 1; }
+    .btn-autofill-sm { width: auto; margin: 0; padding: 12px 16px; font-size: 0.8rem; }
+    .btn-cancel-revert { margin-top: 12px; background: rgba(239, 68, 68, 0.05); }
   </style>
 </head>
 <body>
@@ -321,6 +381,19 @@
           <div class="card-icon card-icon-claim">🎟️</div>
           <div class="card-title">Claim Your SHx Withdrawal</div>
         </div>
+
+        <div class="wallet-selector">
+          <button class="wallet-btn active" id="claim-wallet-freighter" onclick="setWallet('freighter')">
+             <img src="https://www.stronghold.co/favicon-32x32.png" alt=""> Freighter
+          </button>
+          <button class="wallet-btn" id="claim-wallet-lobstr" onclick="setWallet('lobstr')">
+             <img src="https://lobstr.co/static/images/favicon.png" alt=""> LOBSTR
+          </button>
+          <button class="wallet-btn" id="claim-wallet-xbull" onclick="setWallet('xbull')">
+             <img src="https://xbull.app/favicon.ico" alt=""> xBull
+          </button>
+        </div>
+
         <p class="card-desc">
           You have a pending withdrawal of <strong>{{CLAIM_AMOUNT}} SHX</strong>. 
           To receive these funds in your wallet, you must submit the transaction below.
@@ -330,7 +403,13 @@
         
         <div class="balance-val balance-claim">{{CLAIM_AMOUNT}} SHX</div>
         
-        <button class="btn btn-success" onclick="claimWithdrawal()" id="btn-claim">Sign & Claim SHx</button>
+        <div class="linked-section claim-info">
+          <label class="linked-label">Target Destination Address:</label>
+          <div class="linked-badge badge-claim-dest" id="claim-target-addr">Loading...</div>
+        </div>
+        
+        <button class="btn btn-success btn-claim-margin" onclick="claimWithdrawal()" id="btn-claim">Sign & Claim SHx</button>
+        <button class="btn btn-unlink btn-cancel-revert" onclick="cancelWithdrawal()" id="btn-cancel">Cancel & Return SHx to Discord</button>
         <div id="claim-status" class="status"></div>
     </div>
 
@@ -343,7 +422,10 @@
       <p class="card-desc">
         This is your internal tipping balance representing SHx currently held by the bot. You can use this balance immediately in Discord to tip other users via the <code>/tip</code> command.
       </p>
-      <div class="balance-val">{{INTERNAL_BALANCE}} SHX</div>
+      <div class="balance-container">
+        <div class="balance-val balance-val-reset" id="balance-display">{{INTERNAL_BALANCE}} SHX</div>
+        <button class="btn btn-fetch btn-refresh-sm" id="btn-refresh" onclick="refreshBalance()">Refresh</button>
+      </div>
     </div>
 
     <!-- Withdrawal Card -->
@@ -356,8 +438,23 @@
         Link your personal Stellar wallet address to your Discord profile. This allows you to securely withdraw your internal SHx balance back to your own wallet at any time using the <code>/withdraw</code> command in Discord.
       </p>
 
-      <div id="verify-section">
-        <input type="text" id="g-address" class="wallet-input" placeholder="e.g. GABC123..." value="{{EXISTING_KEY_VAL}}">
+      <div class="wallet-selector">
+        <button class="wallet-btn active" id="link-wallet-freighter" onclick="setWallet('freighter')">
+           <img src="https://www.stronghold.co/favicon-32x32.png" alt=""> Freighter
+        </button>
+        <button class="wallet-btn" id="link-wallet-lobstr" onclick="setWallet('lobstr')">
+           <img src="https://lobstr.co/static/images/favicon.png" alt=""> LOBSTR
+        </button>
+        <button class="wallet-btn" id="link-wallet-xbull" onclick="setWallet('xbull')">
+           <img src="https://xbull.app/favicon.ico" alt=""> xBull
+        </button>
+      </div>
+
+      <div id="verify-section" class="verify-section-flex">
+        <div class="input-group-flex">
+           <input type="text" id="g-address" class="wallet-input input-flex-fill" placeholder="e.g. GABC123..." value="{{EXISTING_KEY_VAL}}">
+           <button class="btn btn-fetch btn-autofill-sm" onclick="fetchWalletAddress()">Auto-Fill</button>
+        </div>
         <button class="btn" onclick="verifyWallet()" id="btn-verify">Link Wallet Address</button>
       </div>
 
@@ -411,9 +508,92 @@
     const SOROBAN_CONTRACT_ID = "{{SOROBAN_CONTRACT_ID}}";
     const API_BASE = window.location.origin;
 
+    let ACTIVE_WALLET = 'freighter';
+
+    function setWallet(type) {
+        ACTIVE_WALLET = type;
+        // Update all selectors
+        ['claim', 'link'].forEach(prefix => {
+            const fBtn = document.getElementById(`${prefix}-wallet-freighter`);
+            const lBtn = document.getElementById(`${prefix}-wallet-lobstr`);
+            const xBtn = document.getElementById(`${prefix}-wallet-xbull`);
+            if (fBtn && lBtn && xBtn) {
+                fBtn.classList.toggle('active', type === 'freighter');
+                lBtn.classList.toggle('active', type === 'lobstr');
+                xBtn.classList.toggle('active', type === 'xbull');
+            }
+        });
+    }
+
+    async function getProvider() {
+        if (ACTIVE_WALLET === 'freighter') {
+            if (typeof window.freighterApi === 'undefined') {
+                throw new Error("Freighter not found. Please install the extension.");
+            }
+            return window.freighterApi;
+        } else if (ACTIVE_WALLET === 'lobstr') {
+            if (typeof window.lobstr === 'undefined') {
+                throw new Error("LOBSTR Signer not found. Please install the extension.");
+            }
+            return window.lobstr;
+        } else if (ACTIVE_WALLET === 'xbull') {
+            if (typeof window.xBullSDK === 'undefined') {
+                throw new Error("xBull Wallet not found. Please install the extension.");
+            }
+            return window.xBullSDK;
+        }
+    }
+
+    async function fetchWalletAddress() {
+        try {
+            const provider = await getProvider();
+            const { address } = await provider.getAddress();
+            if (address) {
+                document.getElementById('g-address').value = address;
+            }
+        } catch (e) {
+            alert(e.message);
+        }
+    }
+
+    async function refreshBalance() {
+        const btn = document.getElementById('btn-refresh');
+        const display = document.getElementById('balance-display');
+        try {
+            btn.disabled = true;
+            btn.innerText = "Refreshing...";
+            const res = await axios.get(`${API_BASE}/api/balance?token=${TOKEN}&claim_id=${CLAIM_ID}`);
+            if (res.data.success) {
+                display.innerText = `${res.data.balance} SHX`;
+            }
+        } catch (e) {
+            console.error("Refresh failed:", e);
+        } finally {
+            btn.disabled = false;
+            btn.innerText = "Refresh";
+        }
+    }
+
     // Show claim card if CLAIM_ID is present
     if (CLAIM_ID && CLAIM_ID.length > 5) {
         document.getElementById('claim-card').classList.remove('hidden');
+        
+        // Auto-populate the address field from the claim data
+        axios.get(`${API_BASE}/api/withdrawal/${CLAIM_ID}`)
+            .then(res => {
+                if (res.data.success && res.data.stellar_address) {
+                    const input = document.getElementById('g-address');
+                    const targetDisplay = document.getElementById('claim-target-addr');
+                    
+                    if (input && (!input.value || input.value === "")) {
+                        input.value = res.data.stellar_address;
+                    }
+                    if (targetDisplay) {
+                        targetDisplay.innerText = res.data.stellar_address;
+                    }
+                }
+            })
+            .catch(err => console.error("Auto-populate error:", err));
     }
 
     async function claimWithdrawal() {
@@ -433,10 +613,9 @@
         const { amount, nonce, signature, stellar_address } = res.data;
 
         // 2. Connect to wallet
-        if (typeof window.freighterApi === 'undefined') {
-            throw new Error("Freighter wallet not found. Please install the Freighter extension.");
-        }
-        const { address: userAddr } = await window.freighterApi.getAddress();
+        const provider = await getProvider();
+        const { address: userAddr } = await provider.getAddress();
+        
         if (userAddr !== stellar_address) {
             throw new Error(`Wallet mismatch! This claim is for ${stellar_address.substring(0,8)}... but your wallet is ${userAddr.substring(0,8)}...`);
         }
@@ -480,10 +659,16 @@
         
         const preparedTx = await sorobanServer.prepareTransaction(tx, sim);
 
-        // 5. Sign with Freighter
+        // 5. Sign with Selected Wallet
         btn.innerText = "Waiting for Signature...";
         const xdr = preparedTx.toXDR();
-        const signedXDR = await window.freighterApi.signTransaction(xdr, { network: NETWORK.toUpperCase() });
+        
+        // Lobstr expects UPPERCASE network, Freighter handles upper but testnet is common.
+        // We use UPPERCASE for compatibility with Lobstr Signer API.
+        const signedXDR = await provider.signTransaction(xdr, { 
+            network: NETWORK.toUpperCase(),
+            accountToSignAddress: userAddr // Lobstr specific hint
+        });
 
         // 6. Submit
         btn.innerText = "Submitting to Stellar...";
@@ -616,6 +801,47 @@
       } finally {
         btn.disabled = false;
         btn.innerText = "Unlink Wallet Address";
+      }
+    }
+    async function cancelWithdrawal() {
+      const statusBox = document.getElementById('claim-status');
+      const btn = document.getElementById('btn-cancel');
+      const claimBtn = document.getElementById('btn-claim');
+
+      if (!confirm("Are you sure you want to cancel this withdrawal? Your SHx will be returned to your Discord balance.")) {
+        return;
+      }
+
+      try {
+        btn.disabled = true;
+        btn.innerText = "Cancelling...";
+        statusBox.style.display = 'none';
+
+        const res = await fetch(`${API_BASE}/api/withdrawal/${CLAIM_ID}/cancel`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: TOKEN })
+        });
+        
+        const data = await res.json();
+
+        if (data.success) {
+          statusBox.className = "status success";
+          statusBox.innerText = "✅ Withdrawal cancelled! Your SHx has been returned to Discord.";
+          statusBox.style.display = 'block';
+          btn.style.display = 'none';
+          claimBtn.style.display = 'none';
+          // Refresh balance automatically
+          setTimeout(refreshBalance, 1000);
+        } else {
+          throw new Error(data.message || "Cancellation failed.");
+        }
+      } catch (e) {
+        statusBox.className = "status error";
+        statusBox.innerText = `❌ Cancellation failed: ${e.message}`;
+        statusBox.style.display = 'block';
+        btn.disabled = false;
+        btn.innerText = "Cancel & Return SHx to Discord";
       }
     }
   </script>

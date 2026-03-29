@@ -403,7 +403,46 @@ async def complete_withdrawal(withdrawal_id: str, tx_hash: str):
     """Mark a withdrawal as completed."""
     pool = await get_pool()
     await pool.execute(
-        "UPDATE withdrawals SET status = 'COMPLETED', tx_hash = $1, completed_at = $2 WHERE id = $1",
+        "UPDATE withdrawals SET status = 'COMPLETED', tx_hash = $1, completed_at = $2 WHERE id = $3",
         tx_hash, time.time(), withdrawal_id
     )
+
+async def cancel_withdrawal(withdrawal_id: str) -> bool:
+    """
+    Cancel a pending withdrawal and refund the SHx back to the user's internal balance.
+    Returns True if successfully cancelled, False if not pending or not found.
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            # 1. Check current status and get details
+            row = await conn.fetchrow(
+                "SELECT discord_id, amount, status FROM withdrawals WHERE id = $1", 
+                withdrawal_id
+            )
+            if not row or row["status"] != "PENDING":
+                return False
+                
+            discord_id = row["discord_id"]
+            amount = row["amount"]
+            
+            # 2. Update status to CANCELLED
+            await conn.execute(
+                "UPDATE withdrawals SET status = 'CANCELLED', completed_at = $2 WHERE id = $1",
+                withdrawal_id, time.time()
+            )
+            
+            # 3. Credit the user back (Refund)
+            # Use f"CANCEL_{withdrawal_id}" as the tx_hash for tracking
+            await conn.execute(
+                "UPDATE users SET internal_balance = internal_balance + $1 WHERE discord_id = $2",
+                amount, discord_id
+            )
+            await conn.execute(
+                "INSERT INTO deposits (tx_hash, discord_id, amount, created_at) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
+                f"CANCEL_{withdrawal_id}", discord_id, amount, time.time()
+            )
+            
+            logger.info(f"WITHDRAWAL CANCELLED | ID: {withdrawal_id} | Refunding {amount} SHx to {discord_id}")
+            return True
 

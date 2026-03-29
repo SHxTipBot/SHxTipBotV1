@@ -305,7 +305,7 @@ async def link_command(interaction: Interaction):
     embed = _footer(discord.Embed(
         title="🔗 Verify Your Stellar Wallet",
         description=(
-            "To withdraw your tips, you must verify your Stellar address.\n\n"
+            "To withdraw your tips, you must verify your Stellar address using **Freighter**, **LOBSTR**, or **xBull**.\n\n"
             f"**[→ Click here to Verify]({link_url})**\n\n"
             f"⏰ Verification link expires in **15 minutes**.{relink_note}"
         ),
@@ -371,70 +371,101 @@ async def deposit_command(interaction: Interaction):
         embed=embed, ephemeral=True
     )
 
-
 # ── /withdraw ─────────────────────────────────────────────────────────────────
-
-@bot.tree.command(name="withdraw", description="Withdraw SHx from your tipping balance to an external wallet")
-@app_commands.describe(amount="Amount of SHx or USD (e.g. 100 or $5.00)", destination="Stellar address (G...)")
-async def withdraw_command(interaction: Interaction, amount: str, destination: str):
-    logger.info(f"COMMAND | /withdraw | User: {interaction.user} ({interaction.user.id}) | Amount: {amount}")
+@bot.tree.command(name="withdraw", description="Prepare a withdrawal of SHx to your external Stellar wallet")
+@app_commands.describe(
+    amount="Amount of SHx, USD, or 'all' (e.g. 100, $5.00, or all)", 
+    destination="Optional: Your Stellar address (defaults to your linked wallet)"
+)
+async def withdraw_command(interaction: Interaction, amount: str, destination: str = None):
+    logger.info(f"COMMAND | /withdraw | User: {interaction.user} ({interaction.user.id}) | Amount: {amount} | Dest: {destination}")
     await interaction.response.defer(ephemeral=True)
     discord_id = str(interaction.user.id)
 
-    parsed_amount = await parse_amount(amount)
-    if parsed_amount is None:
-        await interaction.followup.send("❌ Invalid amount. Enter a positive number or fiat string (like `$5`).", ephemeral=True)
+    # 1. Resolve Destination
+    linked_key = await db.get_user_stellar_key(discord_id)
+    if not destination:
+        if not linked_key:
+            await interaction.followup.send("❌ Your Stellar wallet is not linked AND you didn't provide a destination. Use `/link` first (supports **Freighter**, **LOBSTR**, or **xBull**) or specify an address manually.", ephemeral=True)
+            return
+        destination = linked_key
+    elif not (destination.startswith("G") and len(destination) == 56):
+        await interaction.followup.send("❌ Invalid Stellar address provided. Must start with 'G' and be 56 characters.", ephemeral=True)
         return
-    amount_f = parsed_amount
 
-    if not destination.startswith("G") or len(destination) != 56:
-        await interaction.followup.send("❌ Invalid Stellar address.", ephemeral=True)
-        return
-
+    # 2. Resolve Amount
     current_bal = await db.get_internal_balance(discord_id)
+    if amount.lower().strip() == "all":
+        if current_bal <= 0:
+            await interaction.followup.send("❌ Your balance is 0 SHx. Nothing to withdraw.", ephemeral=True)
+            return
+        amount_f = current_bal
+    else:
+        parsed_amount = await parse_amount(amount)
+        if parsed_amount is None or parsed_amount <= 0:
+            await interaction.followup.send("❌ Invalid amount. Enter a positive number, a fiat string (like `$5`), or type `all`.", ephemeral=True)
+            return
+        amount_f = parsed_amount
+
     if amount_f > current_bal:
         await interaction.followup.send(f"❌ Insufficient balance. You have **{current_bal:,.2f} SHx**.", ephemeral=True)
         return
 
-    # User MUST be linked to withdraw on-chain
-    user_key = await db.get_user_stellar_key(discord_id)
-    if not user_key:
-        await interaction.followup.send("❌ Your Stellar wallet is not linked. Use `/link` first or use the dashboard.", ephemeral=True)
+    # 2.5 Check House Account Liquidity
+    house_bal = await stellar.get_shx_balance(stellar.HOUSE_ACCOUNT_PUBLIC)
+    if house_bal is not None and house_bal < amount_f:
+        logger.error(f"HOUSE ACCOUNT LOW LIQUIDITY | Needs {amount_f} but has {house_bal}")
+        await interaction.followup.send("❌ The bot's House Account is currently low on liquidity. Please notify an admin or try a smaller amount.", ephemeral=True)
         return
 
-    # Generate claim ticket
+    # 2.6 Check House Account Allowance
+    allowance = await stellar.check_shx_allowance(stellar.HOUSE_ACCOUNT_PUBLIC, stellar.SOROBAN_CONTRACT_ID)
+    if allowance < amount_f:
+        logger.error(f"HOUSE ACCOUNT LOW ALLOWANCE | Needs {amount_f} but has {allowance}")
+        # Note: In a production environment, you might trigger an auto-approve here if the secret is available
+        await interaction.followup.send("❌ The bot's House Account has technical permission issues (low allowance). Please notify an admin.", ephemeral=True)
+        return
     withdrawal_id = secrets.token_hex(16)
     nonce = int(time.time() * 1000)
     
     try:
-        signature = stellar.sign_withdrawal(user_key, amount_f, nonce)
+        # We sign specifically for the target destination
+        signature = stellar.sign_withdrawal(destination, amount_f, nonce)
     except Exception as e:
         logger.error(f"Failed to sign withdrawal for {discord_id}: {e}")
         await interaction.followup.send("❌ System error generating withdrawal ticket.", ephemeral=True)
         return
 
-    # Atomic DB: Deduct balance + create pending withdrawal
-    # We use a special transfer to a 'LOCK' account or similar, 
-    # but for simplicity we'll just deduct it and record the withdrawal.
+    # 4. Atomic Balance Deduction
     await db.add_deposit(discord_id, f"WD_PENDING_{withdrawal_id}", -amount_f)
-    await db.create_withdrawal(withdrawal_id, discord_id, user_key, amount_f, nonce, signature)
+    await db.create_withdrawal(withdrawal_id, discord_id, destination, amount_f, nonce, signature)
 
-    claim_url = f"{WEB_BASE_URL}/?claim_id={withdrawal_id}"
-
+    # 5. Build and Send Response
+    claim_url = f"{WEB_BASE_URL}/register?claim_id={withdrawal_id}"
+    
     embed = _footer(discord.Embed(
         title="🎟️ Withdrawal Ticket Created",
         description=(
             f"You have prepared a withdrawal of **{amount_f:,.2f} SHx**.\n\n"
+            f"**Destination**: `{destination[:8]}...{destination[-4:]}`\n\n"
             "To complete this, you must claim it on the dashboard using your Stellar wallet.\n\n"
-            "⚠️ **NETWORK FEES**: Since you are withdrawing to your own wallet, you will need a small amount of **XLM** to pay the Stellar network fee."
+            "⚠️ **NETWORK FEES**: You will need a small amount of **XLM** in your wallet to pay the Stellar network fee."
         ),
         color=SUCCESS_COLOR
     ))
-    
     embed.add_field(name="Next Step", value=f"**[→ Click here to Claim your SHx]({claim_url})**", inline=False)
     
     await interaction.followup.send(embed=embed, ephemeral=True)
 
+@withdraw_command.autocomplete('destination')
+async def withdraw_destination_autocomplete(interaction: Interaction, current: str):
+    discord_id = str(interaction.user.id)
+    linked_key = await db.get_user_stellar_key(discord_id)
+    choices = []
+    if linked_key:
+        choices.append(app_commands.Choice(name=f"Verified Wallet (LOBSTR/Freighter/xBull): {linked_key[:8]}...{linked_key[-4:]}", value=linked_key))
+    
+    return [c for c in choices if current.lower() in c.value.lower()][:25]
 
 # ── /tip ──────────────────────────────────────────────────────────────────────
 
@@ -947,6 +978,26 @@ async def patched_close():
     await db.close_db()
     await _original_close()
 bot.close = patched_close
+
+
+
+# ── Admin Sync ────────────────────────────────────────────────────────────────
+
+@bot.tree.command(name="bot-sync", description="[Admin] Sync the bot's command tree with Discord")
+async def bot_sync_command(interaction: Interaction):
+    logger.info(f"COMMAND | /bot-sync | User: {interaction.user}")
+    await interaction.response.defer(ephemeral=True)
+    if str(interaction.user.id) not in ADMIN_DISCORD_IDS:
+        await interaction.followup.send("❌ You do not have permission to use this command.", ephemeral=True)
+        return
+    
+    try:
+        # Sync globally
+        synced = await bot.tree.sync()
+        await interaction.followup.send(f"✅ Successfully synced {len(synced)} commands with Discord. New UI changes (like /withdraw autocomplete) should be visible soon.", ephemeral=True)
+    except Exception as e:
+        logger.error(f"Failed to sync command tree: {e}")
+        await interaction.followup.send(f"❌ Failed to sync: {str(e)}", ephemeral=True)
 
 
 # ── Entry Point ───────────────────────────────────────────────────────────────
