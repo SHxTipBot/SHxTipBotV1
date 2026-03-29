@@ -267,7 +267,7 @@
 
   <div class="container">
     <div class="header">
-      <h1>SHx Tip Bot User Dashboard</h1>
+      <h1>SHx Tip Bot<br><span style="font-size: 1.4rem; font-weight: 500; opacity: 0.9; letter-spacing: 1px; display: block; margin-top: 4px;">User Dashboard</span></h1>
       <p>Manage your tips, deposits, and withdrawals securely.</p>
     </div>
 
@@ -281,6 +281,30 @@
         This is your internal tipping balance representing SHx currently held by the bot. You can use this balance immediately in Discord to tip other users via the <code>/tip</code> command.
       </p>
       <div class="balance-val">{{INTERNAL_BALANCE}} SHX</div>
+    </div>
+
+    <!-- Withdrawal Card -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-icon">🔗</div>
+        <div class="card-title">Withdrawal Setup</div>
+      </div>
+      <p class="card-desc">
+        Link your personal Stellar wallet address to your Discord profile. This allows you to securely withdraw your internal SHx balance back to your own wallet at any time using the <code>/withdraw</code> command in Discord.
+      </p>
+
+      <div id="verify-section">
+        <input type="text" id="g-address" class="wallet-input" placeholder="e.g. GABC123...">
+        <button class="btn" onclick="verifyWallet()" id="btn-verify">Link Wallet Address</button>
+      </div>
+
+      <div id="status-box" class="status"></div>
+      
+      <div class="linked-section">
+        <label class="linked-label">Currently Linked Address:</label>
+        <div class="linked-badge" id="linked-addr">{{EXISTING_KEY or 'None linked yet'}}</div>
+        <button class="btn btn-unlink" id="btn-unlink" onclick="unlinkWallet()">Unlink Wallet Address</button>
+      </div>
     </div>
 
     <!-- Deposit Card -->
@@ -311,30 +335,6 @@
       <div class="qr-container">
         <img src="https://quickchart.io/qr?text={{HOUSE_ACCOUNT_PUBLIC}}&size=150" alt="QR Code">
         <p class="qr-text">Scan to copy deposit address</p>
-      </div>
-    </div>
-
-    <!-- Verification Card -->
-    <div class="card">
-      <div class="card-header">
-        <div class="card-icon">🔗</div>
-        <div class="card-title">Withdrawal Setup</div>
-      </div>
-      <p class="card-desc">
-        Link your personal Stellar wallet address to your Discord profile. This allows you to securely withdraw your internal SHx balance back to your own wallet at any time using the <code>/withdraw</code> command in Discord.
-      </p>
-
-      <div id="verify-section">
-        <input type="text" id="g-address" class="wallet-input" placeholder="e.g. GABC123...">
-        <button class="btn" onclick="verifyWallet()" id="btn-verify">Link Wallet Address</button>
-      </div>
-
-      <div id="status-box" class="status"></div>
-      
-      <div class="linked-section">
-        <label class="linked-label">Currently Linked Address:</label>
-        <div class="linked-badge" id="linked-addr">{{EXISTING_KEY or 'None linked yet'}}</div>
-        <button class="btn btn-unlink" id="btn-unlink" onclick="unlinkWallet()">Unlink Wallet Address</button>
       </div>
     </div>
 
