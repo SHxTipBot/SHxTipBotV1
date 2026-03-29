@@ -14,9 +14,9 @@ from logging.handlers import RotatingFileHandler
 from dotenv import load_dotenv
 import discord
 from discord import app_commands, Interaction
-from discord.ext import commands
+from discord.ext import commands, tasks
 import secrets
-from typing import Optional
+from typing import Optional, List, Dict, Any
 
 import database as db
 import stellar_utils as stellar
@@ -57,6 +57,7 @@ guild_obj = discord.Object(id=DISCORD_GUILD_ID)
 EMBED_COLOR = 0x00C9FF
 ERROR_COLOR = 0xFF4C4C
 SUCCESS_COLOR = 0x00FF88
+AIRDROP_RESERVE = "AIRDROP_RESERVE"
 
 def _footer(embed: discord.Embed) -> discord.Embed:
     embed.set_footer(text="SHx Tip Bot • Stronghold Community")
@@ -74,24 +75,27 @@ class AirdropView(discord.ui.View):
         
         ad = await db.get_airdrop(self.airdrop_id)
         if not ad:
-            await interaction.followup.send("❌ This airdrop is no longer active or fully claimed.", ephemeral=True)
+            await interaction.followup.send("❌ This airdrop is no longer active.", ephemeral=True)
             return
             
         if await db.has_user_claimed(self.airdrop_id, user_id):
-            await interaction.followup.send("❌ You have already claimed this airdrop.", ephemeral=True)
+            await interaction.followup.send("❌ You have already entered this airdrop.", ephemeral=True)
             return
             
-        creator_id = ad["creator_discord_id"]
-        amount = ad["amount_per_claim"]
-        
         await db.get_or_create_user(user_id)
+        await db.add_airdrop_claim(self.airdrop_id, user_id)
         
-        success = await db.transfer_internal(creator_id, user_id, amount, 0.0, f"Airdrop {self.airdrop_id}")
-        if success:
-            await db.add_airdrop_claim(self.airdrop_id, user_id)
-            await interaction.followup.send(f"✅ Successfully claimed **{amount:,.2f} SHx**! Check `/balance`.", ephemeral=True)
-        else:
-            await interaction.followup.send("❌ The airdrop creator's balance is too low to fulfill this claim.", ephemeral=True)
+        # Calculate time remaining
+        expires_at = ad.get("expires_at")
+        rem_str = "soon"
+        if expires_at:
+            delta = int(expires_at - time.time())
+            if delta > 60:
+                rem_str = f"in {delta // 60} minutes"
+            elif delta > 0:
+                rem_str = f"in {delta} seconds"
+        
+        await interaction.followup.send(f"✅ **Entry Confirmed!** You will receive your share of the pool {rem_str}. Keep an eye on the channel!", ephemeral=True)
 
 
 
@@ -803,7 +807,6 @@ async def tip_role_command(interaction: Interaction, role: discord.Role, amount:
 @bot.tree.command(name="airdrop", description="Create an SHx airdrop in the current channel")
 @app_commands.describe(
     total_amount="Total SHx or USD (e.g. 100 or $10)", 
-    claims="Number of people who can claim", 
     duration_minutes="Optional expiration time in minutes",
     duration_hours="Optional expiration time in hours",
     duration_days="Optional expiration time in days"
@@ -811,23 +814,17 @@ async def tip_role_command(interaction: Interaction, role: discord.Role, amount:
 async def airdrop_command(
     interaction: Interaction, 
     total_amount: str, 
-    claims: int, 
     duration_minutes: Optional[int] = None,
     duration_hours: Optional[int] = None,
     duration_days: Optional[int] = None
 ):
-    logger.info(f"COMMAND | /airdrop | User: {interaction.user} Total: {total_amount} Claims: {claims} Mins: {duration_minutes} Hrs: {duration_hours} Days: {duration_days}")
+    logger.info(f"COMMAND | /airdrop | User: {interaction.user} Total: {total_amount} Mins: {duration_minutes} Hrs: {duration_hours} Days: {duration_days}")
     await interaction.response.defer()
     creator_id = str(interaction.user.id)
     
     parsed_amount = await parse_amount(total_amount)
-    if parsed_amount is None or claims <= 0:
-        await interaction.followup.send("❌ Invalid amount or claims. Must be > 0.", ephemeral=True)
-        return
-        
-    amount_per_claim = parsed_amount / claims
-    if amount_per_claim < 1.0:
-        await interaction.followup.send("❌ Amount per claim must be at least 1 SHx.", ephemeral=True)
+    if parsed_amount is None or parsed_amount <= 0:
+        await interaction.followup.send("❌ Invalid amount. Must be > 0.", ephemeral=True)
         return
         
     # Check balance
@@ -836,15 +833,22 @@ async def airdrop_command(
         await interaction.followup.send(f"❌ Insufficient balance. You have **{bal:,.2f} SHx**.", ephemeral=True)
         return
         
+    # Deduct upfront to "reserve" the funds (System account 'AIRDROP_RESERVE')
+    success = await db.transfer_internal(creator_id, AIRDROP_RESERVE, parsed_amount, 0.0, f"Airdrop Pool Funding")
+    if not success:
+        await interaction.followup.send("❌ Error reserving funds for airdrop.", ephemeral=True)
+        return
+
     total_mins = 0
     if duration_minutes: total_mins += duration_minutes
     if duration_hours: total_mins += duration_hours * 60
     if duration_days: total_mins += duration_days * 1440
-    total_mins = total_mins if total_mins > 0 else None
+    # Default to 1 hour if none provided, or ensure at least 1 min
+    if total_mins == 0: total_mins = 60 
     
     airdrop_id = secrets.token_hex(4)
     await db.create_airdrop(
-        airdrop_id, creator_id, parsed_amount, amount_per_claim, claims, "Channel Airdrop", total_mins
+        airdrop_id, creator_id, parsed_amount, "Channel Airdrop", total_mins
     )
     
     expires_str = ""
@@ -858,15 +862,73 @@ async def airdrop_command(
     
     embed = _footer(discord.Embed(
         title="🪂 SHx Airdrop!",
-        description=f"{interaction.user.mention} is dropping **{parsed_amount:,.2f} SHx**!" + expires_str,
+        description=f"{interaction.user.mention} is dropping **{parsed_amount:,.2f} SHx**!\n" +
+                    f"The total pool will be **split equally** among everyone who clicks below!{expires_str}",
         color=0xFF00AA
     ))
-    embed.add_field(name="Amount per claim", value=f"**{amount_per_claim:,.2f} SHx**", inline=True)
-    embed.add_field(name="Total claims", value=f"**{claims}**", inline=True)
+    embed.add_field(name="Total Pool", value=f"**{parsed_amount:,.2f} SHx**", inline=True)
+    embed.add_field(name="Duration", value=f"**{', '.join(expires_parts) if expires_parts else '60 minutes'}**", inline=True)
     
     view = AirdropView(airdrop_id)
     await interaction.followup.send(embed=embed, view=view)
 
+
+# ── Background Task: Airdrop Processing ──────────────────────────────────────────
+
+@tasks.loop(seconds=60)
+async def process_airdrops():
+    """Background task to distribute funds for expired airdrops."""
+    try:
+        expired = await db.get_expired_airdrops()
+        if not expired:
+            return
+
+        for ad in expired:
+            airdrop_id = ad["id"]
+            creator_id = ad["creator_discord_id"]
+            total_amount = ad["total_amount"]
+            
+            participants = await db.get_airdrop_participants(airdrop_id)
+            count = len(participants)
+            
+            # Use channel ID if available, otherwise fallback to system log
+            # For simplicity, we assume the bot can find the channel from cache or ID
+            # In index.html/bot.py context, we usually have a guild-only bot
+            guild = bot.get_guild(DISCORD_GUILD_ID)
+            
+            if count > 0:
+                share = round(total_amount / count, 2)
+                # Ensure we don't over-distribute due to rounding up
+                if share * count > total_amount:
+                    share = total_amount / count # True precision
+                
+                success_count = 0
+                for uid in participants:
+                    # Transfer from System Hold to user
+                    if await db.transfer_internal(AIRDROP_RESERVE, uid, share, 0.0, f"Airdrop {airdrop_id} Split"):
+                        success_count += 1
+                
+                logger.info(f"AIRDROP | {airdrop_id} | Distributed {total_amount} SHx among {count} users.")
+                
+                # Try to announce in the channel
+                # We don't store channel_id in airdrops table currently, but we can try to find the 
+                # original message if we had stored it. For now, let's log and optionally broadcast
+                # to a general channel if DISCORD_GUILD_ID is set.
+                if guild:
+                    # Look for a system/announcement channel or use a common one
+                    # For now, let's just log. If we want to post to the specific channel,
+                    # we would need to have stored channel_id in the airdrops table.
+                    pass
+            else:
+                # Refund creator if 0 participants
+                await db.transfer_internal(AIRDROP_RESERVE, creator_id, total_amount, 0.0, f"Airdrop {airdrop_id} Refund (0 participants)")
+                logger.info(f"AIRDROP | {airdrop_id} | Refunded {total_amount} SHx to {creator_id} (No participants)")
+
+            # Close the airdrop
+            await db.close_airdrop(airdrop_id)
+
+    except Exception as e:
+        logger.error(f"Error in process_airdrops task: {e}", exc_info=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # EVENTS & BACKGROUND TASKS
@@ -911,12 +973,15 @@ async def on_ready():
         # To fix the "duplicate commands" issue, we temporarily clear the global tree 
         # and sync it to Discord. This removes the "Global" copies that appear everywhere.
         bot.tree.clear_commands(guild=None)
-        await bot.tree.sync()
-        logger.info("Cleared global slash command cache (fixes duplicates).")
+        await bot.tree.sync(guild=guild_obj)
+        logger.info("Slash commands synced to guild.")
     except Exception as e:
         logger.error(f"Command sync failed: {e}", exc_info=True)
 
     # Start background tasks
+    if not process_airdrops.is_running():
+        process_airdrops.start()
+        logger.info("Background task process_airdrops started.")
     bot.loop.create_task(heartbeat())
     bot.loop.create_task(start_deposit_monitor())
 

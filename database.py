@@ -273,9 +273,14 @@ async def transfer_internal(sender_id: str, recipient_id: str, amount_shx: float
                 return False
                 
             # Ensure recipient exists
+            try:
+                memo = int(recipient_id)
+            except ValueError:
+                memo = 0 # System accounts don't need a real memo mapping
+                
             await conn.execute(
                 "INSERT INTO users (discord_id, memo_id, internal_balance) VALUES ($1, $2, 0.0) ON CONFLICT DO NOTHING",
-                recipient_id, int(recipient_id)
+                recipient_id, memo
             )
             
             # Increment recipient balance
@@ -312,19 +317,18 @@ async def create_airdrop(
     airdrop_id: str,
     creator_id: str,
     total_amount: float,
-    amount_per_claim: float,
-    max_claims: int,
     reason: Optional[str] = None,
     duration_minutes: Optional[int] = None
 ):
-    """Create a new airdrop entry."""
+    """Create a new airdrop entry for the Equal Split model."""
     pool = await get_pool()
-    expires_at = time.time() + (duration_minutes * 60) if duration_minutes else None
+    now = time.time()
+    expires_at = now + (duration_minutes * 60) if duration_minutes else now + (24 * 60 * 60) # Default 24h
     await pool.execute(
         """INSERT INTO airdrops
             (id, creator_discord_id, total_amount, amount_per_claim, max_claims, reason, created_at, expires_at)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)""",
-        airdrop_id, creator_id, total_amount, amount_per_claim, max_claims, reason, time.time(), expires_at
+        airdrop_id, creator_id, total_amount, 0.0, 0, reason, now, expires_at
     )
 
 async def get_airdrop(airdrop_id: str) -> Optional[Dict[str, Any]]:
@@ -363,10 +367,29 @@ async def add_airdrop_claim(airdrop_id: str, discord_id: str):
                 "UPDATE airdrops SET claims_count = claims_count + 1 WHERE id = $1",
                 airdrop_id
             )
-            await conn.execute(
-                "UPDATE airdrops SET active = 0 WHERE id = $1 AND claims_count >= max_claims",
-                airdrop_id
-            )
+
+async def get_expired_airdrops() -> List[Dict[str, Any]]:
+    """Retrieve all active airdrops that have surpassed their expires_at time."""
+    pool = await get_pool()
+    rows = await pool.fetch(
+        "SELECT * FROM airdrops WHERE active = 1 AND expires_at < $1",
+        time.time()
+    )
+    return [dict(r) for r in rows]
+
+async def get_airdrop_participants(airdrop_id: str) -> List[str]:
+    """Get unique Discord IDs of users who clicked claim for this airdrop."""
+    pool = await get_pool()
+    rows = await pool.fetch(
+        "SELECT DISTINCT user_discord_id FROM airdrop_claims WHERE airdrop_id = $1",
+        airdrop_id
+    )
+    return [r["user_discord_id"] for r in rows]
+
+async def close_airdrop(airdrop_id: str):
+    """Mark an airdrop as inactive."""
+    pool = await get_pool()
+    await pool.execute("UPDATE airdrops SET active = 0 WHERE id = $1", airdrop_id)
 
 async def admin_fund_internal(discord_id: str, amount_shx: float):
     """Admin function to literally mint/fund SHx into a user's internal balance, no on-chain tx required."""
