@@ -97,6 +97,14 @@ async def register_page(token: str = "", claim_id: str = ""):
     if token:
         discord_id = await db.validate_link_token(token)
     
+    # NEW: Auto-detect pending withdrawal if claim_id is missing
+    is_auto_detected = "false"
+    if discord_id and not claim_id:
+        pending = await db.get_latest_pending_withdrawal(discord_id)
+        if pending:
+            claim_id = pending["id"]
+            is_auto_detected = "true"
+
     # If we have a claim_id, we can also derive the discord_id from the withdrawal record
     claim_amount_str = "0.00"
     if claim_id:
@@ -137,6 +145,7 @@ async def register_page(token: str = "", claim_id: str = ""):
     html = html.replace("{{SHX_ISSUER}}", stellar.SHX_ISSUER.strip())
     html = html.replace("{{SHX_SAC_CONTRACT_ID}}", stellar.SHX_SAC_CONTRACT_ID.strip())
     html = html.replace("{{SOROBAN_CONTRACT_ID}}", stellar.SOROBAN_CONTRACT_ID.strip())
+    html = html.replace("{{IS_AUTO_DETECTED}}", is_auto_detected)
 
     return HTMLResponse(html)
 
@@ -292,7 +301,8 @@ async def api_get_withdrawal(withdrawal_id: str):
         "amount": data["amount"],
         "nonce": data["nonce"],
         "signature": data["signature"],
-        "stellar_address": data["stellar_address"]
+        "stellar_address": data["stellar_address"],
+        "created_at": data["created_at"]
     })
 
 @app.post("/api/withdrawal/{withdrawal_id}/complete")

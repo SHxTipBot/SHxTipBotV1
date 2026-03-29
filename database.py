@@ -446,3 +446,12 @@ async def cancel_withdrawal(withdrawal_id: str) -> bool:
             logger.info(f"WITHDRAWAL CANCELLED | ID: {withdrawal_id} | Refunding {amount} SHx to {discord_id}")
             return True
 
+async def get_latest_pending_withdrawal(discord_id: str) -> Optional[Dict[str, Any]]:
+    """Get the most recent pending withdrawal for a user."""
+    pool = await get_pool()
+    row = await pool.fetchrow(
+        "SELECT * FROM withdrawals WHERE discord_id = $1 AND status = 'PENDING' ORDER BY created_at DESC LIMIT 1",
+        discord_id
+    )
+    return dict(row) if row else None
+

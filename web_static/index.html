@@ -381,6 +381,11 @@
           <div class="card-icon card-icon-claim">🎟️</div>
           <div class="card-title">Claim Your SHx Withdrawal</div>
         </div>
+        
+        <!-- Auto-Detection Notice -->
+        <div id="auto-detect-notice" class="status-badge" style="display: none; margin-bottom: 20px; background: rgba(59, 130, 246, 0.1); color: #60A5FA; border: 1px solid rgba(59, 130, 246, 0.2); padding: 12px; border-radius: 12px; font-size: 0.85rem; line-height: 1.4;">
+           ℹ️ <strong>Pending Withdrawal Detected:</strong> We found an active withdrawal ticket for your account created on <span id="auto-detect-date">...</span>.
+        </div>
 
         <div class="wallet-selector">
           <button class="wallet-btn active" id="claim-wallet-freighter" onclick="setWallet('freighter')">
@@ -504,8 +509,9 @@
     const TOKEN = "{{TOKEN}}";
     const CLAIM_ID = "{{CLAIM_ID}}";
     const NETWORK = "{{NETWORK}}";
-    const NETWORK_PASSPHRASE = "{{NETWORK_PASSPHRASE}}";
+    const SHX_SAC_CONTRACT_ID = "{{SHX_SAC_CONTRACT_ID}}";
     const SOROBAN_CONTRACT_ID = "{{SOROBAN_CONTRACT_ID}}";
+    const IS_AUTO_DETECTED = {{IS_AUTO_DETECTED}};
     const API_BASE = window.location.origin;
 
     let ACTIVE_WALLET = 'freighter';
@@ -578,18 +584,27 @@
     if (CLAIM_ID && CLAIM_ID.length > 5) {
         document.getElementById('claim-card').classList.remove('hidden');
         
+        if (IS_AUTO_DETECTED) {
+            document.getElementById('auto-detect-notice').style.display = 'block';
+        }
+
         // Auto-populate the address field from the claim data
         axios.get(`${API_BASE}/api/withdrawal/${CLAIM_ID}`)
             .then(res => {
-                if (res.data.success && res.data.stellar_address) {
+                if (res.data.success) {
                     const input = document.getElementById('g-address');
                     const targetDisplay = document.getElementById('claim-target-addr');
+                    const dateDisplay = document.getElementById('auto-detect-date');
                     
                     if (input && (!input.value || input.value === "")) {
                         input.value = res.data.stellar_address;
                     }
                     if (targetDisplay) {
                         targetDisplay.innerText = res.data.stellar_address;
+                    }
+                    if (dateDisplay && res.data.created_at) {
+                        const date = new Date(res.data.created_at * 1000);
+                        dateDisplay.innerText = date.toLocaleString();
                     }
                 }
             })
