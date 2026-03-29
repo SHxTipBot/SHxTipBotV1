@@ -189,10 +189,38 @@
       border: 1px solid var(--border);
       border-radius: 12px;
       padding: 16px;
-      margin-bottom: 16px;
-      position: relative;
-      transition: all 0.2s ease;
+      margin-bottom: 24px;
+      font-size: 0.9rem;
     }
+
+    /* Claim Card Styles */
+    .card-claim {
+      border-color: var(--success) !important;
+      background: rgba(16, 185, 129, 0.05) !important;
+    }
+    .card-icon-claim {
+      background: rgba(16, 185, 129, 0.1) !important;
+      color: var(--success) !important;
+      border-color: rgba(16, 185, 129, 0.2) !important;
+    }
+    .warning-label {
+      color: #ffaa00;
+      font-weight: 600;
+    }
+    .balance-claim {
+      color: var(--success) !important;
+      font-size: 2.2rem !important;
+      margin-bottom: 24px !important;
+    }
+    .btn-success {
+      background: var(--success) !important;
+    }
+    .btn-success:hover {
+      box-shadow: 0 0 20px rgba(16, 185, 129, 0.4) !important;
+    }
+
+    .hidden { display: none !important; }
+    
     .info-box:hover { border-color: rgba(255,255,255,0.2); }
     
     .info-box label { display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
@@ -287,6 +315,25 @@
       <p>Manage your tips, deposits, and withdrawals securely.</p>
     </div>
 
+    <!-- Claim Card (User-Paid Withdrawal) -->
+    <div class="card card-claim hidden" id="claim-card">
+        <div class="card-header">
+          <div class="card-icon card-icon-claim">🎟️</div>
+          <div class="card-title">Claim Your SHx Withdrawal</div>
+        </div>
+        <p class="card-desc">
+          You have a pending withdrawal of <strong>{{CLAIM_AMOUNT}} SHX</strong>. 
+          To receive these funds in your wallet, you must submit the transaction below.
+          <br><br>
+          <span class="warning-label">⚠️ NETWORK FEE:</span> You will pay a small amount of **XLM** from your own wallet to cover the Stellar network gas fee.
+        </p>
+        
+        <div class="balance-val balance-claim">{{CLAIM_AMOUNT}} SHX</div>
+        
+        <button class="btn btn-success" onclick="claimWithdrawal()" id="btn-claim">Sign & Claim SHx</button>
+        <div id="claim-status" class="status"></div>
+    </div>
+
     <!-- Balance Card -->
     <div class="card">
       <div class="card-header">
@@ -310,7 +357,7 @@
       </p>
 
       <div id="verify-section">
-        <input type="text" id="g-address" class="wallet-input" placeholder="e.g. GABC123...">
+        <input type="text" id="g-address" class="wallet-input" placeholder="e.g. GABC123..." value="{{EXISTING_KEY_VAL}}">
         <button class="btn" onclick="verifyWallet()" id="btn-verify">Link Wallet Address</button>
       </div>
 
@@ -355,9 +402,129 @@
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/stellar-sdk/10.4.1/stellar-sdk.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/1.6.2/axios.min.js"></script>
   <script>
     const TOKEN = "{{TOKEN}}";
+    const CLAIM_ID = "{{CLAIM_ID}}";
+    const NETWORK = "{{NETWORK}}";
+    const NETWORK_PASSPHRASE = "{{NETWORK_PASSPHRASE}}";
+    const SOROBAN_CONTRACT_ID = "{{SOROBAN_CONTRACT_ID}}";
     const API_BASE = window.location.origin;
+
+    // Show claim card if CLAIM_ID is present
+    if (CLAIM_ID && CLAIM_ID.length > 5) {
+        document.getElementById('claim-card').classList.remove('hidden');
+    }
+
+    async function claimWithdrawal() {
+      const btn = document.getElementById('btn-claim');
+      const status = document.getElementById('claim-status');
+      
+      try {
+        btn.disabled = true;
+        btn.innerText = "Preparing Claim...";
+        status.className = "status";
+
+        // 1. Fetch claim details from bot API
+        const res = await axios.get(`${API_BASE}/api/withdrawal/${CLAIM_ID}`);
+        if (!res.data.success) {
+            throw new Error(res.data.message || "Failed to fetch claim details.");
+        }
+        const { amount, nonce, signature, stellar_address } = res.data;
+
+        // 2. Connect to wallet
+        if (typeof window.freighterApi === 'undefined') {
+            throw new Error("Freighter wallet not found. Please install the Freighter extension.");
+        }
+        const { address: userAddr } = await window.freighterApi.getAddress();
+        if (userAddr !== stellar_address) {
+            throw new Error(`Wallet mismatch! This claim is for ${stellar_address.substring(0,8)}... but your wallet is ${userAddr.substring(0,8)}...`);
+        }
+
+        // 3. Build Soroban Transaction
+        const serverUrl = NETWORK === 'testnet' ? 'https://horizon-testnet.stellar.org' : 'https://horizon.stellar.org';
+        const sorobanUrl = NETWORK === 'testnet' ? 'https://soroban-testnet.stellar.org' : 'https://soroban.stellar.org';
+        
+        const server = new StellarSdk.Server(serverUrl);
+        const sorobanServer = new StellarSdk.SorobanServer(sorobanUrl);
+        const account = await server.loadAccount(userAddr);
+
+        // Convert signature (base64) to Bytes
+        const sigBytes = Uint8Array.from(atob(signature), c => c.charCodeAt(0));
+
+        const amountStroops = BigInt(Math.round(amount * 10000000));
+
+        const builder = new StellarSdk.TransactionBuilder(account, {
+            fee: "100000",
+            networkPassphrase: NETWORK_PASSPHRASE
+        });
+
+        // Add the contract invocation
+        builder.addOperation(StellarSdk.Operation.invokeContractFunction({
+            contractId: SOROBAN_CONTRACT_ID,
+            function: "claim_withdrawal",
+            args: [
+                StellarSdk.nativeToScVal(userAddr, { type: 'address' }),
+                StellarSdk.nativeToScVal(amountStroops, { type: 'i128' }),
+                StellarSdk.nativeToScVal(BigInt(nonce), { type: 'u64' }),
+                StellarSdk.xdr.ScVal.scvBytes(sigBytes)
+            ]
+        }));
+
+        const tx = builder.setTimeout(300).build();
+
+        // 4. Simulate & Prepare (handle gas & footprint)
+        btn.innerText = "Simulating...";
+        const sim = await sorobanServer.simulateTransaction(tx);
+        if (sim.error) throw new Error("Simulation failed: " + sim.error);
+        
+        const preparedTx = await sorobanServer.prepareTransaction(tx, sim);
+
+        // 5. Sign with Freighter
+        btn.innerText = "Waiting for Signature...";
+        const xdr = preparedTx.toXDR();
+        const signedXDR = await window.freighterApi.signTransaction(xdr, { network: NETWORK.toUpperCase() });
+
+        // 6. Submit
+        btn.innerText = "Submitting to Stellar...";
+        const submitResponse = await sorobanServer.sendTransaction(StellarSdk.TransactionBuilder.fromXDR(signedXDR, NETWORK_PASSPHRASE));
+        
+        if (submitResponse.status === "ERROR") {
+             throw new Error("Transaction submission failed.");
+        }
+
+        // Poll for success
+        let success = false;
+        for (let i = 0; i < 30; i++) {
+            const result = await sorobanServer.getTransaction(submitResponse.hash);
+            if (result.status === "SUCCESS") {
+                success = true;
+                break;
+            }
+            if (result.status === "FAILED") throw new Error("On-chain execution failed.");
+            await new Promise(r => setTimeout(r, 2000));
+        }
+
+        if (success) {
+            // 7. Notify Backend
+            await axios.post(`${API_BASE}/api/withdrawal/${CLAIM_ID}/complete`, { tx_hash: submitResponse.hash });
+            
+            status.className = "status success";
+            status.innerHTML = `✅ Claim Successful!<br><small>TX: <a href="https://stellar.expert/explorer/${NETWORK}/tx/${submitResponse.hash}" target="_blank" style="color:white;">${submitResponse.hash.substring(0,12)}...</a></small>`;
+            btn.style.display = 'none';
+        } else {
+            throw new Error("Transaction timed out/polling failed.");
+        }
+
+      } catch (e) {
+        console.error(e);
+        status.className = "status error";
+        status.innerText = e.message;
+      } finally {
+        btn.disabled = false;
+        if (btn.innerText !== "Claim Successful!") btn.innerText = "Sign & Claim SHx";
+      }
+    }
 
     function copy(id) {
       const text = document.getElementById(id).innerText;
@@ -416,7 +583,7 @@
     }
 
     async function unlinkWallet() {
-      if (!confirm("Are you sure you want to unlink this wallet? You will not be able to withdraw until you link a new one.")) {
+      if (!confirm("Are you sure you want to unlink this wallet? You will not be able to unlink until you link a new one.")) {
         return;
       }
 

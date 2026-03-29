@@ -184,6 +184,98 @@ async def parse_multiple_each_input(guild: discord.Guild, input_str: str, exclud
                 
     return results
 
+# ── Select Menu & Modal for Multi-Tip ──────────────────────────────────────────
+
+class MultiTipEachModal(discord.ui.Modal):
+    def __init__(self, members: list[discord.Member], reason: str = None):
+        super().__init__(title="Enter Tip Amounts")
+        self.members = members
+        self.reason = reason
+        self.inputs = []
+
+        for member in members:
+            text_input = discord.ui.TextInput(
+                label=f"Amount for {member.display_name}",
+                placeholder="e.g. 100 or $5",
+                min_length=1,
+                max_length=20,
+                required=True
+            )
+            self.add_item(text_input)
+            self.inputs.append((member, text_input))
+
+    async def on_submit(self, interaction: Interaction):
+        await interaction.response.defer(ephemeral=True)
+        sender_id = str(interaction.user.id)
+        
+        tips = []
+        for member, text_input in self.inputs:
+            amount = await parse_amount(text_input.value)
+            if amount is None:
+                await interaction.followup.send(f"❌ Invalid amount for {member.display_name}: `{text_input.value}`", ephemeral=True)
+                return
+            tips.append((member, amount))
+
+        total_needed = sum(a for _, a in tips)
+        sender_bal = await db.get_internal_balance(sender_id)
+        if sender_bal < total_needed:
+            await interaction.followup.send(f"❌ Total required: **{total_needed:,.2f} SHx**, but you only have **{sender_bal:,.2f} SHx**.", ephemeral=True)
+            return
+
+        success_list = []
+        for member, amount in tips:
+            recipient_id = str(member.id)
+            await db.get_or_create_user(recipient_id)
+            success = await db.transfer_internal(sender_id, recipient_id, amount, 0.0, self.reason or "Multi-tip selection")
+            if success:
+                success_list.append(f"{member.mention}: {amount:,.2f} SHx")
+
+        embed = _footer(discord.Embed(title="📊 Multi-Tip Selection Summary", color=SUCCESS_COLOR))
+        embed.add_field(name="Total Sent", value=f"**{total_needed:,.2f} SHx**", inline=False)
+        if success_list:
+            embed.add_field(name="✅ Successful Tips", value="\n".join(success_list), inline=False)
+        if self.reason:
+            embed.add_field(name="Reason", value=self.reason, inline=False)
+        
+        await interaction.followup.send(embed=embed)
+
+class RoleMemberView(discord.ui.View):
+    def __init__(self, role: discord.Role, reason: str = None):
+        super().__init__(timeout=180)
+        self.role = role
+        self.reason = reason
+        
+        # Get members of the role (filter bots)
+        members = [m for m in role.members if not m.bot][:25]
+        if not members:
+            return
+
+        options = [
+            discord.SelectOption(label=m.display_name, value=str(m.id), description=f"ID: {m.id}") 
+            for m in members
+        ]
+        
+        self.select = discord.ui.Select(
+            placeholder=f"Select up to 5 members of {role.name}...",
+            min_values=1,
+            max_values=min(5, len(members)),
+            options=options
+        )
+        self.select.callback = self.select_callback
+        self.add_item(self.select)
+
+    async def select_callback(self, interaction: Interaction):
+        selected_ids = self.select.values
+        selected_members = [interaction.guild.get_member(int(uid)) for uid in selected_ids]
+        selected_members = [m for m in selected_members if m]
+        
+        if not selected_members:
+            await interaction.response.send_message("❌ Error identifying members. Try again.", ephemeral=True)
+            return
+
+        modal = MultiTipEachModal(selected_members, self.reason)
+        await interaction.response.send_modal(modal)
+
 # ══════════════════════════════════════════════════════════════════════════════
 # COMMANDS — define ALL commands BEFORE on_ready so they exist in the tree
 # ══════════════════════════════════════════════════════════════════════════════
@@ -304,24 +396,44 @@ async def withdraw_command(interaction: Interaction, amount: str, destination: s
         await interaction.followup.send(f"❌ Insufficient balance. You have **{current_bal:,.2f} SHx**.", ephemeral=True)
         return
 
-    result = await stellar.send_withdrawal(
-        destination=destination,
-        amount_shx=amount_f,
-        memo="Withdrawal"
-    )
+    # User MUST be linked to withdraw on-chain
+    user_key = await db.get_user_stellar_key(discord_id)
+    if not user_key:
+        await interaction.followup.send("❌ Your Stellar wallet is not linked. Use `/link` first or use the dashboard.", ephemeral=True)
+        return
 
-    if result["success"]:
-        await db.add_deposit(discord_id, result["hash"], -amount_f)
+    # Generate claim ticket
+    withdrawal_id = secrets.token_hex(16)
+    nonce = int(time.time() * 1000)
+    
+    try:
+        signature = stellar.sign_withdrawal(user_key, amount_f, nonce)
+    except Exception as e:
+        logger.error(f"Failed to sign withdrawal for {discord_id}: {e}")
+        await interaction.followup.send("❌ System error generating withdrawal ticket.", ephemeral=True)
+        return
 
-        embed = _footer(discord.Embed(
-            title="✅ Withdrawal Successful",
-            description=f"Sent **{amount_f:,.2f} SHx** to `{destination[:8]}...`",
-            color=SUCCESS_COLOR
-        ))
-        embed.add_field(name="Transaction", value=f"[View]({stellar.get_explorer_url(result['hash'])})")
-        await interaction.followup.send(embed=embed, ephemeral=True)
-    else:
-        await interaction.followup.send(f"❌ Withdrawal failed: {result['error']}", ephemeral=True)
+    # Atomic DB: Deduct balance + create pending withdrawal
+    # We use a special transfer to a 'LOCK' account or similar, 
+    # but for simplicity we'll just deduct it and record the withdrawal.
+    await db.add_deposit(discord_id, f"WD_PENDING_{withdrawal_id}", -amount_f)
+    await db.create_withdrawal(withdrawal_id, discord_id, user_key, amount_f, nonce, signature)
+
+    claim_url = f"{WEB_BASE_URL}/?claim_id={withdrawal_id}"
+
+    embed = _footer(discord.Embed(
+        title="🎟️ Withdrawal Ticket Created",
+        description=(
+            f"You have prepared a withdrawal of **{amount_f:,.2f} SHx**.\n\n"
+            "To complete this, you must claim it on the dashboard using your Stellar wallet.\n\n"
+            "⚠️ **NETWORK FEES**: Since you are withdrawing to your own wallet, you will need a small amount of **XLM** to pay the Stellar network fee."
+        ),
+        color=SUCCESS_COLOR
+    ))
+    
+    embed.add_field(name="Next Step", value=f"**[→ Click here to Claim your SHx]({claim_url})**", inline=False)
+    
+    await interaction.followup.send(embed=embed, ephemeral=True)
 
 
 # ── /tip ──────────────────────────────────────────────────────────────────────
@@ -451,24 +563,46 @@ async def tip_multiple_command(interaction: Interaction, targets: str, amount: s
 
 @bot.tree.command(name="tip-multiple-each", description="Send different SHx amounts to multiple users at once")
 @app_commands.describe(
-    data="Format: @user1 amount, @user2 amount (e.g. @Naugl 10, @Friend $5)",
+    user="Format: @user1 amount, @user2 amount (e.g. @Naugl 10, @Friend $5)",
+    role="Select a role to pick specific members to tip",
     reason="Optional reason"
 )
-async def tip_multiple_each_command(interaction: Interaction, data: str, reason: Optional[str] = None):
-    logger.info(f"COMMAND | /tip-multiple-each | User: {interaction.user} Data: {data}")
-    await interaction.response.defer()
+async def tip_multiple_each_command(interaction: Interaction, user: Optional[str] = None, role: Optional[discord.Role] = None, reason: Optional[str] = None):
+    logger.info(f"COMMAND | /tip-multiple-each | User: {interaction.user} Role: {role.name if role else 'N/A'}")
     
+    if not user and not role:
+        await interaction.response.send_message("❌ Please provide either a `user` list OR select a `role` to pick members from.", ephemeral=True)
+        return
+
     sender_id = str(interaction.user.id)
     # Role check
     if not isinstance(interaction.user, discord.Member):
         if sender_id not in ADMIN_DISCORD_IDS:
-            await interaction.followup.send("❌ This command must be used in a server.", ephemeral=True)
+            await interaction.response.send_message("❌ This command must be used in a server.", ephemeral=True)
             return
     elif len(interaction.user.roles) <= 1 and sender_id not in ADMIN_DISCORD_IDS:
-        await interaction.followup.send("❌ Only users with an assigned role can use `/tip-multiple-each`.", ephemeral=True)
+        await interaction.response.send_message("❌ Only users with an assigned role can use `/tip-multiple-each`.", ephemeral=True)
         return
 
-    tips = await parse_multiple_each_input(interaction.guild, data, exclude_id=sender_id)
+    # Flow A: Role selection
+    if role:
+        # Ensure guild is chunked for role.members
+        if not role.members and not interaction.guild.chunked:
+            await interaction.response.defer(ephemeral=True)
+            try: await interaction.guild.chunk(cache=True)
+            except: pass
+        
+        view = RoleMemberView(role, reason)
+        if not view.children:
+            await interaction.response.send_message(f"❌ No valid (non-bot) members found in role {role.name}.", ephemeral=True)
+            return
+        
+        await interaction.response.send_message(f"👥 Select members from **{role.name}** to tip:", view=view, ephemeral=True)
+        return
+
+    # Flow B: String parsing (user parameter)
+    await interaction.response.defer()
+    tips = await parse_multiple_each_input(interaction.guild, user, exclude_id=sender_id)
     if not tips:
         await interaction.followup.send("❌ No valid tips found. Ensure format is `@user 100, @user2 50`", ephemeral=True)
         return
@@ -738,15 +872,16 @@ async def on_ready():
             logger.warning(f"Guild chunk failed (non-fatal): {e}")
 
     try:
-        # Copy the globally defined python commands to the specific guild
-        # This guarantees interactions work whether Discord sends a global or guild payload!
+        # Sync the globally defined commands to our specific guild first
         bot.tree.copy_global_to(guild=guild_obj)
-        synced_guild = await bot.tree.sync(guild=guild_obj)
-        logger.info(f"Synced {len(synced_guild)} guild slash commands.")
+        await bot.tree.sync(guild=guild_obj)
+        logger.info(f"Synced guild slash commands to {DISCORD_GUILD_ID}.")
         
-        # Sync the global tree as well to replace any old global commands 
-        synced_global = await bot.tree.sync()
-        logger.info(f"Cleared global slash commands.")
+        # To fix the "duplicate commands" issue, we temporarily clear the global tree 
+        # and sync it to Discord. This removes the "Global" copies that appear everywhere.
+        bot.tree.clear_commands(guild=None)
+        await bot.tree.sync()
+        logger.info("Cleared global slash command cache (fixes duplicates).")
     except Exception as e:
         logger.error(f"Command sync failed: {e}", exc_info=True)
 

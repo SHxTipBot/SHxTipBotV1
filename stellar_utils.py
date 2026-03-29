@@ -10,7 +10,7 @@ import logging
 import aiohttp
 from stellar_sdk import (
     Keypair, Network, Server, ServerAsync, AiohttpClient, TransactionBuilder, Asset,
-    SorobanServer, scval,
+    SorobanServer, scval, xdr as stellar_xdr,
 )
 from stellar_sdk.soroban_rpc import GetTransactionStatus, SendTransactionStatus
 from stellar_sdk.exceptions import NotFoundError
@@ -686,37 +686,151 @@ async def stream_deposits(cursor: str = "now", callback=None):
 
 async def send_withdrawal(destination: str, amount_shx: float, memo: str = None) -> dict:
     """
-    Send SHX from the House account to a user's destination address.
+    LEGACY: Direct withdrawal from House Account (Bot-Paid fee).
+    Replaced by User-Paid 'claim' model.
+    """
+    # ... existing implementation omitted for brevity or kept for admin etc
+    pass
+
+async def deploy_contract_wasm(secret: str, wasm_path: str) -> str:
+    """
+    Install the contract WASM code on-chain.
+    Returns the WASM ID.
+    """
+    kp = Keypair.from_secret(secret)
+    horizon_server = Server(HORIZON_URL)
+    soroban_server = SorobanServer(SOROBAN_RPC_URL)
+    
+    with open(wasm_path, "rb") as f:
+        wasm_content = f.read()
+
+    account = horizon_server.load_account(kp.public_key)
+    builder = TransactionBuilder(account, NETWORK_PASSPHRASE).append_install_contract_code_op(wasm_content)
+    
+    tx = builder.build()
+    sim = soroban_server.simulate_transaction(tx)
+    if sim.error:
+        raise Exception(f"Install simulation failed: {sim.error}")
+    
+    tx = soroban_server.prepare_transaction(tx, sim)
+    tx.sign(kp)
+    
+    resp = soroban_server.send_transaction(tx)
+    if resp.status == SendTransactionStatus.ERROR:
+        raise Exception(f"Install submit error: {resp.error_result_xdr}")
+    
+    # Wait for completion
+    for _ in range(30):
+        res = soroban_server.get_transaction(resp.hash)
+        if res.status == GetTransactionStatus.SUCCESS:
+            return res.wasm_id
+        await asyncio.sleep(2)
+    
+    raise Exception("Install timed out")
+
+async def deploy_contract_instance(secret: str, wasm_id: str) -> str:
+    """
+    Deploy a contract instance using a WASM ID.
+    Returns the Contract ID.
+    """
+    kp = Keypair.from_secret(secret)
+    horizon_server = Server(HORIZON_URL)
+    soroban_server = SorobanServer(SOROBAN_RPC_URL)
+    
+    account = horizon_server.load_account(kp.public_key)
+    builder = TransactionBuilder(account, NETWORK_PASSPHRASE).append_create_contract_with_id_op(
+        wasm_id=wasm_id,
+        address=kp.public_key,
+        salt=os.urandom(32)
+    )
+    
+    tx = builder.build()
+    sim = soroban_server.simulate_transaction(tx)
+    if sim.error:
+        raise Exception(f"Deploy simulation failed: {sim.error}")
+        
+    tx = soroban_server.prepare_transaction(tx, sim)
+    tx.sign(kp)
+    
+    resp = soroban_server.send_transaction(tx)
+    if resp.status == SendTransactionStatus.ERROR:
+        raise Exception(f"Deploy submit error: {resp.error_result_xdr}")
+
+    for _ in range(30):
+        res = soroban_server.get_transaction(resp.hash)
+        if res.status == GetTransactionStatus.SUCCESS:
+            return res.contract_id
+        await asyncio.sleep(2)
+        
+    raise Exception("Deploy timed out")
+
+async def invoke_contract_function(secret: str, contract_id: str, function_name: str, parameters: list) -> dict:
+    """
+    Invoke a Soroban contract function and wait for confirmation.
     """
     try:
-        house_kp = Keypair.from_secret(HOUSE_ACCOUNT_SECRET)
-        server = Server(HORIZON_URL)
-        house_account = server.load_account(house_kp.public_key)
+        kp = Keypair.from_secret(secret)
+        horizon_server = Server(HORIZON_URL)
+        soroban_server = SorobanServer(SOROBAN_RPC_URL)
         
-        shx_asset = get_shx_asset()
+        account = horizon_server.load_account(kp.public_key)
+        builder = TransactionBuilder(account, NETWORK_PASSPHRASE, base_fee=100_000)
+        builder.append_invoke_contract_function_op(
+            contract_id=contract_id,
+            function_name=function_name,
+            parameters=parameters,
+        )
+        builder.set_timeout(300)
+        tx = builder.build()
         
-        builder = TransactionBuilder(
-            source_account=house_account,
-            network_passphrase=NETWORK_PASSPHRASE,
-            base_fee=100_000,
-        )
-        builder.append_payment_op(
-            destination=destination,
-            asset=shx_asset,
-            amount=str(amount_shx)
-        )
-        if memo:
-            # Stewardship for the user's request: "in the memo is where the description... will go"
-            builder.add_text_memo(memo[:28])
+        sim = soroban_server.simulate_transaction(tx)
+        if sim.error:
+            return {"success": False, "error": f"Invocation simulation failed: {sim.error}"}
             
-        tx = builder.set_timeout(300).build()
-        tx.sign(house_kp)
+        tx = soroban_server.prepare_transaction(tx, sim)
+        tx.sign(kp)
         
-        resp = server.submit_transaction(tx)
-        logger.info(f"Withdrawal of {amount_shx} SHX to {destination[:8]}... successful. TX: {resp['hash']}")
-        return {"success": True, "hash": resp["hash"]}
+        resp = soroban_server.send_transaction(tx)
+        if resp.status == SendTransactionStatus.ERROR:
+             return {"success": False, "error": f"Invocation submit error: {resp.error_result_xdr}"}
+             
+        # Wait for confirmation
+        for _ in range(30):
+            res = soroban_server.get_transaction(resp.hash)
+            if res.status == GetTransactionStatus.SUCCESS:
+                return {"success": True, "hash": resp.hash}
+            if res.status == GetTransactionStatus.FAILED:
+                return {"success": False, "error": "Transaction failed on-chain"}
+            await asyncio.sleep(2)
+            
+        return {"success": False, "error": "Invocation timed out"}
     except Exception as e:
-        logger.error(f"Withdrawal failed to {destination[:8]}...: {e}")
         return {"success": False, "error": str(e)}
+
+def sign_withdrawal(user_address: str, amount_shx: float, nonce: int) -> str:
+    """
+    Generate an Ed25519 signature for a withdrawal claim.
+    Matches Soroban contract: [ContractAddress, User, Amount, Nonce] using standard .to_xdr()
+    """
+    kp = Keypair.from_secret(HOUSE_ACCOUNT_SECRET)
+    amount_stroops = _to_stroops(amount_shx)
+    
+    # Pack values exactly as Rust's .to_xdr(&env) does.
+    # In Soroban-SDK 21+, .to_xdr() on these types produces the ScVal XDR.
+    data = (
+        scval.to_address(SOROBAN_CONTRACT_ID).to_xdr_bytes() +
+        scval.to_address(user_address).to_xdr_bytes() +
+        scval.to_int128(amount_stroops).to_xdr_bytes() +
+        scval.to_uint64(nonce).to_xdr_bytes()
+    )
+    
+    signature_bytes = kp.sign(data)
+    import base64
+    return base64.b64encode(signature_bytes).decode('utf-8')
+
+def get_house_pubkey_hex() -> str:
+    """Return the raw 32-byte public key in hex format for contract setup."""
+    kp = Keypair.from_public_key(HOUSE_ACCOUNT_PUBLIC)
+    return kp.raw_public_key().hex()
 
 

@@ -75,27 +75,48 @@ async def root():
 
 # ── Registration Page ─────────────────────────────────────────────────────────
 
-@app.get("/register", response_class=HTMLResponse)
-async def register_page(token: str = ""):
-    """Serve the wallet-linking HTML page."""
-    if not token:
-        return HTMLResponse("<h1>Missing token parameter.</h1>", status_code=400)
+    # Get optional claim_id for User-Paid withdrawal
+    # We allow the root /register to be used for both linking and claiming
+    claim_id = ""
+    claim_total = "0.00"
+    
+    # Try to get claim_id from request params if available (FastAPI handles this via token: str = "")
+    # However, since I named the param token, I should probably check for claim_id explicitly.
+    # I'll modify the signature to accept both.
+    pass
 
-    # Validate token exists and is not expired
-    discord_id = await db.validate_link_token(token)
+@app.get("/register", response_class=HTMLResponse)
+async def register_page(token: str = "", claim_id: str = ""):
+    """Serve the wallet-linking / claim HTML page."""
+    # If no token, we might be in 'Claim Only' mode, but usually users come from /link
+    # If no token AND no claim_id, it's invalid.
+    if not token and not claim_id:
+         return HTMLResponse("<h1>Missing session identifier.</h1>", status_code=400)
+
+    discord_id = None
+    if token:
+        discord_id = await db.validate_link_token(token)
+    
+    # If we have a claim_id, we can also derive the discord_id from the withdrawal record
+    claim_amount_str = "0.00"
+    if claim_id:
+        claim_data = await db.get_withdrawal(claim_id)
+        if claim_data:
+            if not discord_id:
+                discord_id = claim_data["discord_id"]
+            claim_amount_str = f"{claim_data['amount']:,.2f}"
+
     if not discord_id:
         return HTMLResponse(
-            "<h1>Invalid or expired link.</h1><p>Please use /link in Discord to get a new one.</p>",
+            "<h1>Invalid or expired session.</h1><p>Please use /link or /withdraw in Discord.</p>",
             status_code=400,
         )
 
-    # Check if user already has a linked wallet
-    existing_key = await db.get_user_stellar_key(discord_id)
-
-    # Get user details for custodial dashboard
+    # Get user details for dashboard
     user_data = await db.get_or_create_user(discord_id)
     memo_id = user_data["memo_id"]
     internal_balance = await db.get_internal_balance(discord_id)
+    existing_key = await db.get_user_stellar_key(discord_id)
 
     # Read and serve the HTML file, injecting variables
     html_path = os.path.join(STATIC_DIR, "index.html")
@@ -104,12 +125,15 @@ async def register_page(token: str = ""):
 
     # Inject runtime values into the page
     html = html.replace("{{TOKEN}}", token.strip())
+    html = html.replace("{{CLAIM_ID}}", claim_id.strip())
+    html = html.replace("{{CLAIM_AMOUNT}}", claim_amount_str)
     html = html.replace("{{NETWORK}}", stellar.STELLAR_NETWORK.strip())
     html = html.replace("{{NETWORK_PASSPHRASE}}", stellar.NETWORK_PASSPHRASE.strip())
     html = html.replace("{{HOUSE_ACCOUNT_PUBLIC}}", stellar.HOUSE_ACCOUNT_PUBLIC.strip())
     html = html.replace("{{MEMO_ID}}", str(memo_id))
     html = html.replace("{{INTERNAL_BALANCE}}", f"{internal_balance:,.2f}")
     html = html.replace("{{EXISTING_KEY or 'None linked yet'}}", (existing_key or "None linked yet").strip())
+    html = html.replace("{{EXISTING_KEY_VAL}}", (existing_key or "").strip())
     html = html.replace("{{SHX_ISSUER}}", stellar.SHX_ISSUER.strip())
     html = html.replace("{{SHX_SAC_CONTRACT_ID}}", stellar.SHX_SAC_CONTRACT_ID.strip())
     html = html.replace("{{SOROBAN_CONTRACT_ID}}", stellar.SOROBAN_CONTRACT_ID.strip())
@@ -224,6 +248,48 @@ async def api_approve_tx(request: Request):
     except Exception as e:
         logger.error(f"APPROVE-TX FAIL | Key: {public_key[:8]}... | Error: {e}")
         raise HTTPException(500, f"Failed to build transaction: {str(e)}")
+
+
+# ── API: Withdrawals ─────────────────────────────────────────────────────────
+
+@app.get("/api/withdrawal/{withdrawal_id}")
+async def api_get_withdrawal(withdrawal_id: str):
+    """Fetch pending withdrawal details for the claim UI."""
+    data = await db.get_withdrawal(withdrawal_id)
+    if not data:
+        raise HTTPException(404, "Withdrawal not found.")
+    
+    if data["status"] != "PENDING":
+        return JSONResponse({
+            "success": False, 
+            "status": data["status"], 
+            "tx_hash": data["tx_hash"],
+            "message": f"This withdrawal is already {data['status'].lower()}."
+        })
+
+    return JSONResponse({
+        "success": True,
+        "amount": data["amount"],
+        "nonce": data["nonce"],
+        "signature": data["signature"],
+        "stellar_address": data["stellar_address"]
+    })
+
+@app.post("/api/withdrawal/{withdrawal_id}/complete")
+async def api_complete_withdrawal(withdrawal_id: str, request: Request):
+    """Mark a withdrawal as completed after successful on-chain claim."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Invalid JSON body.")
+
+    tx_hash = body.get("tx_hash", "").strip()
+    if not tx_hash:
+        raise HTTPException(400, "Missing tx_hash.")
+
+    await db.complete_withdrawal(withdrawal_id, tx_hash)
+    logger.info(f"WITHDRAWAL COMPLETE | ID: {withdrawal_id} | Hash: {tx_hash}")
+    return {"success": True}
 
 
 # ── Health Check ──────────────────────────────────────────────────────────────

@@ -116,6 +116,20 @@ async def init_db():
                 created_at DOUBLE PRECISION NOT NULL
             )
         """)
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS withdrawals (
+                id TEXT PRIMARY KEY,
+                discord_id TEXT NOT NULL,
+                stellar_address TEXT,
+                amount REAL NOT NULL,
+                nonce BIGINT NOT NULL,
+                signature TEXT NOT NULL,
+                status TEXT DEFAULT 'PENDING',
+                tx_hash TEXT,
+                created_at DOUBLE PRECISION NOT NULL,
+                completed_at DOUBLE PRECISION
+            )
+        """)
     
     # Run migrations: comprehensively sanitize all legacy NOT NULL constraints for Tip.cc zero-friction architecture
     migration_queries = [
@@ -247,18 +261,27 @@ async def transfer_internal(sender_id: str, recipient_id: str, amount_shx: float
     total_needed = amount_shx + fee_shx
     pool = await get_pool()
     async with pool.acquire() as conn:
-        sender_bal = await conn.fetchval("SELECT internal_balance FROM users WHERE discord_id = $1", sender_id)
-        if sender_bal is None or sender_bal < total_needed:
-            return False
-            
         async with conn.transaction():
-            await conn.execute("UPDATE users SET internal_balance = internal_balance - $1 WHERE discord_id = $2", total_needed, sender_id)
+            # Atomic update: only decrement if balance is sufficient
+            res = await conn.execute(
+                "UPDATE users SET internal_balance = internal_balance - $1 WHERE discord_id = $2 AND internal_balance >= $1",
+                total_needed, sender_id
+            )
+            
+            # Check if any row was actually updated
+            if res == "UPDATE 0":
+                return False
+                
             # Ensure recipient exists
             await conn.execute(
                 "INSERT INTO users (discord_id, memo_id, internal_balance) VALUES ($1, $2, 0.0) ON CONFLICT DO NOTHING",
                 recipient_id, int(recipient_id)
             )
+            
+            # Increment recipient balance
             await conn.execute("UPDATE users SET internal_balance = internal_balance + $1 WHERE discord_id = $2", amount_shx, recipient_id)
+            
+            # Record tip history
             await conn.execute(
                 """INSERT INTO internal_tips 
                    (sender_discord_id, recipient_discord_id, amount, fee, reason, created_at)
@@ -351,5 +374,36 @@ async def admin_fund_internal(discord_id: str, amount_shx: float):
     await pool.execute(
         "UPDATE users SET internal_balance = internal_balance + $1 WHERE discord_id = $2",
         amount_shx, discord_id
+    )
+
+async def create_withdrawal(
+    withdrawal_id: str,
+    discord_id: str,
+    stellar_address: str,
+    amount: float,
+    nonce: int,
+    signature: str
+):
+    """Create a pending withdrawal entry."""
+    pool = await get_pool()
+    await pool.execute(
+        """INSERT INTO withdrawals 
+            (id, discord_id, stellar_address, amount, nonce, signature, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)""",
+        withdrawal_id, discord_id, stellar_address, amount, nonce, signature, time.time()
+    )
+
+async def get_withdrawal(withdrawal_id: str) -> Optional[Dict[str, Any]]:
+    """Get withdrawal details."""
+    pool = await get_pool()
+    row = await pool.fetchrow("SELECT * FROM withdrawals WHERE id = $1", withdrawal_id)
+    return dict(row) if row else None
+
+async def complete_withdrawal(withdrawal_id: str, tx_hash: str):
+    """Mark a withdrawal as completed."""
+    pool = await get_pool()
+    await pool.execute(
+        "UPDATE withdrawals SET status = 'COMPLETED', tx_hash = $1, completed_at = $2 WHERE id = $1",
+        tx_hash, time.time(), withdrawal_id
     )
 

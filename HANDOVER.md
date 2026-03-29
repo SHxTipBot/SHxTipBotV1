@@ -13,10 +13,10 @@ Complete setup guide for the Stronghold team to deploy and manage the SHx Tip Bo
 5. [Environment Configuration](#environment-configuration)
 6. [Deploying on Vercel](#deploying-on-vercel)
 7. [Deploying on Railway](#deploying-on-railway)
-8. [House Account and Role-Based Funding](#house-account-and-role-based-funding)
+8. [Ownership Transfer (Step-by-Step)](#ownership-transfer-step-by-step)
 9. [Admin Commands](#admin-commands)
 10. [House Account Tipping Commands](#house-account-tipping-commands)
-11. [How Tipping Works](#how-tipping-works)
+11. [How Tipping Works (Custodial Architecture)](#how-tipping-works-custodial-architecture)
 12. [Security Best Practices](#security-best-practices)
 13. [Troubleshooting](#troubleshooting)
 14. [File Reference](#file-reference)
@@ -26,35 +26,32 @@ Complete setup guide for the Stronghold team to deploy and manage the SHx Tip Bo
 ## Architecture Overview
 
 ```text
-Stronghold  ──/distribute──►  Mod Wallets (SHX supply)
-                                    │
-                                    ▼
-Discord Mod  ──/tip──►  Discord Bot (bot.py)
-                              │
-                              ▼
-                     Soroban Smart Contract
-                     (tipping_contract)
-                              │
-                     ┌────────┴────────┐
-                     ▼                 ▼
-              Sender Wallet     Recipient Wallet
-              (mod's own)       (user's own)
-                                    │
-                                    ▼
-                              Small SHX → XLM swap
-                              (covers gas fee)
-
-Discord User  ──/link──►  Web App (web.py + index.html)
-                              │
-                              ▼
-                     Links Discord ID → Stellar wallet
+Stronghold  ──/distribute──►  House Account (SHX pool)
+                                     │
+                                     ▼
+Discord User  ──/withdraw──►  Discord Bot (bot.py)
+                                     │
+                                     ▼
+                        Generates signed "Claim Ticket"
+                                     │
+                                     ▼
+Discord User  ──/claim─────►  Web Dashboard (Freighter)
+                                     │
+                                     ▼
+                          Soroban Smart Contract
+                          (claim_withdrawal)
+                                     │
+                      ┌──────────────┴──────────────┐
+                      ▼                             ▼
+               User Wallet                   House Account 
+               (Pays XLM Fee)                (Sends SHX)
 ```
 
 **Key principles**:
 
-- **Non-custodial** — users hold their own Stellar wallets
-- **No fees collected** — Stronghold supplies SHX to mods for distribution
-- **Recipient pays gas** — a tiny portion of the received SHX is swapped to XLM to cover the Stellar transaction fee
+- **Hybrid Custodial Model** — Bot uses an internal database ledger for instant, gasless community tipping.
+- **User-Paid Withdrawals** — On-chain Stellar network fees are paid by the user (XLM) when they "Claim" their funds.
+- **Master Wallet Storage** — All community SHx is held in a single secure House Account authorized by the Bot.
 
 ### Components
 
@@ -85,10 +82,10 @@ You need **2 Stellar accounts** for production:
 
 ### 1. House Account (submits transactions)
 
-- The bot uses this account to submit Soroban contract calls to the network
-- Fund with **20–50 XLM** initially (gas costs ~0.05 XLM per tip)
-- The XLM cost is reimbursed by the recipient (see "How Tipping Works" below)
-- Keep the secret key secure (it's used by the bot to sign transactions)
+- The bot uses this account to authorize withdrawals and tipping operations.
+- The House Account **no longer pays network fees** for user withdrawals (the user pays the XLM gas when claiming).
+- Fund with a base amount of XLM (1-2 XLM) to keep the account active.
+- Keep the secret key secure (it's used to sign "Claim Tickets").
 
 ### 2. Stronghold Supply Wallet (SHX distribution)
 
@@ -108,7 +105,23 @@ Two contract IDs are needed:
 - **SOROBAN_CONTRACT_ID**: The deployed tipping contract
 - **SHX_SAC_CONTRACT_ID**: The SHx Stellar Asset Contract (SAC) — wraps the SHx classic asset for Soroban
 
-To redeploy on mainnet, build and deploy the contract from `soroban_tipping_contract/`.
+#### Automated Deployment (Recommended)
+
+To deploy and initialize the contract in one step, ensure your `.env` file has the correct `HOUSE_ACCOUNT_SECRET` and `SHX_SAC_CONTRACT_ID`, then run:
+
+```bash
+python deploy_and_init.py
+```
+
+This script will:
+
+1. Install the `soroban_tipping_contract.wasm` on-chain.
+2. Deploy a new contract instance.
+3. Initialize the contract with your SHx token and House Account.
+4. Correctly authorize the bot to sign withdrawals.
+5. Automatically update your `.env` with the new `SOROBAN_CONTRACT_ID`.
+
+To redeploy on mainnet, simply change your `STELLAR_NETWORK` to `public` in `.env` and run the script again.
 
 ---
 
@@ -155,7 +168,8 @@ SHX_ISSUER=your_shx_issuer_public_key
 SOROBAN_CONTRACT_ID=your_tipping_contract_id
 SHX_SAC_CONTRACT_ID=your_shx_sac_contract_id
 
-# ── Bot House Account (submits transactions) ────
+# ── Bot House Account (Master Wallet) ───
+# The House Account secret is used to sign "Withdrawal Claim Tickets"
 HOUSE_ACCOUNT_SECRET=your_house_secret_key
 HOUSE_ACCOUNT_PUBLIC=your_house_public_key
 
@@ -287,21 +301,53 @@ Ensure your latest code (including `Dockerfile` and `run_all.py`) is pushed to G
 
 ---
 
-## House Account and Role-Based Funding
+## Ownership Transfer (Step-by-Step)
 
-To prepare for mainnet and maintain a strict 1:1 custodial backing of SHx, the bot uses a "House Account" model.
+To handover the bot to a new team or individual, follow these steps:
 
-- The **House Account** is simply any Discord user designated as an Admin (`ADMIN_DISCORD_IDS` in `.env`).
-- To fund the House Account, you must make a real Stellar deposit to the bot's deposit address (obtainable via the `/deposit` command) using the Admin's Discord ID as the memo. This credits the Admin's internal balance with real SHx.
-- Once funded, the House Account can distribute SHx to other Discord members (usually "Tippers") so they have a balance to tip regular users.
+### 1. Identify the New Admin
 
-### Linking Profiles to Roles & Tipping
+The person "accepting" the admin role needs to find their unique **Discord User ID**:
 
-You can manage roles natively via Discord Server Settings, or use the bot's built-in commands:
+1. Open Discord → **User Settings** → **Advanced**.
+2. Enable **Developer Mode**.
+3. Right-click their profile → **Copy User ID**.
 
-1. Use `/create-role` to create a new role (e.g., "Tippers").
-2. Use `/assign-role` to give this role to specific Discord profiles.
-3. Once users are assigned to a role, they unlock the ability to run `/tip-role`. Any user with an assigned role can tip **every** member of another configured role, using their own SHx balance!
+### 2. Update the Admin List
+
+Open the `.env` file (or update the environment variables in Railway/Vercel) and add the new User ID to the `ADMIN_DISCORD_IDS` list:
+
+```env
+ADMIN_DISCORD_IDS=1234567890,9876543210
+```
+
+This grants that user full access to `/create-role`, `/assign-role`, and `/airdrop`.
+
+### 3. Link the Master Wallet (House Account)
+
+The "Master Wallet" is the Stellar account that holds the SHx and XLM for the community.
+
+1. Generate or import a Stellar secret key (starts with 'S').
+2. Update the `HOUSE_ACCOUNT_SECRET` and `HOUSE_ACCOUNT_PUBLIC` in the `.env` file.
+3. Fund this wallet with **XLM** (for gas) and **SHx** (for the tip pool).
+4. Restart the bot.
+
+---
+
+## How Tipping Works (Custodial Architecture)
+
+Unlike most bots that require on-chain transactions for every micro-tip, this bot uses a **1:1 Custodial Internal Balance** system. This makes tipping instant and free for your community.
+
+1. **Deposits**: Users deposit SHx to the Bot's House Account with a unique **memo ID**.
+2. **Internal Ledger**: The bot detects the deposit and credits the user's **Internal Balance** in the database.
+3. **Tipping**: When a user types `/tip @recipient 10`, the bot instantly moves 10 SHx from the sender's balance to the recipient's balance in the database. There are **no on-chain gas fees** for internal tips.
+4. **Withdrawals**: When a user wants their SHx on-chain, they use the `/withdraw` command. The bot deducts their internal balance and provides a **"Claim Ticket"** (link to dashboard). The user then visits the dashboard and signs a transaction with their own wallet (Freighter/Lobstr). **The user pays the Stellar network fee (XLM)** for this transaction.
+
+### Why this is better
+
+- **Instant**: Community tipping is limited only by Discord's speed, not the Stellar network.
+- **Gasless**: Users don't need XLM to tip each other.
+- **Simplified Setup**: You only need to fund the single Master Wallet (House Account) with XLM for withdrawals.
 
 ---
 
@@ -325,17 +371,12 @@ Any Discord user that is a **House Account** or **Tipper** (meaning they are ass
 | ------------------------ | -------------------------------------------------------- |
 | `/tip-role @role amount` | Tip a specific amount of SHx to *each* member of a role. |
 
-## How Tipping Works
+### 2. Verification Link Flow
 
-1. Mod types `/tip @recipient 10 Great work!`
-2. Bot checks: sender linked? recipient linked? balance sufficient? rate limit ok?
-3. Bot calculates gas fee equivalent in SHX (based on SHx/XLM DEX price)
-4. Bot calls the Soroban tipping contract:
-   - Transfers `amount` SHx from sender → recipient
-   - A small SHX portion from the tip is swapped to XLM via the Stellar DEX to cover the network gas fee
-5. The **recipient** effectively pays the gas (deducted from the tip they receive)
-6. **No fees go to a treasury** — Stronghold supplies SHX, mods distribute it
-7. Bot posts success embed with Stellar Expert link
+1. User types `/link`.
+2. Bot generates a unique, time-limited token.
+3. User visits the dashboard, chooses their wallet, and signs a "Link" transaction (or provides their address).
+4. The Master Wallet (`HOUSE_ACCOUNT_SECRET`) validates the request and saves the link to the DB.
 
 ### Airdrops & Group Tipping
 
@@ -364,12 +405,11 @@ Any Discord user that is a **House Account** or **Tipper** (meaning they are ass
 ## Security Best Practices
 
 - 🔐 **Never commit `.env`** — it contains secret keys
-- 🔐 **Never commit `testnet_secrets.env` or `testnet_accounts.json`**
-- 🔐 The **HOUSE_ACCOUNT_SECRET** is the most sensitive value — it signs all tip transactions
+- 🔐 The **HOUSE_ACCOUNT_SECRET** is the most sensitive value — it signs all "Claim Tickets" which authorize on-chain transfers.
 - 🔐 Use environment variables in production (Vercel dashboard, Docker `--env-file`)
 - 🔐 Rotate the house account secret key if compromised
 - 🔐 Keep the house account XLM balance modest (50–100 XLM) to limit exposure
-- 🔐 The bot is non-custodial — you never hold user SHx
+- 🔐 The bot uses a 1:1 custodial model — ensure internal balances match real SHx in the Master Wallet
 
 ---
 

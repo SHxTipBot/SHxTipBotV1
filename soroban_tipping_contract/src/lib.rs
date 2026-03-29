@@ -10,7 +10,7 @@
 
 #![no_std]
 
-use soroban_sdk::{contract, contractimpl, contracttype, symbol_short, token, Address, Env};
+use soroban_sdk::{contract, contractimpl, contracttype, symbol_short, token, Address, Env, xdr::ToXdr};
 
 /// Persistent storage keys.
 #[contracttype]
@@ -42,6 +42,13 @@ impl TippingContract {
         env.storage().instance().set(&DataKey::Version, &1u32);
     }
 
+    /// Set the raw Ed25519 public key of the bot (for withdrawal signatures).
+    pub fn set_admin_pubkey(env: Env, pubkey: soroban_sdk::BytesN<32>) {
+        let admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+        admin.require_auth();
+        env.storage().instance().set(&symbol_short!("adm_pub"), &pubkey);
+    }
+
     /// Execute a tip and emit a TipExecuted event.
     pub fn tip(env: Env, sender: Address, recipient: Address, amount: i128, fee: i128) {
         assert!(amount > 0, "amount must be > 0");
@@ -65,6 +72,63 @@ impl TippingContract {
         env.events().publish(
             (symbol_short!("tip_exec"), sender.clone(), recipient.clone()),
             (amount, fee),
+        );
+    }
+
+    /// Claim a withdrawal from the House Account into the user's wallet.
+    /// This requires a valid Ed25519 signature from the bot (admin_pubkey).
+    pub fn claim_withdrawal(
+        env: Env,
+        user: Address,
+        amount: i128,
+        nonce: u64,
+        signature: soroban_sdk::BytesN<64>,
+    ) {
+        user.require_auth(); // The user pays the gas
+
+        // 1. Replay Protection: Check if this nonce was already used for this user.
+        let nonce_key = (symbol_short!("nonce"), user.clone(), nonce);
+        if env.storage().persistent().has(&nonce_key) {
+            panic!("nonce already used");
+        }
+
+        // 2. Signature Verification
+        let admin_pubkey: soroban_sdk::BytesN<32> = env
+            .storage()
+            .instance()
+            .get(&symbol_short!("adm_pub"))
+            .expect("admin_pubkey not set");
+
+        // The message being signed: [ContractAddress, User, Amount, Nonce]
+        let mut msg_bin = soroban_sdk::Bytes::new(&env);
+        msg_bin.append(&env.current_contract_address().to_xdr(&env));
+        msg_bin.append(&user.clone().to_xdr(&env));
+        msg_bin.append(&amount.clone().to_xdr(&env));
+        msg_bin.append(&nonce.clone().to_xdr(&env));
+
+        env.crypto().ed25519_verify(&admin_pubkey, &msg_bin, &signature);
+
+        // 3. Move SHx from House Account to User
+        // Note: The House Account MUST be the 'Admin' address in this contract's context,
+        // so we use the stored 'Admin' address as the source of funds.
+        let house_account: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+        let shx_contract: Address = env.storage().instance().get(&DataKey::ShxContract).unwrap();
+        let shx = token::TokenClient::new(&env, &shx_contract);
+
+        shx.transfer_from(
+            &env.current_contract_address(),
+            &house_account,
+            &user,
+            &amount,
+        );
+
+        // 4. Record the nonce to prevent double-claiming
+        env.storage().persistent().set(&nonce_key, &true);
+
+        // 5. Emit event
+        env.events().publish(
+            (symbol_short!("withdraw"), user.clone()),
+            (amount, nonce),
         );
     }
 
