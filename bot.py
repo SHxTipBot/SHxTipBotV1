@@ -809,14 +809,16 @@ async def tip_role_command(interaction: Interaction, role: discord.Role, amount:
     total_amount="Total SHx or USD (e.g. 100 or $10)", 
     duration_minutes="Optional expiration time in minutes",
     duration_hours="Optional expiration time in hours",
-    duration_days="Optional expiration time in days"
+    duration_days="Optional expiration time in days",
+    claims="Legacy parameter (ignored)"
 )
 async def airdrop_command(
     interaction: Interaction, 
     total_amount: str, 
     duration_minutes: Optional[int] = None,
     duration_hours: Optional[int] = None,
-    duration_days: Optional[int] = None
+    duration_days: Optional[int] = None,
+    claims: Optional[int] = None
 ):
     logger.info(f"COMMAND | /airdrop | User: {interaction.user} Total: {total_amount} Mins: {duration_minutes} Hrs: {duration_hours} Days: {duration_days}")
     await interaction.response.defer()
@@ -965,18 +967,14 @@ async def on_ready():
             logger.warning(f"Guild chunk failed (non-fatal): {e}")
 
     try:
-        # Sync the globally defined commands to our specific guild first
+        # Simplified Sync: Copy global commands and sync to our specific guild
+        # This resolves duplicate registrations and ensures immediate updates
+        guild_obj = discord.Object(id=DISCORD_GUILD_ID)
         bot.tree.copy_global_to(guild=guild_obj)
         await bot.tree.sync(guild=guild_obj)
-        logger.info(f"Synced guild slash commands to {DISCORD_GUILD_ID}.")
-        
-        # To fix the "duplicate commands" issue, we temporarily clear the global tree 
-        # and sync it to Discord. This removes the "Global" copies that appear everywhere.
-        bot.tree.clear_commands(guild=None)
-        await bot.tree.sync(guild=guild_obj)
-        logger.info("Slash commands synced to guild.")
+        logger.info(f"Slash command tree synchronized to guild {DISCORD_GUILD_ID}.")
     except Exception as e:
-        logger.error(f"Command sync failed: {e}", exc_info=True)
+        logger.error(f"Command registration/sync failed: {e}", exc_info=True)
 
     # Start background tasks
     if not process_airdrops.is_running():
