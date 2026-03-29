@@ -4,6 +4,7 @@ Handles balance queries, fee calculation, transaction construction, and contract
 """
 
 import os
+import time
 import asyncio
 import logging
 import aiohttp
@@ -214,29 +215,73 @@ _usd_price_cache = {"price": 0.0, "timestamp": 0.0}
 
 async def get_shx_usd_price() -> float | None:
     """
-    Get the current price of SHx in USD from CoinGecko.
-    Caches the result for 5 minutes to prevent rate limiting.
+    Get the current price of SHx in USD.
+    
+    Logic:
+    1. If on Testnet, returns a mock value of $0.001.
+    2. If on Mainnet, tries CoinGecko first (most stable).
+    3. If CoinGecko fails, falls back to the Stellar DEX (SHX/USDC pair).
+    4. Caches results for 5 minutes.
     """
     now = time.time()
     if now - _usd_price_cache["timestamp"] < 300:
         if _usd_price_cache["price"] > 0:
             return _usd_price_cache["price"]
-            
+
+    # 1. Testnet Mock
+    if STELLAR_NETWORK == "testnet":
+        return 0.001
+
+    price = None
+
+    # 2. Try CoinGecko (Mainnet)
     try:
         session = await get_session()
-        url = "https://api.coingecko.com/api/v3/simple/price?ids=stronghold-token&vs_currencies=usd"
-        async with session.get(url) as resp:
+        cg_url = "https://api.coingecko.com/api/v3/simple/price?ids=stronghold-token&vs_currencies=usd"
+        async with session.get(cg_url) as resp:
             if resp.status == 200:
                 data = await resp.json()
                 price = float(data.get("stronghold-token", {}).get("usd", 0.0))
                 if price > 0:
+                    logger.info(f"Price Oracle | CoinGecko | SHX = ${price:.6f}")
                     _usd_price_cache["price"] = price
                     _usd_price_cache["timestamp"] = now
                     return price
-            return _usd_price_cache["price"] if _usd_price_cache["price"] > 0 else None
     except Exception as e:
-        logger.error(f"Error fetching SHx/USD price: {e}")
-        return _usd_price_cache["price"] if _usd_price_cache["price"] > 0 else None
+        logger.warning(f"Price Oracle | CoinGecko failed: {e}")
+
+    # 3. Try Stellar DEX Fallback (Mainnet)
+    try:
+        session = await get_session()
+        # USDC (Centre) on Stellar Mainnet
+        USDC_CODE = "USDC"
+        USDC_ISSUER = "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335XOP3IA2M6GKP5V7SUCTS6XY"
+        
+        dex_url = (
+            f"{HORIZON_URL}/order_book"
+            f"?selling_asset_type=credit_alphanum4"
+            f"&selling_asset_code={SHX_ASSET_CODE}"
+            f"&selling_asset_issuer={SHX_ISSUER}"
+            f"&buying_asset_type=credit_alphanum4"
+            f"&buying_asset_code={USDC_CODE}"
+            f"&buying_asset_issuer={USDC_ISSUER}"
+            f"&limit=1"
+        )
+        async with session.get(dex_url) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                if data.get("bids"):
+                    price = float(data["bids"][0]["price"])
+                    if price > 0:
+                        logger.info(f"Price Oracle | Stellar DEX | SHX = ${price:.6f}")
+                        _usd_price_cache["price"] = price
+                        _usd_price_cache["timestamp"] = now
+                        return price
+    except Exception as e:
+        logger.error(f"Price Oracle | Stellar DEX failed: {e}")
+
+    # 4. Final Fallback to Cache
+    return _usd_price_cache["price"] if _usd_price_cache["price"] > 0 else None
 
 async def get_shx_xlm_price() -> float | None:
     """
@@ -281,40 +326,6 @@ async def calculate_gas_shx() -> float:
         return FALLBACK_GAS_SHX
 
 
-async def get_shx_usd_price() -> float | None:
-    """
-    Get the current price of SHx in USD (via USDC) from the Stellar DEX.
-    If on Testnet, returns a mock value of $0.001 unless a pair exists.
-    """
-    if STELLAR_NETWORK == "testnet":
-        return 0.001 # Mock for testnet
-        
-    try:
-        session = await get_session()
-        # USDC (Centre) on Stellar Mainnet
-        USDC_CODE = "USDC"
-        USDC_ISSUER = "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335XOP3IA2M6GKP5V7SUCTS6XY"
-        
-        url = (
-            f"{HORIZON_URL}/order_book"
-            f"?selling_asset_type=credit_alphanum4"
-            f"&selling_asset_code={SHX_ASSET_CODE}"
-            f"&selling_asset_issuer={SHX_ISSUER}"
-            f"&buying_asset_type=credit_alphanum4"
-            f"&buying_asset_code={USDC_CODE}"
-            f"&buying_asset_issuer={USDC_ISSUER}"
-            f"&limit=1"
-        )
-        async with session.get(url) as resp:
-            if resp.status != 200:
-                return None
-            data = await resp.json()
-            if data.get("bids"):
-                return float(data["bids"][0]["price"])
-            return None
-    except Exception as e:
-        logger.error(f"Error fetching SHx/USD price: {e}")
-        return None
 
 
 def usd_to_shx(usd_amount: float, shx_price_usd: float) -> float:

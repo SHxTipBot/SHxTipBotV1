@@ -12,12 +12,14 @@ Complete setup guide for the Stronghold team to deploy and manage the SHx Tip Bo
 4. [Discord Bot Setup](#discord-bot-setup)
 5. [Environment Configuration](#environment-configuration)
 6. [Deploying on Vercel](#deploying-on-vercel)
-7. [Running the Discord Bot](#running-the-discord-bot)
-8. [Admin Commands](#admin-commands)
-9. [How Tipping Works](#how-tipping-works)
-10. [Security Best Practices](#security-best-practices)
-11. [Troubleshooting](#troubleshooting)
-12. [Deploying on Railway](#deploying-on-railway)
+7. [Deploying on Railway](#deploying-on-railway)
+8. [House Account and Role-Based Funding](#house-account-and-role-based-funding)
+9. [Admin Commands](#admin-commands)
+10. [House Account Tipping Commands](#house-account-tipping-commands)
+11. [How Tipping Works](#how-tipping-works)
+12. [Security Best Practices](#security-best-practices)
+13. [Troubleshooting](#troubleshooting)
+14. [File Reference](#file-reference)
 
 ---
 
@@ -283,12 +285,12 @@ Ensure your latest code (including `Dockerfile` and `run_all.py`) is pushed to G
 2. Click **Generate Domain**. This will be your new `WEB_BASE_URL`.
 3. Important: Update the `WEB_BASE_URL` variable in Railway to match this new domain.
 
-
 ---
 
 ## House Account and Role-Based Funding
 
 To prepare for mainnet and maintain a strict 1:1 custodial backing of SHx, the bot uses a "House Account" model.
+
 - The **House Account** is simply any Discord user designated as an Admin (`ADMIN_DISCORD_IDS` in `.env`).
 - To fund the House Account, you must make a real Stellar deposit to the bot's deposit address (obtainable via the `/deposit` command) using the Admin's Discord ID as the memo. This credits the Admin's internal balance with real SHx.
 - Once funded, the House Account can distribute SHx to other Discord members (usually "Tippers") so they have a balance to tip regular users.
@@ -301,16 +303,15 @@ You can manage roles natively via Discord Server Settings, or use the bot's buil
 2. Use `/assign-role` to give this role to specific Discord profiles.
 3. Once users are assigned to a role, they unlock the ability to run `/tip-role`. Any user with an assigned role can tip **every** member of another configured role, using their own SHx balance!
 
-
 ---
 
 ## Admin Commands
 
-| Command                     | Description                                            |
-| --------------------------- | ------------------------------------------------------ |
-| `/create-role name hex_color`| Create a new Discord role (Admin only).                |
-| `/assign-role @user @role` | Assign a role to a Discord user (Admin only). |
-| `/airdrop total max mins` | Create an airdrop message with a "Claim SHx" button. |
+| Command                       | Description                                          |
+| ----------------------------- | ---------------------------------------------------- |
+| `/create-role name hex_color` | Create a new Discord role (Admin only).              |
+| `/assign-role @user @role`    | Assign a role to a Discord user (Admin only).        |
+| `/airdrop total max mins`     | Create an airdrop message with a "Claim SHx" button. |
 
 *Note: Only users whose Discord IDs are in `ADMIN_DISCORD_IDS` can use the admin commands listed above (except airdrop if configured otherwise).*
 
@@ -320,10 +321,9 @@ You can manage roles natively via Discord Server Settings, or use the bot's buil
 
 Any Discord user that is a **House Account** or **Tipper** (meaning they are assigned to any Discord role) can use:
 
-| Command                  | Description                                            |
-| ------------------------ | ------------------------------------------------------ |
+| Command                  | Description                                              |
+| ------------------------ | -------------------------------------------------------- |
 | `/tip-role @role amount` | Tip a specific amount of SHx to *each* member of a role. |
-
 
 ## How Tipping Works
 
@@ -375,15 +375,15 @@ Any Discord user that is a **House Account** or **Tipper** (meaning they are ass
 
 ## Troubleshooting
 
-| Issue                       | Solution                                                   |
-| --------------------------- | ---------------------------------------------------------- |
-| Slash commands don't appear | Restart bot — commands sync on startup                     |
-| "Wallet not linked" | User needs to use `/link` and complete the web flow |
-| "Not enough allowance" | Run `approve_contract.py <USER_SECRET_KEY>` |
-| "Transaction timed out" | Testnet can be slow — check Stellar Expert for the TX hash |
-| "DEX price unavailable" | Normal on testnet — uses fallback fee of 5 SHx |
-| House account out of XLM | Send more XLM to the house account |
-| Port 8080 in use | Kill old process: `netstat -ano \| findstr :8080` then `taskkill /PID <PID> /F` |
+| Issue                       | Solution                                                                        |
+| --------------------------- | ------------------------------------------------------------------------------- |
+| Slash commands don't appear | Restart bot — commands sync on startup                                          |
+| "Wallet not linked"         | User needs to use `/link` and complete the web flow                             |
+| "Not enough allowance"      | Run `approve_contract.py <USER_SECRET_KEY>`                                     |
+| "Transaction timed out"     | Testnet can be slow — check Stellar Expert for the TX hash                      |
+| "DEX price unavailable"     | Normal on testnet — uses fallback fee of 5 SHx                                  |
+| House account out of XLM    | Send more XLM to the house account                                              |
+| Port 8080 in use            | Kill old process: `netstat -ano \| findstr :8080` then `taskkill /PID <PID> /F` |
 
 ---
 

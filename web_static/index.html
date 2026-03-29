@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SHx Tip Bot — Dashboard</title>
+  <title>SHx Tip Bot User Dashboard</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
@@ -36,34 +36,50 @@
       position: relative;
     }
 
-    /* Dynamic glowing background blobs */
-    body::before, body::after {
+    @keyframes float {
+      0% { transform: translate(0, 0) scale(1); }
+      100% { transform: translate(30px, -50px) scale(1.1); }
+    }
+
+    /* Stronghold Castle Background */
+    body::before {
       content: '';
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-image: url('https://cdn.prod.website-files.com/5e9a1cde22bbc0a89dba7f5b/60c9649cf8fb48e5c883950e_Stronghold%20Logo%20Mark%20Blue.png');
+      background-repeat: no-repeat;
+      background-position: center top;
+      background-size: 900px;
+      opacity: 0.06;
+      z-index: -1;
+      pointer-events: none;
+    }
+
+    /* Dynamic glowing background blobs */
+    .bg-blob {
       position: fixed;
       width: 400px;
       height: 400px;
       border-radius: 50%;
       filter: blur(100px);
-      z-index: -1;
-      opacity: 0.15;
+      z-index: -2;
+      opacity: 0.12;
       pointer-events: none;
       animation: float 10s infinite alternate ease-in-out;
     }
-    body::before {
+    .blob-1 {
       top: 10%;
       left: -10%;
       background: var(--accent);
     }
-    body::after {
+    .blob-2 {
       bottom: 10%;
       right: -10%;
       background: #6c63ff;
       animation-delay: -5s;
-    }
-
-    @keyframes float {
-      0% { transform: translate(0, 0) scale(1); }
-      100% { transform: translate(30px, -50px) scale(1.1); }
     }
 
     .container {
@@ -210,6 +226,21 @@
     .btn:active { transform: translateY(0); }
     .btn:disabled { opacity: 0.7; cursor: not-allowed; transform: none; }
 
+    .btn-unlink {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid var(--error);
+      color: var(--error);
+      margin-top: 12px;
+      font-size: 0.9rem;
+      padding: 12px;
+      box-shadow: none;
+    }
+    .btn-unlink:hover {
+      background: var(--error);
+      color: #fff;
+      box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3);
+    }
+
     .status { margin-top: 16px; padding: 14px; border-radius: 10px; font-size: 0.9rem; text-align: center; display: none; font-weight: 500; }
     .status.success { display: block; background: rgba(16, 185, 129, 0.1); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.2); }
     .status.error { display: block; background: rgba(239, 68, 68, 0.1); color: var(--error); border: 1px solid rgba(239, 68, 68, 0.2); }
@@ -231,10 +262,12 @@
   </style>
 </head>
 <body>
+  <div class="bg-blob blob-1"></div>
+  <div class="bg-blob blob-2"></div>
 
   <div class="container">
     <div class="header">
-      <h1>SHx Dashboard</h1>
+      <h1>SHx Tip Bot User Dashboard</h1>
       <p>Manage your tips, deposits, and withdrawals securely.</p>
     </div>
 
@@ -301,6 +334,7 @@
       <div class="linked-section">
         <label class="linked-label">Currently Linked Address:</label>
         <div class="linked-badge" id="linked-addr">{{EXISTING_KEY or 'None linked yet'}}</div>
+        <button class="btn btn-unlink" id="btn-unlink" onclick="unlinkWallet()">Unlink Wallet Address</button>
       </div>
     </div>
 
@@ -367,6 +401,43 @@
       } finally {
         btn.disabled = false;
         btn.innerText = "Link Wallet Address";
+      }
+    }
+
+    async function unlinkWallet() {
+      if (!confirm("Are you sure you want to unlink this wallet? You will not be able to withdraw until you link a new one.")) {
+        return;
+      }
+
+      const btn = document.getElementById('btn-unlink');
+      const status = document.getElementById('status-box');
+      
+      try {
+        btn.disabled = true;
+        btn.innerText = "Unlinking...";
+        status.className = "status";
+
+        const res = await fetch(API_BASE + '/api/unlink', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: TOKEN })
+        });
+        
+        const data = await res.json();
+        if (data.success) {
+          status.className = "status success";
+          status.innerText = "Wallet unlinked successfully.";
+          document.getElementById('linked-addr').innerText = "None linked yet";
+          document.getElementById('g-address').value = "";
+        } else {
+          throw new Error(data.detail || "Unlinking failed.");
+        }
+      } catch (e) {
+        status.className = "status error";
+        status.innerText = e.message;
+      } finally {
+        btn.disabled = false;
+        btn.innerText = "Unlink Wallet Address";
       }
     }
   </script>

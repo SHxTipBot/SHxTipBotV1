@@ -111,8 +111,81 @@ async def parse_amount(input_str: str) -> float | None:
     except ValueError:
         return None
 
+
+async def get_unique_users_from_string(guild: discord.Guild, input_str: str, exclude_id: str = None) -> list[discord.Member]:
+    """Extract unique Members from a string containing mentions of users and roles."""
+    import re
+    user_ids = set(re.findall(r'<@!?(\d+)>', input_str))
+    role_ids = set(re.findall(r'<@&(\d+)>', input_str))
+    
+    unique_members = {}
+    
+    # Process user mentions
+    for uid_str in user_ids:
+        uid = int(uid_str)
+        if str(uid) == exclude_id: continue
+        member = guild.get_member(uid)
+        if not member:
+            try: member = await guild.fetch_member(uid)
+            except: continue
+        if member and not member.bot:
+            unique_members[member.id] = member
+            
+    # Process role mentions
+    for rid_str in role_ids:
+        rid = int(rid_str)
+        role = guild.get_role(rid)
+        if role:
+            # Ensure guild is chunked for role.members
+            if not role.members and not guild.chunked:
+                try: await guild.chunk(cache=True)
+                except: pass
+            
+            members = role.members
+            if not members:
+                try:
+                    # fetch_members is heavy, use with caution but necessary if cache fails
+                    async for m in guild.fetch_members(limit=None):
+                        if role in m.roles and not m.bot and str(m.id) != exclude_id:
+                            unique_members[m.id] = m
+                except Exception as e:
+                    logger.warning(f"Failed to fetch members for role {role.name}: {e}")
+            else:
+                for m in members:
+                    if not m.bot and str(m.id) != exclude_id:
+                        unique_members[m.id] = m
+                        
+    return list(unique_members.values())
+
+async def parse_multiple_each_input(guild: discord.Guild, input_str: str, exclude_id: str = None) -> list[tuple[discord.Member, float]]:
+    """Parse a string like '@user1 10, @user2 $5' into (Member, SHx_amount) pairs."""
+    import re
+    # Pattern: <@!?ID> followed by an optional $ and numbers/commas/decimals/usd
+    pattern = r'(<@!?\d+>)\s*[:=]?\s*([\$]?[\d,]+(?:\.\d+)?(?:usd)?)'
+    matches = re.findall(pattern, input_str, re.IGNORECASE)
+    
+    results = []
+    seen_ids = set()
+    
+    for mention, amt_str in matches:
+        uid = int(re.search(r'\d+', mention).group())
+        if str(uid) == exclude_id or uid in seen_ids: continue
+        
+        member = guild.get_member(uid)
+        if not member:
+            try: member = await guild.fetch_member(uid)
+            except: continue
+            
+        if member and not member.bot:
+            parsed_amt = await parse_amount(amt_str)
+            if parsed_amt and parsed_amt > 0:
+                results.append((member, parsed_amt))
+                seen_ids.add(uid)
+                
+    return results
+
 # ══════════════════════════════════════════════════════════════════════════════
-# COMMANDS — define ALL 5 commands BEFORE on_ready so they exist in the tree
+# COMMANDS — define ALL commands BEFORE on_ready so they exist in the tree
 # ══════════════════════════════════════════════════════════════════════════════
 
 
@@ -313,6 +386,129 @@ async def tip_command(
         )
 
 
+# ── /tip-multiple ─────────────────────────────────────────────────────────────
+
+@bot.tree.command(name="tip-multiple", description="Split a total SHx amount among multiple mentioned users or roles")
+@app_commands.describe(
+    targets="Mention users and/or roles (e.g. @user1 @role1)",
+    amount="Total SHx to split equally among all members (e.g. 100 or $5)",
+    reason="Optional reason"
+)
+async def tip_multiple_command(interaction: Interaction, targets: str, amount: str, reason: Optional[str] = None):
+    logger.info(f"COMMAND | /tip-multiple | User: {interaction.user} Targets: {targets} Amount: {amount}")
+    await interaction.response.defer()
+    
+    sender_id = str(interaction.user.id)
+    # Role check (standard for role-based tipping features)
+    if not isinstance(interaction.user, discord.Member):
+        if sender_id not in ADMIN_DISCORD_IDS:
+            await interaction.followup.send("❌ This command must be used in a server.", ephemeral=True)
+            return
+    elif len(interaction.user.roles) <= 1 and sender_id not in ADMIN_DISCORD_IDS:
+        await interaction.followup.send("❌ Only users with an assigned role can use `/tip-multiple`.", ephemeral=True)
+        return
+
+    parsed_amount = await parse_amount(amount)
+    if parsed_amount is None:
+        await interaction.followup.send("❌ Invalid amount. Enter numbers or a fiat string (e.g. `$5`).", ephemeral=True)
+        return
+
+    members = await get_unique_users_from_string(interaction.guild, targets, exclude_id=sender_id)
+    if not members:
+        await interaction.followup.send("❌ No valid recipient users or roles found in the input. Ensure you mention them properly.", ephemeral=True)
+        return
+
+    amount_per_member = round(parsed_amount / len(members), 7)
+    if amount_per_member < 0.0000001:
+        await interaction.followup.send(f"❌ Total amount too small to split among {len(members)} users.", ephemeral=True)
+        return
+
+    sender_bal = await db.get_internal_balance(sender_id)
+    if sender_bal < parsed_amount:
+        await interaction.followup.send(f"❌ Insufficient balance. You need **{parsed_amount:,.2f} SHx**, but you only have **{sender_bal:,.2f} SHx**.", ephemeral=True)
+        return
+
+    success_count = 0
+    for member in members:
+        recipient_id = str(member.id)
+        await db.get_or_create_user(recipient_id)
+        success = await db.transfer_internal(sender_id, recipient_id, amount_per_member, 0.0, reason or "Multi-tip split")
+        if success:
+            success_count += 1
+            
+    embed = _footer(discord.Embed(title="👥 Multi-Tip Split Complete!", color=SUCCESS_COLOR))
+    embed.add_field(name="Total Split", value=f"**{parsed_amount:,.2f} SHx**", inline=True)
+    embed.add_field(name="Recipients", value=f"**{len(members)}**", inline=True)
+    embed.add_field(name="Amount Each", value=f"**{amount_per_member:,.4f} SHx**", inline=True)
+    if reason:
+        embed.add_field(name="Reason", value=reason, inline=False)
+    
+    await interaction.followup.send(embed=embed)
+    logger.info(f"MULTI-TIP OK | {sender_id} split {parsed_amount} among {success_count} users")
+
+
+# ── /tip-multiple-each ────────────────────────────────────────────────────────
+
+@bot.tree.command(name="tip-multiple-each", description="Send different SHx amounts to multiple users at once")
+@app_commands.describe(
+    data="Format: @user1 amount, @user2 amount (e.g. @Naugl 10, @Friend $5)",
+    reason="Optional reason"
+)
+async def tip_multiple_each_command(interaction: Interaction, data: str, reason: Optional[str] = None):
+    logger.info(f"COMMAND | /tip-multiple-each | User: {interaction.user} Data: {data}")
+    await interaction.response.defer()
+    
+    sender_id = str(interaction.user.id)
+    # Role check
+    if not isinstance(interaction.user, discord.Member):
+        if sender_id not in ADMIN_DISCORD_IDS:
+            await interaction.followup.send("❌ This command must be used in a server.", ephemeral=True)
+            return
+    elif len(interaction.user.roles) <= 1 and sender_id not in ADMIN_DISCORD_IDS:
+        await interaction.followup.send("❌ Only users with an assigned role can use `/tip-multiple-each`.", ephemeral=True)
+        return
+
+    tips = await parse_multiple_each_input(interaction.guild, data, exclude_id=sender_id)
+    if not tips:
+        await interaction.followup.send("❌ No valid tips found. Ensure format is `@user 100, @user2 50`", ephemeral=True)
+        return
+
+    total_amount = sum(amt for _, amt in tips)
+    sender_bal = await db.get_internal_balance(sender_id)
+    if sender_bal < total_amount:
+        await interaction.followup.send(f"❌ Insufficient balance for all tips. Total required: **{total_amount:,.2f} SHx**, but you have **{sender_bal:,.2f} SHx**.", ephemeral=True)
+        return
+
+    success_list = []
+    fail_list = []
+    
+    for member, amount in tips:
+        recipient_id = str(member.id)
+        await db.get_or_create_user(recipient_id)
+        success = await db.transfer_internal(sender_id, recipient_id, amount, 0.0, reason or "Multi-tip each")
+        if success:
+            success_list.append(f"{member.mention}: {amount:,.2f} SHx")
+        else:
+            fail_list.append(f"{member.mention}: {amount:,.2f} SHx (Insufficient funds?)")
+
+    embed = _footer(discord.Embed(title="📊 Multi-Tip Each Summary", color=SUCCESS_COLOR))
+    success_total = sum(amt for m, amt in tips if any(m.mention in s for s in success_list))
+    embed.add_field(name="Total Sent", value=f"**{success_total:,.2f} SHx**", inline=False)
+    
+    if success_list:
+        embed.add_field(name="✅ Successful Tips", value="\n".join(success_list[:15]) + ("\n..." if len(success_list) > 15 else ""), inline=False)
+    if fail_list:
+        embed.add_field(name="❌ Failed Tips", value="\n".join(fail_list), inline=False)
+        embed.color = ERROR_COLOR
+    if reason:
+        embed.add_field(name="Reason", value=reason, inline=False)
+
+    await interaction.followup.send(embed=embed)
+    logger.info(f"MULTI-TIP-EACH OK | {sender_id} sent {success_total} SHx to {len(success_list)} users")
+
+
+
+
 # ── /create-role ──────────────────────────────────────────────────────────────
 
 @bot.tree.command(name="create-role", description="[Admin] Create a new Discord role")
@@ -360,8 +556,8 @@ async def assign_role_command(interaction: Interaction, user: discord.Member, ro
 
 # ── /tip-role ─────────────────────────────────────────────────────────────────
 
-@bot.tree.command(name="tip-role", description="Tip an amount of SHx to EACH member of a role")
-@app_commands.describe(role="The role to tip", amount="Amount to send to EACH member (e.g. 100 or $5)")
+@bot.tree.command(name="tip-role", description="Split a total SHx amount equally among all members of a role")
+@app_commands.describe(role="The role to tip", amount="Total SHx to split equally (e.g. 100 or $5)")
 async def tip_role_command(interaction: Interaction, role: discord.Role, amount: str):
     logger.info(f"COMMAND | /tip-role | User: {interaction.user} Role: {role.name} Amount/User: {amount}")
     await interaction.response.defer()
@@ -384,16 +580,25 @@ async def tip_role_command(interaction: Interaction, role: discord.Role, amount:
         return
 
     members = role.members
-    # Fallback to fetching all members if role.members goes stale or lacks intent population
-    if not members and interaction.guild.chunked is False:
+    # Fallback 1: guild not yet chunked — request chunking now
+    if not members and not interaction.guild.chunked:
         try:
-            await interaction.guild.chunk()
+            await interaction.guild.chunk(cache=True)
             members = role.members
-        except Exception:
-            pass
-            
+        except Exception as ce:
+            logger.warning(f"Guild chunk failed in tip-role: {ce}")
+
+    # Fallback 2: still empty — fetch members directly from the API
     if not members:
-        await interaction.followup.send(f"❌ There are no members found in the {role.name} role.", ephemeral=True)
+        try:
+            fetched = [m async for m in interaction.guild.fetch_members(limit=None)]
+            members = [m for m in fetched if role in m.roles]
+            logger.info(f"tip-role: fetched {len(members)} members via API for role {role.name}")
+        except Exception as fe:
+            logger.error(f"Failed to fetch members for tip-role: {fe}")
+
+    if not members:
+        await interaction.followup.send(f"❌ There are no members found in the **{role.name}** role.", ephemeral=True)
         return
 
     valid_members = [m for m in members if not m.bot and str(m.id) != sender_id]
@@ -401,28 +606,32 @@ async def tip_role_command(interaction: Interaction, role: discord.Role, amount:
         await interaction.followup.send(f"❌ There are no valid recipient members in the {role.name} role (bots and yourself are excluded).", ephemeral=True)
         return
 
-    total_needed = parsed_amount * len(valid_members)
+    amount_per_member = round(parsed_amount / len(valid_members), 7)
+    if amount_per_member < 0.0000001:
+        await interaction.followup.send(f"❌ Total amount too small to split among {len(valid_members)} members.", ephemeral=True)
+        return
+
     sender_bal = await db.get_internal_balance(sender_id)
-    
-    if sender_bal < total_needed:
-        await interaction.followup.send(f"❌ Insufficient balance. You need **{total_needed:,.2f} SHx** to tip {len(valid_members)} members **{parsed_amount:,.2f} SHx** each, but you only have **{sender_bal:,.2f} SHx**.", ephemeral=True)
+    if sender_bal < parsed_amount:
+        await interaction.followup.send(f"❌ Insufficient balance. You need **{parsed_amount:,.2f} SHx** to split among {len(valid_members)} members, but you only have **{sender_bal:,.2f} SHx**.", ephemeral=True)
         return
 
     success_count = 0
     for member in valid_members:
         recipient_id = str(member.id)
         await db.get_or_create_user(recipient_id)
-        success = await db.transfer_internal(sender_id, recipient_id, parsed_amount, 0.0, f"Role tip: {role.name}")
+        success = await db.transfer_internal(sender_id, recipient_id, amount_per_member, 0.0, f"Role tip: {role.name}")
         if success:
             success_count += 1
             
     embed = _footer(discord.Embed(title="🎭 Role Tip Complete!", color=SUCCESS_COLOR))
     embed.add_field(name="Role Tipped", value=role.mention, inline=False)
-    embed.add_field(name="Amount per User", value=f"**{parsed_amount:,.2f} SHx**", inline=True)
-    embed.add_field(name="Users Tipped", value=f"**{success_count}** out of {len(valid_members)}", inline=True)
-    embed.add_field(name="Total Sent", value=f"**{(parsed_amount * success_count):,.2f} SHx**", inline=False)
+    embed.add_field(name="Each Member Received", value=f"**{amount_per_member:,.4f} SHx**", inline=True)
+    embed.add_field(name="Members Tipped", value=f"**{success_count}** out of {len(valid_members)}", inline=True)
+    embed.add_field(name="Total Distributed", value=f"**{(amount_per_member * success_count):,.4f} SHx**", inline=False)
     
     await interaction.followup.send(embed=embed)
+    logger.info(f"ROLE TIP OK | {sender_id}→{role.name} | {amount_per_member} SHx x {success_count} members | Total: {amount_per_member * success_count}")
 
 # ── /airdrop ──────────────────────────────────────────────────────────────────
 
@@ -518,6 +727,15 @@ async def on_ready():
     # Initialize DB and HTTP session
     await db.init_db()
     await stellar.get_session()
+
+    # Chunk the guild so role.members is populated in cache
+    guild = bot.get_guild(DISCORD_GUILD_ID)
+    if guild and not guild.chunked:
+        try:
+            await guild.chunk(cache=True)
+            logger.info(f"Guild member cache populated ({guild.member_count} members).")
+        except Exception as e:
+            logger.warning(f"Guild chunk failed (non-fatal): {e}")
 
     try:
         # Copy the globally defined python commands to the specific guild

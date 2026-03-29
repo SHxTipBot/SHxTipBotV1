@@ -209,6 +209,16 @@ async def link_user(discord_id: str, stellar_public_key: str, is_approved: bool 
     )
     logger.info(f"Linked Discord user {discord_id} to Stellar key {stellar_public_key[:8]}...")
 
+async def unlink_user(discord_id: str):
+    """Unlink a Stellar public key from a Discord user."""
+    now = time.time()
+    pool = await get_pool()
+    await pool.execute(
+        "UPDATE users SET stellar_public_key = NULL, is_approved = FALSE, updated_at = $1 WHERE discord_id = $2",
+        now, discord_id
+    )
+    logger.info(f"Unlinked Discord user {discord_id}")
+
 async def get_internal_balance(discord_id: str) -> float:
     """Get the user's internal SHx balance."""
     pool = await get_pool()
