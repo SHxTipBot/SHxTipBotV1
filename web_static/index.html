@@ -512,7 +512,7 @@
     const NETWORK = "{{NETWORK}}";
     const SHX_SAC_CONTRACT_ID = "{{SHX_SAC_CONTRACT_ID}}";
     const SOROBAN_CONTRACT_ID = "{{SOROBAN_CONTRACT_ID}}";
-    const IS_AUTO_DETECTED = {{IS_AUTO_DETECTED}};
+    const isAutoDetected = "{{IS_AUTO_DETECTED}}" === "true";
     const API_BASE = window.location.origin;
 
     let ACTIVE_WALLET = 'freighter';
@@ -585,7 +585,7 @@
     if (CLAIM_ID && CLAIM_ID.length > 5) {
         document.getElementById('claim-card').classList.remove('hidden');
         
-        if (IS_AUTO_DETECTED) {
+        if (isAutoDetected) {
             document.getElementById('auto-detect-notice').style.display = 'block';
         }
 
