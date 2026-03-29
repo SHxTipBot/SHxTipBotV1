@@ -363,6 +363,7 @@
     .input-flex-fill { margin-bottom: 0; flex: 1; }
     .btn-autofill-sm { width: auto; margin: 0; padding: 12px 16px; font-size: 0.8rem; }
     .btn-cancel-revert { margin-top: 12px; background: rgba(239, 68, 68, 0.05); }
+    .notice-banner { display: none; margin-bottom: 20px; background: rgba(59, 130, 246, 0.1); color: #60A5FA; border: 1px solid rgba(59, 130, 246, 0.2); padding: 12px; border-radius: 12px; font-size: 0.85rem; line-height: 1.4; }
   </style>
 </head>
 <body>
@@ -383,7 +384,7 @@
         </div>
         
         <!-- Auto-Detection Notice -->
-        <div id="auto-detect-notice" class="status-badge" style="display: none; margin-bottom: 20px; background: rgba(59, 130, 246, 0.1); color: #60A5FA; border: 1px solid rgba(59, 130, 246, 0.2); padding: 12px; border-radius: 12px; font-size: 0.85rem; line-height: 1.4;">
+        <div id="auto-detect-notice" class="status-badge notice-banner">
            ℹ️ <strong>Pending Withdrawal Detected:</strong> We found an active withdrawal ticket for your account created on <span id="auto-detect-date">...</span>.
         </div>
 
