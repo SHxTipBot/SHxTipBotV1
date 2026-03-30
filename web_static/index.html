@@ -52,6 +52,24 @@
       pointer-events: none;
     }
 
+    /* Stronghold Blue Castle Watermark */
+    body::after {
+      content: '';
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 60vw;
+      height: 60vh;
+      background: url('/static/stronghold_logo_watermark.svg') no-repeat center;
+      background-size: contain;
+      opacity: 0.05;
+      z-index: -1;
+      pointer-events: none;
+      filter: blur(2px);
+    }
+
+
     .container {
       width: 100%;
       max-width: 600px;
@@ -88,15 +106,16 @@
     }
 
     .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
+      background: rgba(17, 24, 39, 0.4);
+      border: 1px solid rgba(255, 255, 255, 0.1);
       border-radius: var(--radius);
-      -webkit-backdrop-filter: blur(20px);
-      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(40px);
+      backdrop-filter: blur(40px);
       padding: 32px;
       margin-bottom: 24px;
       transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
       position: relative;
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
     }
     
     .card:hover {
@@ -355,7 +374,7 @@
             </div>
             <div class="info-item">
                 <label>Registered Wallet</label>
-                <div class="value">{{EXISTING_KEY or 'None'}}</div>
+                <div class="value">{{EXISTING_KEY}}</div>
             </div>
         </div>
 
@@ -396,25 +415,44 @@
   <!-- Libraries -->
   <script src="https://cdn.jsdelivr.net/npm/@stellar/stellar-sdk/dist/stellar-sdk.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
-  <!-- Stellar Wallets Kit (Global Bundle) -->
-  <script src="https://cdn.jsdelivr.net/npm/@creit-tech/stellar-wallets-kit/dist/index.global.js"></script>
 
-  <script>
+  <script type="module">
+    // Import Stellar Wallets Kit from esm.sh for stable browser support
+    import { 
+        StellarWalletsKit, 
+        WalletNetwork, 
+        WalletType 
+    } from "https://esm.sh/@creit-tech/stellar-wallets-kit?bundle";
+
     const TOKEN = "{{TOKEN}}";
     const CLAIM_ID = "{{CLAIM_ID}}";
     const NETWORK = "{{NETWORK}}";
     const NETWORK_PASSPHRASE = "{{NETWORK_PASSPHRASE}}";
     const SOROBAN_CONTRACT_ID = "{{SOROBAN_CONTRACT_ID}}";
+    const DISCORD_ID = "{{DISCORD_ID}}";
     const API_BASE = window.location.origin;
     
-    // Initialize Stellar Wallets Kit
-    const { StellarWalletsKit, WalletNetwork, WalletType } = StellarWalletsKit;
-    const kit = new StellarWalletsKit({
-        network: NETWORK === 'mainnet' ? WalletNetwork.PUBLIC : WalletNetwork.TESTNET,
-        selectedWallet: WalletType.FREIGHTER // Default
-    });
-
+    let _kit = null;
     let userAddress = null;
+
+    // Lazy initialization of Stellar Wallets Kit
+    function getKit() {
+        if (!_kit) {
+            try {
+                console.log("Initializing Stellar Wallets Kit...");
+                _kit = new StellarWalletsKit({
+                    network: NETWORK === 'mainnet' ? WalletNetwork.PUBLIC : WalletNetwork.TESTNET,
+                    selectedWallet: WalletType.FREIGHTER, // Default
+                    allowWalletConnect: true,
+                    walletConnectProjectId: '1da02e75fe8efd7560248dc15804b13c'
+                });
+            } catch (e) {
+                console.error("Failed to initialize SWK", e);
+                throw new Error("Stellar Wallets Kit failed to initialize. Try refreshing the page.");
+            }
+        }
+        return _kit;
+    }
 
     // Detect state on load
     window.addEventListener('DOMContentLoaded', async () => {
@@ -431,22 +469,28 @@
         }
     });
 
-    async function connectWallet() {
+    // --- Exposed Functions for HTML onclick attributes ---
+
+    window.connectWallet = async function() {
         try {
-            // Open SWK modal
+            console.log("Opening SWK Modal...");
+            const kit = getKit();
             await kit.openModal({
                 onConfirmed: async (walletType, network) => {
+                    console.log("Wallet confirmed:", walletType);
                     kit.setWallet(walletType);
                     const { address } = await kit.getAddress();
                     userAddress = address;
                     handleConnectionSuccess(address);
-                }
+                },
+                modalTitle: "Connect to SHx Tip Bot",
+                modalDescription: "Choose your preferred Stellar wallet to securely link or claim rewards."
             });
         } catch (e) {
             console.error("Connection failed", e);
             alert("Connection cancelled or failed: " + e.message);
         }
-    }
+    };
 
     function handleConnectionSuccess(address) {
         document.getElementById('btn-connect').classList.add('hidden');
@@ -461,37 +505,68 @@
         if (claimBtn) claimBtn.disabled = false;
     }
 
-    async function handleLink() {
+    window.handleLink = async function() {
         if (!userAddress) return;
         const btn = document.getElementById('btn-link');
         const status = document.getElementById('status-box');
         
         try {
             btn.disabled = true;
-            btn.innerText = "Processing...";
+            btn.innerText = "Proving ownership...";
             status.style.display = 'none';
 
+            // 1. Fetch account to get sequence number
+            const serverUrl = NETWORK === 'testnet' ? 'https://horizon-testnet.stellar.org' : 'https://horizon.stellar.org';
+            const server = new window.StellarSdk.Server(serverUrl);
+            let account;
+            try {
+                account = await server.loadAccount(userAddress);
+            } catch (e) {
+                throw new Error("Account not found on network. Please fund your wallet with at least 1 XLM to link.");
+            }
+
+            // 2. Build a dummy verification transaction
+            const tx = new window.StellarSdk.TransactionBuilder(account, {
+                fee: "1000", // Standard fee
+                networkPassphrase: NETWORK_PASSPHRASE
+            })
+            .addOperation(window.StellarSdk.Operation.manageData({
+                name: "link_discord",
+                value: DISCORD_ID
+            }))
+            .setTimeout(300)
+            .build();
+
+            // 3. Request signature from Kit
+            btn.innerText = "Sign in wallet...";
+            const kit = getKit();
+            const signedXdr = await kit.signTransaction(tx.toXDR());
+
+            // 4. Send to server
+            btn.innerText = "Linking...";
             const res = await axios.post(`${API_BASE}/api/link`, {
                 token: TOKEN,
                 public_key: userAddress,
+                signature_xdr: signedXdr, 
                 is_approved: true
             });
 
             if (res.data.success) {
                 status.className = "status success";
-                status.innerText = "✅ Wallet successfully linked to Discord!";
+                status.innerText = "✅ Wallet verified and linked successfully!";
                 document.getElementById('link-status-text').innerText = "Linked ✅";
             }
         } catch (e) {
+            console.error(e);
             status.className = "status error";
             status.innerText = e.response?.data?.detail || e.message;
         } finally {
             btn.disabled = false;
             btn.innerText = "Register Connected Wallet";
         }
-    }
+    };
 
-    async function claimWithdrawal() {
+    window.claimWithdrawal = async function() {
         if (!userAddress) return;
         const btn = document.getElementById('btn-claim-action');
         const status = document.getElementById('claim-status');
@@ -542,6 +617,7 @@
 
             // 4. Sign with Kit
             btn.innerText = "Sign in Wallet...";
+            const kit = getKit();
             const signedXDR = await kit.signTransaction(preparedTx.toXDR());
 
             // 5. Submit
@@ -577,9 +653,9 @@
             btn.disabled = false;
             if (btn.style.display !== 'none') btn.innerText = "Claim SHx Tokens";
         }
-    }
+    };
 
-    async function unlinkWallet() {
+    window.unlinkWallet = async function() {
         if (!confirm("Are you sure? This will remove your linked wallet from Discord.")) return;
         const btn = document.getElementById('btn-unlink');
         const status = document.getElementById('status-box');
@@ -597,9 +673,9 @@
         } finally {
             btn.disabled = false;
         }
-    }
+    };
 
-    async function cancelWithdrawal() {
+    window.cancelWithdrawal = async function() {
         if (!confirm("Cancel withdrawal and return funds to Discord?")) return;
         try {
             const res = await axios.post(`${API_BASE}/api/withdrawal/${CLAIM_ID}/cancel`, { token: TOKEN });
@@ -607,13 +683,13 @@
                 location.reload();
             }
         } catch (e) { alert(e.message); }
-    }
+    };
 
-    function copy(id) {
+    window.copy = function(id) {
         const text = document.getElementById(id).innerText;
         navigator.clipboard.writeText(text);
         alert("Copied: " + text);
-    }
+    };
   </script>
 </body>
 </html>

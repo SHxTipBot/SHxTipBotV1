@@ -9,6 +9,7 @@ import time
 import secrets
 import logging
 from typing import Any, List, Dict, Optional
+from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
 
 from dotenv import load_dotenv
 
@@ -24,12 +25,32 @@ _pool: asyncpg.Pool | None = None
 async def get_pool() -> asyncpg.Pool:
     """Get or create a global persistent database connection pool.
        Uses statement_cache_size=0 to avoid stale schema cache errors.
+       Sanitizes the URL to remove parameters unsupported by asyncpg (e.g. sslmode).
     """
     global _pool
     if _pool is None:
-        url = os.getenv("DATABASE_URL")
-        if not url:
+        raw_url = os.getenv("DATABASE_URL")
+        if not raw_url:
             raise ValueError("DATABASE_URL environment variable is not set")
+        
+        # ── Sanitize URL for asyncpg ──
+        # asyncpg does not support 'sslmode', 'channel_binding', etc. in the connection string.
+        try:
+            parsed = urlparse(raw_url)
+            query = parse_qs(parsed.query)
+            
+            # Remove unsupported fields
+            unsupported = ['sslmode', 'channel_binding']
+            for field in unsupported:
+                query.pop(field, None)
+            
+            # Reconstruct the URL without unsupported fields
+            new_query = urlencode(query, doseq=True)
+            url = urlunparse(parsed._replace(query=new_query))
+        except Exception as e:
+            logger.warning(f"URL sanitization failed (using raw): {e}")
+            url = raw_url
+
         try:
             # statement_cache_size=0 prevents "cached statement plan is invalid" errors
             # after ALTER TABLE migrations run
@@ -149,7 +170,12 @@ async def init_db():
             try:
                 await conn.execute(query)
             except Exception as e:
-                logger.debug(f"Migration note (safe to ignore): {e}")
+                # If it's a 'column already exists' error, it's safe to ignore.
+                # Otherwise, log it as a warning.
+                if "already exists" in str(e).lower():
+                    logger.debug(f"Migration note (safe to ignore): {e}")
+                else:
+                    logger.warning(f"Migration query failed: {query} -> {e}")
 
     logger.info("Database initialized successfully.")
 
