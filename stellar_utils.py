@@ -10,7 +10,7 @@ import logging
 import aiohttp
 from stellar_sdk import (
     Keypair, Network, Server, ServerAsync, AiohttpClient, TransactionBuilder, Asset,
-    SorobanServer, scval, xdr as stellar_xdr,
+    SorobanServer, scval, xdr as stellar_xdr, TransactionEnvelope,
 )
 from stellar_sdk.soroban_rpc import GetTransactionStatus, SendTransactionStatus
 from stellar_sdk.exceptions import NotFoundError
@@ -832,5 +832,44 @@ def get_house_pubkey_hex() -> str:
     """Return the raw 32-byte public key in hex format for contract setup."""
     kp = Keypair.from_public_key(HOUSE_ACCOUNT_PUBLIC)
     return kp.raw_public_key().hex()
+
+def verify_link_signature_xdr(public_key: str, signature_xdr: str, expected_discord_id: str) -> bool:
+    """
+    Verify a signed transaction XDR for wallet linking.
+    The transaction must:
+    1. Have the provided public_key as the source account.
+    2. Contain a ManageData operation with key 'link_discord' and value 'expected_discord_id'.
+    3. Have a valid signature from the public_key.
+    """
+    try:
+        from stellar_sdk import TransactionEnvelope, xdr as stellar_xdr
+        te = TransactionEnvelope.from_xdr(signature_xdr, NETWORK_PASSPHRASE)
+        tx = te.transaction
+        
+        # 1. Verify source account
+        if tx.source.public_key != public_key:
+            logger.warning(f"Verify Link | Source mismatch: {tx.source.public_key} != {public_key}")
+            return False
+            
+        # 2. Verify operations
+        found_op = False
+        for op in tx.operations:
+            # Check for ManageData operation
+            # In stellar_sdk Transaction, operations are higher level objects
+            if hasattr(op, "data_name") and op.data_name == "link_discord":
+                if op.data_value.decode() == expected_discord_id:
+                    found_op = True
+                    break
+        
+        if not found_op:
+            logger.warning(f"Verify Link | Expected ManageData op 'link_discord' not found or value mismatch for {expected_discord_id}")
+            return False
+            
+        # 3. Verify signature
+        te.verify(public_key)
+        return True
+    except Exception as e:
+        logger.error(f"Verify Link | Error: {e}")
+        return False
 
 

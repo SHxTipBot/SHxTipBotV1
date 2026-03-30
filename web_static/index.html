@@ -36,7 +36,6 @@
       position: relative;
     }
 
-    /* Animated Mesh Background */
     body::before {
       content: '';
       position: fixed;
@@ -52,7 +51,6 @@
       pointer-events: none;
     }
 
-    /* Stronghold Blue Castle Watermark */
     body::after {
       content: '';
       position: fixed;
@@ -68,7 +66,6 @@
       pointer-events: none;
       filter: blur(2px);
     }
-
 
     .container {
       width: 100%;
@@ -96,7 +93,6 @@
     }
     .header p { color: var(--text-muted); font-size: 1.1rem; max-width: 400px; margin: 0 auto; line-height: 1.5; }
 
-    /* Connect Section */
     .connect-section {
         display: flex;
         flex-direction: column;
@@ -168,7 +164,6 @@
       -webkit-text-fill-color: transparent;
     }
 
-    /* Buttons */
     .btn {
       width: 100%;
       padding: 16px 24px;
@@ -218,7 +213,6 @@
         box-shadow: none;
     }
 
-    /* Wallet Info */
     .wallet-info {
         display: flex;
         align-items: center;
@@ -246,7 +240,6 @@
         box-shadow: 0 0 10px var(--success);
     }
 
-    /* Utility Cards */
     .info-grid {
         display: grid;
         grid-template-columns: 1fr;
@@ -290,9 +283,6 @@
     }
     .copy-btn:hover { background: var(--accent); color: #fff; }
 
-    /* Modal Styling for SWK Override (Simulated) */
-    /* Note: SWK injects its own CSS, but we want our page to feel cohesive */
-    
     .status { margin-top: 16px; padding: 16px; border-radius: 14px; font-size: 0.95rem; text-align: center; display: none; }
     .status.success { display: block; background: rgba(16, 185, 129, 0.1); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.2); }
     .status.error { display: block; background: rgba(239, 68, 68, 0.1); color: var(--error); border: 1px solid rgba(239, 68, 68, 0.2); }
@@ -301,11 +291,9 @@
     
     footer { text-align: center; margin-top: 40px; color: var(--text-muted); font-size: 0.85rem; opacity: 0.6; }
 
-    /* Claim Specific */
     .claim-card { border-color: var(--success); background: linear-gradient(to bottom right, rgba(16, 185, 129, 0.05), var(--surface)); }
     .claim-card .card-icon { background: rgba(16, 185, 129, 0.1); color: var(--success); border-color: rgba(16, 185, 129, 0.2); }
 
-    /* New Utility Classes for Inline Style Removal */
     .auto-detect-notice { margin-bottom: 12px; font-size: 0.85rem; }
     .btn-danger-outline { margin-top: 12px; color: var(--error); border-color: rgba(239, 68, 68, 0.2); }
     .info-item-accent { border-color: var(--accent); }
@@ -331,7 +319,6 @@
         </div>
     </div>
 
-    <!-- Claim (User-Paid) section -->
     <div class="card claim-card hidden" id="claim-card">
         <div class="card-header">
             <div class="card-icon">🎟️</div>
@@ -347,9 +334,6 @@
                 <label>Network</label>
                 <div class="value">{{NETWORK}}</div>
             </div>
-            <div id="auto-detect-notice" class="status success hidden auto-detect-notice">
-                ℹ️ Auto-detected withdrawal ticket
-            </div>
         </div>
 
         <button class="btn" id="btn-claim-action" disabled>Claim SHx Tokens</button>
@@ -357,7 +341,6 @@
         <div id="claim-status" class="status"></div>
     </div>
 
-    <!-- Main Linking Card -->
     <div class="card" id="link-card">
         <div class="card-header">
             <div class="card-icon">🔗</div>
@@ -385,7 +368,6 @@
         <div id="status-box" class="status"></div>
     </div>
 
-    <!-- Deposit Helper Card -->
     <div class="card">
       <div class="card-header">
         <div class="card-icon">📥</div>
@@ -412,16 +394,28 @@
     </footer>
   </div>
 
-  <!-- Libraries -->
+  <!-- Polyfills & Essential Libraries -->
+  <script>
+    if (typeof window.Buffer === 'undefined') {
+      window.Buffer = {
+        isBuffer: () => false,
+        from: (data) => {
+          if (typeof data === 'string') return new TextEncoder().encode(data);
+          return new Uint8Array(data);
+        }
+      };
+    }
+    window.process = { env: { NODE_ENV: 'production' }, nextTick: (f) => setTimeout(f, 0) };
+  </script>
+
   <script src="https://cdn.jsdelivr.net/npm/@stellar/stellar-sdk/dist/stellar-sdk.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
 
   <script type="module">
-    // Import Stellar Wallets Kit from esm.sh for stable browser support
     import { 
         StellarWalletsKit, 
         WalletNetwork, 
-        WalletType 
+        WalletType
     } from "https://esm.sh/@creit.tech/stellar-wallets-kit?bundle";
 
     const urlParams = new URLSearchParams(window.location.search);
@@ -431,197 +425,104 @@
     const NETWORK_PASSPHRASE = "{{NETWORK_PASSPHRASE}}";
     const SOROBAN_CONTRACT_ID = "{{SOROBAN_CONTRACT_ID}}";
     const DISCORD_ID = "{{DISCORD_ID}}";
-    const API_BASE = window.location.origin;
-    const SERVER_URL = NETWORK === 'testnet' ? 'https://horizon-testnet.stellar.org' : 'https://horizon.stellar.org';
+    const WC_PROJECT_ID = '1da02e75fe8efd7560248dc15804b13c';
     
+    const API_BASE = window.location.origin;
+    const HORIZON_URL = NETWORK === 'mainnet' ? 'https://horizon.stellar.org' : 'https://horizon-testnet.stellar.org';
+    const SOROBAN_URL = NETWORK === 'mainnet' ? 'https://soroban.stellar.org' : 'https://soroban-testnet.stellar.org';
+
     let _kit = null;
     let userAddress = null;
 
-    // Lazy initialization of Stellar Wallets Kit
-    function getKit() {
-        if (!_kit) {
-            try {
-                console.log("Initializing Stellar Wallets Kit...");
-                _kit = new StellarWalletsKit({
-                    network: NETWORK === 'mainnet' ? WalletNetwork.PUBLIC : WalletNetwork.TESTNET,
-                    selectedWallet: WalletType.FREIGHTER, // Default
-                    allowWalletConnect: true,
-                    walletConnectProjectId: '1da02e75fe8efd7560248dc15804b13c'
-                });
-            } catch (e) {
-                console.error("Failed to initialize SWK", e);
-                throw new Error("Stellar Wallets Kit failed to initialize. Try refreshing the page.");
-            }
-        }
+    const updateLinkStatus = (msg, isError = false) => {
+        const box = document.getElementById('status-box');
+        if (!box) return;
+        box.style.display = 'block';
+        box.className = `status ${isError ? 'error' : 'success'}`;
+        box.innerText = msg;
+    };
+
+    const updateClaimStatus = (msg, isError = false) => {
+        const box = document.getElementById('claim-status');
+        if (!box) return;
+        box.style.display = 'block';
+        box.className = `status ${isError ? 'error' : 'success'}`;
+        box.innerText = msg;
+    };
+
+    function initKit() {
+        if (_kit) return _kit;
+        _kit = new StellarWalletsKit({
+            network: NETWORK === 'mainnet' ? WalletNetwork.PUBLIC : WalletNetwork.TESTNET,
+            selectedWallet: WalletType.FREIGHTER,
+            allowWalletConnect: true,
+            walletConnectProjectId: WC_PROJECT_ID
+        });
         return _kit;
     }
 
-    // Detect state on load & Attach Event Listeners
-    window.addEventListener('DOMContentLoaded', async () => {
-        // UI State
-        if (CLAIM_ID && CLAIM_ID.length > 5 && CLAIM_ID !== "{{CLAIM_ID}}") {
-            document.getElementById('claim-card').classList.remove('hidden');
-        }
-        
-        const existing = "{{EXISTING_KEY_VAL}}";
-        if (existing && existing.length > 10 && existing !== "{{EXISTING_KEY_VAL}}") {
-            document.getElementById('link-status-text').innerText = "Linked ✅";
-        } else {
-            document.getElementById('link-status-text').innerText = "Not linked ⚠️";
-        }
-
-        // --- Event Listeners (Once and for all fix) ---
-        
-        // Connect Wallet
-        const connectBtn = document.getElementById('btn-connect');
-        const walletDisplay = document.getElementById('wallet-display');
-        
-        [connectBtn, walletDisplay].forEach(el => {
-            el.addEventListener('click', connectWallet);
-        });
-
-        // Link
-        document.getElementById('btn-link').addEventListener('click', handleLink);
-        
-        // Unlink
-        document.getElementById('btn-unlink').addEventListener('click', unlinkWallet);
-
-        // Claim
-        document.getElementById('btn-claim-action').addEventListener('click', claimWithdrawal);
-
-        // Cancel
-        document.getElementById('btn-cancel-action').addEventListener('click', cancelWithdrawal);
-
-        // Copy buttons
-        document.getElementById('btn-copy-addr').addEventListener('click', () => copy('addr-text'));
-        document.getElementById('btn-copy-memo').addEventListener('click', () => copy('memo-text'));
-    });
-
-    // --- Internal Functions ---
-
     async function connectWallet() {
+        const kit = initKit();
         try {
-            console.log("Opening SWK Modal...");
-            const kit = getKit();
             await kit.openModal({
-                onConfirmed: async (walletType, network) => {
-                    console.log("Wallet confirmed:", walletType);
+                onConfirmed: async (walletType) => {
                     kit.setWallet(walletType);
                     const { address } = await kit.getAddress();
                     userAddress = address;
-                    handleConnectionSuccess(address);
+                    document.getElementById('btn-connect').classList.add('hidden');
+                    const display = document.getElementById('wallet-display');
+                    display.classList.remove('hidden');
+                    document.getElementById('address-short').innerText = `${address.substring(0,6)}...${address.substring(52)}`;
+                    document.getElementById('btn-link').disabled = false;
+                    const claimBtn = document.getElementById('btn-claim-action');
+                    if (claimBtn) claimBtn.disabled = false;
                 },
-                modalTitle: "Connect to SHx Tip Bot",
-                modalDescription: "Choose your preferred Stellar wallet to securely link or claim rewards."
+                modalTitle: "Connect Your Wallet",
+                modalDescription: "Choose your favorite Stellar wallet."
             });
-        } catch (e) {
-            console.error("Connection failed", e);
-            alert("Connection cancelled or failed: " + e.message);
-        }
-    };
-
-    function handleConnectionSuccess(address) {
-        document.getElementById('btn-connect').classList.add('hidden');
-        const display = document.getElementById('wallet-display');
-        display.classList.remove('hidden');
-        document.getElementById('address-short').innerText = `${address.substring(0,6)}...${address.substring(52)}`;
-        
-        // Enable actions
-        const linkBtn = document.getElementById('btn-link');
-        const claimBtn = document.getElementById('btn-claim-action');
-        if (linkBtn) linkBtn.disabled = false;
-        if (claimBtn) claimBtn.disabled = false;
+        } catch (e) { console.error(e); }
     }
 
     async function handleLink() {
         if (!userAddress) return;
         const btn = document.getElementById('btn-link');
-        const status = document.getElementById('status-box');
-        
         try {
             btn.disabled = true;
-            btn.innerText = "Proving ownership...";
-            status.style.display = 'none';
+            updateLinkStatus("Signing link request...", false);
+            const server = new window.StellarSdk.Server(HORIZON_URL);
+            const account = await server.loadAccount(userAddress);
+            const tx = new window.StellarSdk.TransactionBuilder(account, { fee: "1000", networkPassphrase: NETWORK_PASSPHRASE })
+                .addOperation(window.StellarSdk.Operation.manageData({ name: "Link Discord", value: DISCORD_ID }))
+                .setTimeout(300).build();
 
-            // 1. Fetch account to get sequence number
-            const server = new window.StellarSdk.Server(SERVER_URL);
-            let account;
-            try {
-                account = await server.loadAccount(userAddress);
-            } catch (e) {
-                throw new Error("Account not found on network. Please fund your wallet with at least 1 XLM to link.");
-            }
-
-            // 2. Build a dummy verification transaction
-            const tx = new window.StellarSdk.TransactionBuilder(account, {
-                fee: "1000", // Standard fee
-                networkPassphrase: NETWORK_PASSPHRASE
-            })
-            .addOperation(window.StellarSdk.Operation.manageData({
-                name: "link_discord",
-                value: DISCORD_ID
-            }))
-            .setTimeout(300)
-            .build();
-
-            // 3. Request signature from Kit
-            btn.innerText = "Sign in wallet...";
-            const kit = getKit();
+            const kit = initKit();
             const signedXdr = await kit.signTransaction(tx.toXDR());
-
-            // 4. Send to server
-            btn.innerText = "Linking...";
-            const res = await axios.post(`${API_BASE}/api/link`, {
-                token: TOKEN,
-                public_key: userAddress,
-                signature_xdr: signedXdr, 
-                is_approved: true
-            });
-
+            updateLinkStatus("Verifying on server...", false);
+            const res = await axios.post(`${API_BASE}/api/link`, { token: TOKEN, public_key: userAddress, signature_xdr: signedXdr, is_approved: true });
             if (res.data.success) {
-                status.className = "status success";
-                status.innerText = "✅ Wallet verified and linked successfully!";
+                updateLinkStatus("✅ Wallet linked successfully!", false);
                 document.getElementById('link-status-text').innerText = "Linked ✅";
             }
         } catch (e) {
-            console.error(e);
-            status.className = "status error";
-            status.innerText = e.response?.data?.detail || e.message;
-        } finally {
-            btn.disabled = false;
-            btn.innerText = "Register Connected Wallet";
-        }
-    };
+            updateLinkStatus(e.response?.data?.detail || e.message, true);
+        } finally { btn.disabled = false; }
+    }
 
     async function claimWithdrawal() {
         if (!userAddress) return;
         const btn = document.getElementById('btn-claim-action');
-        const status = document.getElementById('claim-status');
-
         try {
             btn.disabled = true;
-            btn.innerText = "Preparing Transaction...";
-            status.style.display = 'none';
-
-            // 1. Fetch claim details
+            updateClaimStatus("Preparing claim...", false);
             const res = await axios.get(`${API_BASE}/api/withdrawal/${CLAIM_ID}`);
             if (!res.data.success) throw new Error(res.data.message);
             const { amount, nonce, signature } = res.data;
-
-            // 2. Build Transaction
-            const sorobanUrl = NETWORK === 'testnet' ? 'https://soroban-testnet.stellar.org' : 'https://soroban.stellar.org';
-            const server = new window.StellarSdk.Server(SERVER_URL);
-            const sorobanServer = new window.StellarSdk.SorobanServer(sorobanUrl);
-            
+            const server = new window.StellarSdk.Server(HORIZON_URL);
+            const sorobanServer = new window.StellarSdk.SorobanServer(SOROBAN_URL);
             const account = await server.loadAccount(userAddress);
             const sigBytes = Uint8Array.from(atob(signature), c => c.charCodeAt(0));
             const amountStroops = BigInt(Math.round(amount * 10000000));
-
-            const builder = new window.StellarSdk.TransactionBuilder(account, {
-                fee: "100000",
-                networkPassphrase: NETWORK_PASSPHRASE
-            });
-
+            const builder = new window.StellarSdk.TransactionBuilder(account, { fee: "100000", networkPassphrase: NETWORK_PASSPHRASE });
             builder.addOperation(window.StellarSdk.Operation.invokeContractFunction({
                 contractId: SOROBAN_CONTRACT_ID,
                 function: "claim_withdrawal",
@@ -632,90 +533,75 @@
                     window.StellarSdk.xdr.ScVal.scvBytes(sigBytes)
                 ]
             }));
-
             const tx = builder.setTimeout(300).build();
-
-            // 3. Simulate and Prepare
-            btn.innerText = "Simulating...";
+            updateClaimStatus("Simulating...", false);
             const sim = await sorobanServer.simulateTransaction(tx);
-            if (sim.error) throw new Error("Simulation failed: " + sim.error);
+            if (sim.error) throw new Error(sim.error);
             const preparedTx = await sorobanServer.prepareTransaction(tx, sim);
-
-            // 4. Sign with Kit
-            btn.innerText = "Sign in Wallet...";
-            const kit = getKit();
+            updateClaimStatus("Awaiting Signature...", false);
+            const kit = initKit();
             const signedXDR = await kit.signTransaction(preparedTx.toXDR());
-
-            // 5. Submit
-            btn.innerText = "Broadcasting...";
-            const submitResponse = await sorobanServer.sendTransaction(window.StellarSdk.TransactionBuilder.fromXDR(signedXDR, NETWORK_PASSPHRASE));
-            
-            if (submitResponse.status === "ERROR") throw new Error("Submission failed.");
-
-            // Poll
+            updateClaimStatus("Submitting...", false);
+            const resp = await sorobanServer.sendTransaction(window.StellarSdk.TransactionBuilder.fromXDR(signedXDR, NETWORK_PASSPHRASE));
+            if (resp.status === "ERROR") throw new Error("Submit failed");
+            updateClaimStatus("Confirming...", false);
             let success = false;
-            for (let i = 0; i < 30; i++) {
-                const result = await sorobanServer.getTransaction(submitResponse.hash);
-                if (result.status === "SUCCESS") {
-                    success = true;
-                    break;
-                }
-                if (result.status === "FAILED") throw new Error("On-chain execution failed.");
+            for (let i = 0; i < 20; i++) {
+                const result = await sorobanServer.getTransaction(resp.hash);
+                if (result.status === "SUCCESS") { success = true; break; }
+                if (result.status === "FAILED") throw new Error("Tx Failed");
                 await new Promise(r => setTimeout(r, 2000));
             }
-
             if (success) {
-                await axios.post(`${API_BASE}/api/withdrawal/${CLAIM_ID}/complete`, { tx_hash: submitResponse.hash });
-                status.className = "status success";
-                status.innerHTML = `✅ Claim Successful! Tokens on the way.`;
-                btn.style.display = 'none';
+                await axios.post(`${API_BASE}/api/withdrawal/${CLAIM_ID}/complete`, { tx_hash: resp.hash });
+                updateClaimStatus("✅ Claim Successful!", false);
+                btn.classList.add('hidden');
             }
-
         } catch (e) {
-            console.error(e);
-            status.className = "status error";
-            status.innerText = e.message;
-        } finally {
-            btn.disabled = false;
-            if (btn.style.display !== 'none') btn.innerText = "Claim SHx Tokens";
-        }
-    };
+            updateClaimStatus(e.message, true);
+        } finally { btn.disabled = false; }
+    }
 
     async function unlinkWallet() {
-        if (!confirm("Are you sure? This will remove your linked wallet from Discord.")) return;
-        const btn = document.getElementById('btn-unlink');
-        const status = document.getElementById('status-box');
+        if (!confirm("Are you sure?")) return;
         try {
-            btn.disabled = true;
             const res = await axios.post(`${API_BASE}/api/unlink`, { token: TOKEN });
             if (res.data.success) {
-                status.className = "status success";
-                status.innerText = "Wallet unlinked.";
+                updateLinkStatus("✅ Unlinked", false);
                 document.getElementById('link-status-text').innerText = "Not linked ⚠️";
             }
-        } catch (e) {
-            status.className = "status error";
-            status.innerText = e.message;
-        } finally {
-            btn.disabled = false;
-        }
-    };
+        } catch (e) { updateLinkStatus(e.message, true); }
+    }
 
     async function cancelWithdrawal() {
-        if (!confirm("Cancel withdrawal and return funds to Discord?")) return;
+        if (!confirm("Cancel?")) return;
         try {
-            const res = await axios.post(`${API_BASE}/api/withdrawal/${CLAIM_ID}/cancel`, { token: TOKEN });
-            if (res.data.success) {
-                location.reload();
-            }
+            await axios.post(`${API_BASE}/api/withdrawal/${CLAIM_ID}/cancel`, { token: TOKEN });
+            location.reload();
         } catch (e) { alert(e.message); }
-    };
+    }
 
-    function copy(id) {
-        const text = document.getElementById(id).innerText;
-        navigator.clipboard.writeText(text);
-        alert("Copied: " + text);
-    };
+    window.addEventListener('DOMContentLoaded', () => {
+        if (CLAIM_ID && CLAIM_ID.length > 5 && CLAIM_ID !== "{{CLAIM_ID}}") document.getElementById('claim-card').classList.remove('hidden');
+        const existing = "{{EXISTING_KEY_VAL}}";
+        if (existing && existing.length > 10 && existing !== "{{EXISTING_KEY_VAL}}") document.getElementById('link-status-text').innerText = "Linked ✅";
+        
+        document.getElementById('btn-connect').onclick = connectWallet;
+        document.getElementById('wallet-display').onclick = connectWallet;
+        document.getElementById('btn-link').onclick = handleLink;
+        document.getElementById('btn-unlink').onclick = unlinkWallet;
+        document.getElementById('btn-claim-action').onclick = claimWithdrawal;
+        document.getElementById('btn-cancel-action').onclick = cancelWithdrawal;
+
+        document.getElementById('btn-copy-addr').onclick = () => {
+            navigator.clipboard.writeText(document.getElementById('addr-text').innerText);
+            alert("Copied");
+        };
+        document.getElementById('btn-copy-memo').onclick = () => {
+            navigator.clipboard.writeText(document.getElementById('memo-text').innerText);
+            alert("Copied");
+        };
+    });
   </script>
 </body>
 </html>
