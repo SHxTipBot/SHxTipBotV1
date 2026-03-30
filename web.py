@@ -1,6 +1,7 @@
 """
 SHx Tip Bot — Web Application
 FastAPI server that serves the wallet-linking page and handles the /api/link endpoint.
+Deploy: 2026-03-29 (Stabilization Fix)
 """
 
 import os
@@ -40,11 +41,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com; "
-            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; "
             "font-src 'self' https://fonts.gstatic.com; "
             "img-src 'self' https: data:; "
-            "connect-src 'self' https://horizon-testnet.stellar.org https://soroban-testnet.stellar.org https://horizon.stellar.org https://soroban.stellar.org https://friendbot.stellar.org https://api.id.lobstr.co;"
+            "connect-src 'self' https://horizon-testnet.stellar.org https://soroban-testnet.stellar.org https://horizon.stellar.org https://soroban.stellar.org https://friendbot.stellar.org https://api.id.lobstr.co https://esm.sh wss://relay.walletconnect.com https://relay.walletconnect.com https://verify.walletconnect.org https://api.web3modal.com;"
         )
         return response
 
@@ -140,8 +141,9 @@ async def register_page(token: str = "", claim_id: str = ""):
     html = html.replace("{{HOUSE_ACCOUNT_PUBLIC}}", stellar.HOUSE_ACCOUNT_PUBLIC.strip())
     html = html.replace("{{MEMO_ID}}", str(memo_id))
     html = html.replace("{{INTERNAL_BALANCE}}", f"{internal_balance:,.2f}")
-    html = html.replace("{{EXISTING_KEY or 'None linked yet'}}", (existing_key or "None linked yet").strip())
+    html = html.replace("{{EXISTING_KEY}}", (existing_key or "None").strip())
     html = html.replace("{{EXISTING_KEY_VAL}}", (existing_key or "").strip())
+    html = html.replace("{{DISCORD_ID}}", str(discord_id))
     html = html.replace("{{SHX_ISSUER}}", stellar.SHX_ISSUER.strip())
     html = html.replace("{{SHX_SAC_CONTRACT_ID}}", stellar.SHX_SAC_CONTRACT_ID.strip())
     html = html.replace("{{SOROBAN_CONTRACT_ID}}", stellar.SOROBAN_CONTRACT_ID.strip())
@@ -155,8 +157,8 @@ async def register_page(token: str = "", claim_id: str = ""):
 @app.post("/api/link")
 async def api_link(request: Request):
     """
-    Link a Stellar public key to a Discord account.
-    Body: { "token": "...", "public_key": "G..." }
+    Link a Stellar public key to a Discord account with signature verification.
+    Body: { "token": "...", "public_key": "G...", "signature_xdr": "...", "is_approved": true }
     """
     try:
         body = await request.json()
@@ -165,6 +167,7 @@ async def api_link(request: Request):
 
     token = body.get("token", "").strip()
     public_key = body.get("public_key", "").strip()
+    signature_xdr = body.get("signature_xdr", "").strip()
     is_approved = body.get("is_approved", False)
 
     if not token or not public_key:
@@ -178,11 +181,19 @@ async def api_link(request: Request):
     if not discord_id:
         raise HTTPException(400, "Invalid or expired token. Use /link in Discord again.")
 
-    # Link the user
+    # 1. Verify Signature/Ownership
+    if not signature_xdr:
+         raise HTTPException(400, "Verification signature required. Please sign the transaction in your wallet.")
+    
+    is_valid = stellar.verify_link_signature_xdr(public_key, signature_xdr, str(discord_id))
+    if not is_valid:
+        raise HTTPException(400, "Invalid verification signature. Ensure you sign the transaction with the correct wallet.")
+
+    # 2. Link the user
     try:
-        await db.link_user(discord_id, public_key, is_approved) # Pass is_approved
+        await db.link_user(discord_id, public_key, is_approved)
         await db.mark_token_used(token)
-        logger.info(f"LINK SUCCESS | Discord {discord_id} → {public_key[:8]}... (approved: {is_approved})")
+        logger.info(f"LINK SUCCESS | Discord {discord_id} → {public_key[:8]}...")
     except Exception as e:
         logger.error(f"LINK FAIL | Discord {discord_id} → {public_key[:8]}... | Error: {e}")
         raise HTTPException(500, "Internal error linking wallet.")
