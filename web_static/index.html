@@ -322,10 +322,10 @@
     </div>
 
     <div class="connect-section" id="connect-section">
-        <button class="btn" id="btn-connect" onclick="connectWallet()">
+        <button class="btn" id="btn-connect">
             <span>🌐</span> Connect Stellar Wallet
         </button>
-        <div id="wallet-display" class="wallet-info hidden" onclick="connectWallet()">
+        <div id="wallet-display" class="wallet-info hidden">
             <div class="wallet-dot"></div>
             <span id="address-short">Loading...</span>
         </div>
@@ -352,8 +352,8 @@
             </div>
         </div>
 
-        <button class="btn" onclick="claimWithdrawal()" id="btn-claim-action" disabled>Claim SHx Tokens</button>
-        <button class="btn btn-outline btn-danger-outline" onclick="cancelWithdrawal()" id="btn-cancel-action">Cancel Withdrawal</button>
+        <button class="btn" id="btn-claim-action" disabled>Claim SHx Tokens</button>
+        <button class="btn btn-outline btn-danger-outline" id="btn-cancel-action">Cancel Withdrawal</button>
         <div id="claim-status" class="status"></div>
     </div>
 
@@ -379,8 +379,8 @@
         </div>
 
         <div id="link-controls">
-            <button class="btn btn-secondary" id="btn-link" onclick="handleLink()" disabled>Register Connected Wallet</button>
-            <button class="btn btn-outline btn-danger-outline" id="btn-unlink" onclick="unlinkWallet()">Unlink Wallet</button>
+            <button class="btn btn-secondary" id="btn-link" disabled>Register Connected Wallet</button>
+            <button class="btn btn-outline btn-danger-outline" id="btn-unlink">Unlink Wallet</button>
         </div>
         <div id="status-box" class="status"></div>
     </div>
@@ -394,15 +394,15 @@
       <p class="card-desc">Fund your internal tip balance by sending SHx to the house account. <strong>Memo is required.</strong></p>
       
       <div class="info-grid">
-          <div class="info-item">
+          <div id="deposit-account" class="info-item">
               <label>House Account</label>
               <div class="value" id="addr-text">{{HOUSE_ACCOUNT_PUBLIC}}</div>
-              <button class="copy-btn" onclick="copy('addr-text')">Copy</button>
+              <button class="copy-btn" id="btn-copy-addr">Copy</button>
           </div>
-          <div class="info-item info-item-accent">
+          <div id="deposit-memo" class="info-item info-item-accent">
               <label class="label-accent">Your Unique Memo</label>
               <div class="value value-large" id="memo-text">{{MEMO_ID}}</div>
-              <button class="copy-btn" onclick="copy('memo-text')">Copy</button>
+              <button class="copy-btn" id="btn-copy-memo">Copy</button>
           </div>
       </div>
     </div>
@@ -424,13 +424,15 @@
         WalletType 
     } from "https://esm.sh/@creit.tech/stellar-wallets-kit?bundle";
 
-    const TOKEN = "{{TOKEN}}";
-    const CLAIM_ID = "{{CLAIM_ID}}";
+    const urlParams = new URLSearchParams(window.location.search);
+    const TOKEN = urlParams.get('token') || "{{TOKEN}}";
+    const CLAIM_ID = urlParams.get('claim_id') || "{{CLAIM_ID}}";
     const NETWORK = "{{NETWORK}}";
     const NETWORK_PASSPHRASE = "{{NETWORK_PASSPHRASE}}";
     const SOROBAN_CONTRACT_ID = "{{SOROBAN_CONTRACT_ID}}";
     const DISCORD_ID = "{{DISCORD_ID}}";
     const API_BASE = window.location.origin;
+    const SERVER_URL = NETWORK === 'testnet' ? 'https://horizon-testnet.stellar.org' : 'https://horizon.stellar.org';
     
     let _kit = null;
     let userAddress = null;
@@ -454,24 +456,50 @@
         return _kit;
     }
 
-    // Detect state on load
+    // Detect state on load & Attach Event Listeners
     window.addEventListener('DOMContentLoaded', async () => {
-        if (CLAIM_ID && CLAIM_ID.length > 5) {
+        // UI State
+        if (CLAIM_ID && CLAIM_ID.length > 5 && CLAIM_ID !== "{{CLAIM_ID}}") {
             document.getElementById('claim-card').classList.remove('hidden');
         }
         
-        // Populate existing address if any
         const existing = "{{EXISTING_KEY_VAL}}";
-        if (existing && existing.length > 10) {
+        if (existing && existing.length > 10 && existing !== "{{EXISTING_KEY_VAL}}") {
             document.getElementById('link-status-text').innerText = "Linked ✅";
         } else {
             document.getElementById('link-status-text').innerText = "Not linked ⚠️";
         }
+
+        // --- Event Listeners (Once and for all fix) ---
+        
+        // Connect Wallet
+        const connectBtn = document.getElementById('btn-connect');
+        const walletDisplay = document.getElementById('wallet-display');
+        
+        [connectBtn, walletDisplay].forEach(el => {
+            el.addEventListener('click', connectWallet);
+        });
+
+        // Link
+        document.getElementById('btn-link').addEventListener('click', handleLink);
+        
+        // Unlink
+        document.getElementById('btn-unlink').addEventListener('click', unlinkWallet);
+
+        // Claim
+        document.getElementById('btn-claim-action').addEventListener('click', claimWithdrawal);
+
+        // Cancel
+        document.getElementById('btn-cancel-action').addEventListener('click', cancelWithdrawal);
+
+        // Copy buttons
+        document.getElementById('btn-copy-addr').addEventListener('click', () => copy('addr-text'));
+        document.getElementById('btn-copy-memo').addEventListener('click', () => copy('memo-text'));
     });
 
-    // --- Exposed Functions for HTML onclick attributes ---
+    // --- Internal Functions ---
 
-    window.connectWallet = async function() {
+    async function connectWallet() {
         try {
             console.log("Opening SWK Modal...");
             const kit = getKit();
@@ -505,7 +533,7 @@
         if (claimBtn) claimBtn.disabled = false;
     }
 
-    window.handleLink = async function() {
+    async function handleLink() {
         if (!userAddress) return;
         const btn = document.getElementById('btn-link');
         const status = document.getElementById('status-box');
@@ -516,8 +544,7 @@
             status.style.display = 'none';
 
             // 1. Fetch account to get sequence number
-            const serverUrl = NETWORK === 'testnet' ? 'https://horizon-testnet.stellar.org' : 'https://horizon.stellar.org';
-            const server = new window.StellarSdk.Server(serverUrl);
+            const server = new window.StellarSdk.Server(SERVER_URL);
             let account;
             try {
                 account = await server.loadAccount(userAddress);
@@ -566,7 +593,7 @@
         }
     };
 
-    window.claimWithdrawal = async function() {
+    async function claimWithdrawal() {
         if (!userAddress) return;
         const btn = document.getElementById('btn-claim-action');
         const status = document.getElementById('claim-status');
@@ -582,9 +609,8 @@
             const { amount, nonce, signature } = res.data;
 
             // 2. Build Transaction
-            const serverUrl = NETWORK === 'testnet' ? 'https://horizon-testnet.stellar.org' : 'https://horizon.stellar.org';
             const sorobanUrl = NETWORK === 'testnet' ? 'https://soroban-testnet.stellar.org' : 'https://soroban.stellar.org';
-            const server = new window.StellarSdk.Server(serverUrl);
+            const server = new window.StellarSdk.Server(SERVER_URL);
             const sorobanServer = new window.StellarSdk.SorobanServer(sorobanUrl);
             
             const account = await server.loadAccount(userAddress);
@@ -655,7 +681,7 @@
         }
     };
 
-    window.unlinkWallet = async function() {
+    async function unlinkWallet() {
         if (!confirm("Are you sure? This will remove your linked wallet from Discord.")) return;
         const btn = document.getElementById('btn-unlink');
         const status = document.getElementById('status-box');
@@ -675,7 +701,7 @@
         }
     };
 
-    window.cancelWithdrawal = async function() {
+    async function cancelWithdrawal() {
         if (!confirm("Cancel withdrawal and return funds to Discord?")) return;
         try {
             const res = await axios.post(`${API_BASE}/api/withdrawal/${CLAIM_ID}/cancel`, { token: TOKEN });
@@ -685,7 +711,7 @@
         } catch (e) { alert(e.message); }
     };
 
-    window.copy = function(id) {
+    function copy(id) {
         const text = document.getElementById(id).innerText;
         navigator.clipboard.writeText(text);
         alert("Copied: " + text);
