@@ -276,12 +276,27 @@
     // --- WALLET CONNECTORS ---
     async function connectFreighter() {
         try {
-            if (!window.freighterApi) throw new Error("Freighter not installed!");
-            const address = await window.freighterApi.getPublicKey();
+            // Wait up to 1 second for injection
+            let attempts = 0;
+            const findFreighter = () => window.freighterApi || window.stellarLumens;
+            
+            while (!findFreighter() && attempts < 10) {
+                await new Promise(r => setTimeout(r, 100));
+                attempts++;
+            }
+
+            const freighter = findFreighter();
+            if (!freighter) {
+                throw new Error("Freighter not detected. Please make sure the extension is installed and 'Allowed' for this site.");
+            }
+            
+            const address = await freighter.getPublicKey();
             currentWallet = 'freighter';
             showModal(false);
             updateUI(address);
-        } catch (e) { alert(e.message); }
+        } catch (e) { 
+            alert("FREIGHTER ERROR: " + e.message); 
+        }
     }
 
     async function connectAlbedo() {
