@@ -133,3 +133,4 @@ testnet_secrets.env
 shx_tip_bot.log
 .DS_Store
 .vercel
+node_modules

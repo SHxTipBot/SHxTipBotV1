@@ -5,18 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SHx Tip Bot | Web Dashboard</title>
   
-  <script>
-    function logError(msg) {
-        const debug = document.getElementById('debug-log');
-        if (debug) {
-            debug.style.display = 'block';
-            debug.innerHTML += `<div>[${new Date().toLocaleTimeString()}] ${msg}</div>`;
-        }
-    }
-    window.onunhandledrejection = (e) => logError(`Promise Rejection: ${e.reason}`);
-    alert("Diagnostic: Pre-Module Script Executed");
-  </script>
-
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -29,20 +17,9 @@
       --border-hover: rgba(59, 130, 246, 0.5);
       --text: #f9fafb;
       --text-muted: #9ca3af;
+      --accent: #3b82f6;
       --error: #ef4444;
-    }
-
-    #load-status {
-      position: fixed;
-      top: 10px;
-      right: 10px;
-      background: rgba(0,0,0,0.8);
-      color: #ffd700;
-      padding: 8px 15px;
-      border-radius: 8px;
-      font-size: 12px;
-      z-index: 10000;
-      border: 1px solid #ffd700;
+      --success: #10b981;
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -51,7 +28,8 @@
       color: var(--text);
       font-family: 'Inter', sans-serif;
       min-height: 100vh;
-      overflow-x: hidden;
+      display: flex;
+      flex-direction: column;
     }
 
     .background-castle {
@@ -69,7 +47,8 @@
     .container {
       max-width: 1000px;
       margin: 0 auto;
-      padding: 2rem 1rem;
+      padding: 1.5rem;
+      flex: 1;
     }
 
     nav {
@@ -94,14 +73,14 @@
 
     .hero {
       text-align: center;
-      padding: 4rem 0;
-      margin-bottom: 3rem;
+      padding: 3rem 0;
+      margin-bottom: 2rem;
     }
 
     .hero h1 {
       font-family: 'Outfit', sans-serif;
-      font-size: 3.5rem;
-      margin-bottom: 1rem;
+      font-size: 3rem;
+      margin-bottom: 0.5rem;
       background: linear-gradient(135deg, #fff 0%, #3b82f6 100%);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
@@ -113,42 +92,62 @@
       border: 1px solid var(--border);
       border-radius: 1.5rem;
       padding: 2rem;
-      margin-bottom: 2rem;
+      margin-bottom: 1.5rem;
+      transition: border-color 0.3s ease;
     }
 
     .btn {
       display: inline-flex;
       align-items: center;
       gap: 0.5rem;
-      padding: 1rem 2rem;
+      padding: 0.875rem 1.75rem;
       border-radius: 0.75rem;
       font-weight: 600;
+      font-size: 1rem;
       cursor: pointer;
       border: none;
-      transition: all 0.2s;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      color: white;
     }
 
-    .btn-primary { background: #3b82f6; color: white; }
-    .btn-secondary { background: rgba(59, 130, 246, 0.1); color: #3b82f6; border: 1px solid var(--border); }
-    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary { background-color: var(--accent); box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3); }
+    .btn-primary:hover { background-color: #2563eb; transform: translateY(-1px); }
+    .btn-secondary { background: rgba(59, 130, 246, 0.1); color: var(--accent); border: 1px solid var(--border); }
+    .btn-secondary:hover { border-color: var(--accent); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
-    #debug-log {
-      position: fixed;
-      bottom: 0; left: 0; width: 100%;
-      max-height: 200px; overflow-y: auto;
-      background: rgba(0,0,0,0.9);
-      color: #4ade80;
-      font-family: monospace;
-      font-size: 12px;
-      padding: 10px;
-      z-index: 10001;
-      display: none;
+    .status {
+      padding: 1rem; border-radius: 0.75rem; margin-bottom: 1.5rem; font-size: 0.95rem; font-weight: 500;
     }
+    .status.success { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }
+    .status.error { background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
+
+    /* Custom Wallet Selection Modal */
+    .modal-overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.85); backdrop-filter: blur(8px);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 1000; opacity: 0; pointer-events: none; transition: opacity 0.3s;
+    }
+    .modal-overlay.active { opacity: 1; pointer-events: auto; }
+    .modal {
+      background: #0f172a; border: 1px solid var(--border); border-radius: 1.5rem;
+      width: 400px; max-width: 90%; padding: 2rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+    }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+    .modal-options { display: flex; flex-direction: column; gap: 0.75rem; }
+    .wallet-option {
+      display: flex; align-items: center; gap: 1rem; padding: 1rem;
+      border-radius: 1rem; border: 1px solid var(--border); cursor: pointer; transition: all 0.2s;
+    }
+    .wallet-option:hover { border-color: var(--accent); background: rgba(59, 130, 246, 0.05); }
+    .wallet-option img { width: 32px; height: 32px; }
+    .close-modal { color: var(--text-muted); cursor: pointer; font-size: 1.5rem; }
+
     .hidden { display: none !important; }
   </style>
 </head>
 <body>
-  <div id="load-status">System: JavaScript Loading...</div>
   <div class="background-castle"></div>
 
   <div class="container">
@@ -157,256 +156,232 @@
         <img src="/static/stronghold_logo_watermark.svg" alt="SHx">
         <span>SHx Tip Bot</span>
       </div>
-      <div id="wallet-status">
-        <button id="btn-connect" class="btn btn-secondary">
-            <span>🌐</span> Connect Stellar Wallet
-        </button>
-        <div id="wallet-display" class="wallet-info hidden">
-            <span id="address-short">Loading...</span>
+      <div>
+        <button id="btn-connect" class="btn btn-secondary">🌐 Connect Wallet</button>
+        <div id="wallet-display" class="hidden" style="text-align: right;">
+          <code id="address-short" style="color: var(--accent); font-weight: 600;">G...</code>
         </div>
       </div>
     </nav>
 
     <div class="hero">
-      <h1>Your Community Portal</h1>
-      <p>Securely link your wallet and manage your community rewards.</p>
+      <h1>Community Portal</h1>
+      <p style="color: var(--text-muted);">Securely link your Discord and manage claims.</p>
     </div>
 
-    <!-- Link Wallet Section -->
+    <!-- Link Card -->
     <div class="card">
-      <h2>Discord Verification</h2>
-      <p id="link-status-text" style="color: var(--text-muted); margin-bottom: 1.5rem;">Checking status...</p>
-      <div id="status-box" class="status hidden"></div>
-      <button id="btn-link" class="btn btn-primary" disabled>Verify & Link Wallet</button>
-      <button id="btn-unlink" class="btn btn-secondary" style="margin-left: 10px;">Unlink</button>
+      <h2 style="margin-bottom: 0.5rem; font-family: 'Outfit';">Discord Status</h2>
+      <p id="link-status-text" style="color: var(--text-muted); margin-bottom: 1.25rem;">Checking status...</p>
+      <div id="link-notify" class="status hidden"></div>
+      <button id="btn-link" class="btn btn-primary" style="width: 100%; justify-content: center;" disabled>Verify & Link Wallet</button>
+      <p id="btn-unlink" style="color: var(--error); cursor: pointer; font-size: 0.85rem; text-align: center; margin-top: 1rem;" class="hidden">Unlink Wallet</p>
     </div>
 
-    <!-- Instructions / Balance Card -->
-    <div class="card">
-        <h2>House Account Details</h2>
-        <div style="margin-top: 1rem;">
-            <p style="font-size: 0.9rem; color: var(--text-muted);">House Account Address:</p>
-            <div style="display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px; margin-top: 5px;">
-                <code id="addr-text" style="color: #4ade80;">GBX...</code>
-                <button id="btn-copy-addr" class="btn" style="padding: 5px 10px; font-size: 11px;">Copy</button>
-            </div>
-            <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 1rem;">Available Memo: <strong id="memo-text">12345</strong> <button id="btn-copy-memo" class="btn" style="padding: 2px 5px; font-size: 10px;">Copy</button></p>
-        </div>
-    </div>
-
-    <!-- Withdrawals Section (Conditionally Visible) -->
+    <!-- Claim Card -->
     <div id="claim-card" class="card hidden">
-      <h2>Pending Withdrawal</h2>
-      <div id="claim-status" class="status hidden"></div>
-      <button id="btn-claim-action" class="btn btn-primary" style="background: #10b981; width: 100%; justify-content: center; margin-top: 1rem;">
-        Claim SHx Rewards
-      </button>
+      <h2 style="margin-bottom: 0.5rem; font-family: 'Outfit';">Pending Withdrawal</h2>
+      <div id="claim-notify" class="status hidden"></div>
+      <button id="btn-claim-action" class="btn btn-primary" style="background: var(--success); width: 100%; justify-content: center;" disabled>Claim SHx Rewards</button>
+    </div>
+
+    <!-- Info Card -->
+    <div class="card">
+      <h2 style="margin-bottom: 1rem; font-family: 'Outfit';">House Account</h2>
+      <div style="background: rgba(0,0,0,0.3); padding: 1rem; border-radius: 0.75rem; border: 1px solid var(--border);">
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem;">Address:</p>
+        <code id="house-addr" style="color: var(--success); display: block; overflow-wrap: break-word;">{{HOUSE_ACCOUNT}}</code>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 1rem;">Available Memo:</p>
+        <code id="memo-val" style="color: #fff;">{{MEMO}}</code>
+      </div>
     </div>
   </div>
 
-  <div id="debug-log"></div>
+  <!-- Wallet Modal -->
+  <div id="wallet-modal" class="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 style="font-family: 'Outfit';">Connect Wallet</h3>
+        <span class="close-modal">&times;</span>
+      </div>
+      <div class="modal-options">
+        <div class="wallet-option" onclick="connectFreighter()">
+          <img src="https://www.freighter.app/freighter_logo_dark.png" alt="Freighter">
+          <div>
+            <div style="font-weight: 600;">Freighter</div>
+            <div style="font-size: 0.8rem; color: var(--text-muted);">Official Stellar Browser Wallet</div>
+          </div>
+        </div>
+        <div class="wallet-option" onclick="connectAlbedo()">
+          <img src="https://albedo.link/static/images/logo.svg" alt="Albedo">
+          <div>
+            <div style="font-weight: 600;">Albedo</div>
+            <div style="font-size: 0.8rem; color: var(--text-muted);">Web-based Stellar Login</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@stellar/stellar-sdk/dist/stellar-sdk.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+  <script src="https://albedo.link/albedo.js"></script>
 
   <script>
-    async function initDashboard() {
-        alert("Standard Script: Initializing Dashboard...");
-        const status = document.getElementById('load-status');
-        const debug = document.getElementById('debug-log');
-        
-        function updateProgress(msg) {
-            console.log(msg);
-            if (debug) {
-                debug.style.display = 'block';
-                debug.innerHTML += `<div style="color: #00ff00">[${new Date().toLocaleTimeString()}] ${msg}</div>`;
-            }
-        }
+    const urlParams = new URLSearchParams(window.location.search);
+    const TOKEN = urlParams.get('token') || "{{TOKEN}}";
+    const CLAIM_ID = urlParams.get('claim_id') || "{{CLAIM_ID}}";
+    const NETWORK = "{{NETWORK}}";
+    const NETWORK_PASSPHRASE = ({{NETWORK}} === 'mainnet' || {{NETWORK}} === 'public') ? 'Public Global Stellar Network ; September 2015' : 'Test SDF Network ; September 2015';
+    const SOROBAN_CONTRACT_ID = "{{SOROBAN_CONTRACT_ID}}";
+    const DISCORD_ID = "{{DISCORD_ID}}";
+    
+    const API_BASE = window.location.origin;
+    const HORIZON_URL = (NETWORK === 'mainnet' || NETWORK === 'public') ? 'https://horizon.stellar.org' : 'https://horizon-testnet.stellar.org';
+    const SOROBAN_URL = (NETWORK === 'mainnet' || NETWORK === 'public') ? 'https://soroban.stellar.org' : 'https://soroban-testnet.stellar.org';
 
+    let userAddress = null;
+    let currentWallet = null;
+
+    // --- UI HELPERS ---
+    const showModal = (active) => document.getElementById('wallet-modal').classList.toggle('active', active);
+    document.getElementById('btn-connect').onclick = () => showModal(true);
+    document.querySelector('.close-modal').onclick = () => showModal(false);
+
+    const updateUI = (address) => {
+      userAddress = address;
+      if (address) {
+        document.getElementById('btn-connect').classList.add('hidden');
+        document.getElementById('wallet-display').classList.remove('hidden');
+        document.getElementById('address-short').innerText = `${address.substring(0,5)}...${address.substring(51)}`;
+        document.getElementById('btn-link').disabled = false;
+        const claimBtn = document.getElementById('btn-claim-action');
+        if (claimBtn) claimBtn.disabled = false;
+      }
+    };
+
+    const notify = (id, msg, isError = false) => {
+        const div = document.getElementById(id);
+        div.classList.remove('hidden', 'success', 'error');
+        div.classList.add(isError ? 'error' : 'success');
+        div.innerText = msg;
+    };
+
+    // --- WALLET CONNECTORS ---
+    async function connectFreighter() {
         try {
-            updateProgress("Loading locally-hosted Stellar Wallets Kit...");
-            // Use the local bundle we just downloaded
-            const sdk = await import("/static/lib/swk_bundle.mjs");
-            updateProgress("Local bundle loaded successfully! ✅");
-
-            const { 
-                StellarWalletsKit, 
-                WalletNetwork, 
-                KitEventType,
-                SwkAppDarkTheme,
-                FreighterModule, 
-                AlbedoModule, 
-                WalletConnectModule 
-            } = sdk;
-
-            if (status) status.innerText = "System: JavaScript Ready ✅";
-            alert("SUCCESS: Dashboard Fully Loaded (Local Mode)");
-
-            // -- APP LOGIC START --
-            const urlParams = new URLSearchParams(window.location.search);
-            const TOKEN = urlParams.get('token') || "{{TOKEN}}";
-            const CLAIM_ID = urlParams.get('claim_id') || "{{CLAIM_ID}}";
-            const NETWORK = "{{NETWORK}}";
-            const NETWORK_PASSPHRASE = "{{NETWORK_PASSPHRASE}}";
-            const SOROBAN_CONTRACT_ID = "{{SOROBAN_CONTRACT_ID}}";
-            const DISCORD_ID = "{{DISCORD_ID}}";
-            const WC_PROJECT_ID = '1da02e75fe8efd7560248dc15804b13c';
-            
-            const API_BASE = window.location.origin;
-            const HORIZON_URL = (NETWORK === 'mainnet' || NETWORK === 'public') ? 'https://horizon.stellar.org' : 'https://horizon-testnet.stellar.org';
-            const SOROBAN_URL = (NETWORK === 'mainnet' || NETWORK === 'public') ? 'https://soroban.stellar.org' : 'https://soroban-testnet.stellar.org';
-
-            let _kit = null;
-            let userAddress = null;
-
-            const updateLinkStatus = (msg, isError = false) => {
-                const box = document.getElementById('status-box');
-                if (box) { box.style.display = 'block'; box.className = `status ${isError ? 'error' : 'success'}`; box.innerText = msg; }
-            };
-
-            const updateClaimStatus = (msg, isError = false) => {
-                const box = document.getElementById('claim-status');
-                if (box) { box.style.display = 'block'; box.className = `status ${isError ? 'error' : 'success'}`; box.innerText = msg; }
-            };
-
-            function initKit() {
-                if (_kit) return _kit;
-                _kit = StellarWalletsKit.init({
-                    network: (NETWORK === 'mainnet' || NETWORK === 'public') ? WalletNetwork.PUBLIC : WalletNetwork.TESTNET,
-                    theme: SwkAppDarkTheme,
-                    modules: [
-                        new FreighterModule(),
-                        new AlbedoModule(),
-                        new WalletConnectModule({
-                            projectId: WC_PROJECT_ID,
-                            chains: [(NETWORK === 'mainnet' || NETWORK === 'public') ? 'stellar:pubnet' : 'stellar:testnet'],
-                            url: 'https://shxtipbotv1.vercel.app',
-                        }),
-                    ],
-                });
-
-                _kit.on(KitEventType.STATE_UPDATED, (state) => {
-                    if (state.address) {
-                        userAddress = state.address;
-                        document.getElementById('btn-connect').classList.add('hidden');
-                        document.getElementById('wallet-display').classList.remove('hidden');
-                        document.getElementById('address-short').innerText = `${userAddress.substring(0,6)}...${userAddress.substring(52)}`;
-                        document.getElementById('btn-link').disabled = false;
-                        const claimBtn = document.getElementById('btn-claim-action');
-                        if (claimBtn) claimBtn.disabled = false;
-                    } else {
-                        userAddress = null;
-                        document.getElementById('btn-connect').classList.remove('hidden');
-                        document.getElementById('wallet-display').classList.add('hidden');
-                        document.getElementById('btn-link').disabled = true;
-                    }
-                });
-                return _kit;
-            }
-
-            window.connectWallet = async () => {
-                const kit = initKit();
-                try {
-                    await kit.openModal({
-                        modalTitle: "Connect Your Wallet",
-                        modalDescription: "Choose your favorite Stellar wallet.",
-                    });
-                } catch (e) { alert("Modal error: " + e.message); }
-            };
-
-            async function handleLink() {
-                if (!userAddress) return;
-                try {
-                    updateLinkStatus("Signing link request...", false);
-                    const server = new window.StellarSdk.Server(HORIZON_URL);
-                    const account = await server.loadAccount(userAddress);
-                    const tx = new window.StellarSdk.TransactionBuilder(account, { fee: "1000", networkPassphrase: NETWORK_PASSPHRASE })
-                        .addOperation(window.StellarSdk.Operation.manageData({ name: "Link Discord", value: DISCORD_ID }))
-                        .setTimeout(300).build();
-
-                    const kit = initKit();
-                    const { signedTxXdr } = await kit.signTransaction(tx.toXDR(), {
-                        networkPassphrase: NETWORK_PASSPHRASE, address: userAddress
-                    });
-                    updateLinkStatus("Verifying on server...", false);
-                    const res = await axios.post(`${API_BASE}/api/link`, { token: TOKEN, public_key: userAddress, signature_xdr: signedTxXdr, is_approved: true });
-                    if (res.data.success) {
-                        updateLinkStatus("✅ Wallet linked successfully!", false);
-                        document.getElementById('link-status-text').innerText = "Linked ✅";
-                    }
-                } catch (e) { updateLinkStatus(e.message, true); }
-            }
-
-            async function claimWithdrawal() {
-                if (!userAddress) return;
-                try {
-                    updateClaimStatus("Preparing claim...", false);
-                    const res = await axios.get(`${API_BASE}/api/withdrawal/${CLAIM_ID}`);
-                    if (!res.data.success) throw new Error(res.data.message);
-                    const { amount, nonce, signature } = res.data;
-                    const server = new window.StellarSdk.Server(HORIZON_URL);
-                    const sorobanServer = new window.StellarSdk.SorobanServer(SOROBAN_URL);
-                    const account = await server.loadAccount(userAddress);
-                    const sigBytes = Uint8Array.from(atob(signature), c => c.charCodeAt(0));
-                    const amountStroops = BigInt(Math.round(amount * 10000000));
-                    const tx = new window.StellarSdk.TransactionBuilder(account, { fee: "100000", networkPassphrase: NETWORK_PASSPHRASE })
-                        .addOperation(window.StellarSdk.Operation.invokeContractFunction({
-                            contractId: SOROBAN_CONTRACT_ID,
-                            function: "claim_withdrawal",
-                            args: [
-                                window.StellarSdk.nativeToScVal(userAddress, { type: 'address' }),
-                                window.StellarSdk.nativeToScVal(amountStroops, { type: 'i128' }),
-                                window.StellarSdk.nativeToScVal(BigInt(nonce), { type: 'u64' }),
-                                window.StellarSdk.xdr.ScVal.scvBytes(sigBytes)
-                            ]
-                        })).setTimeout(300).build();
-                    
-                    updateClaimStatus("Sumulating...", false);
-                    const sim = await sorobanServer.simulateTransaction(tx);
-                    const preparedTx = await sorobanServer.prepareTransaction(tx, sim);
-                    updateClaimStatus("Awaiting Signature...", false);
-                    const kit = initKit();
-                    const { signedTxXdr } = await kit.signTransaction(preparedTx.toXDR(), { networkPassphrase: NETWORK_PASSPHRASE, address: userAddress });
-                    updateClaimStatus("Submitting...", false);
-                    const resp = await sorobanServer.sendTransaction(window.StellarSdk.TransactionBuilder.fromXDR(signedTxXdr, NETWORK_PASSPHRASE));
-                    updateClaimStatus("✅ Claim submitted! Waiting for confirmation...", false);
-                } catch (e) { updateClaimStatus(e.message, true); }
-            }
-
-            async function cancelWithdrawal() {
-                if (!confirm("Cancel?")) return;
-                try {
-                    await axios.post(`${API_BASE}/api/withdrawal/${CLAIM_ID}/cancel`, { token: TOKEN });
-                    location.reload();
-                } catch (e) { alert(e.message); }
-            }
-
-            // Wire UI
-            document.getElementById('btn-connect').onclick = window.connectWallet;
-            document.getElementById('wallet-display').onclick = window.connectWallet;
-            document.getElementById('btn-link').onclick = handleLink;
-            document.getElementById('btn-unlink').onclick = async () => {
-                if (!confirm("Unlink?")) return;
-                await axios.post(`${API_BASE}/api/unlink`, { token: TOKEN });
-                location.reload();
-            };
-            const btnClaim = document.getElementById('btn-claim-action');
-            if (btnClaim) btnClaim.onclick = claimWithdrawal;
-            
-            document.getElementById('btn-copy-addr').onclick = () => {
-                navigator.clipboard.writeText(document.getElementById('addr-text').innerText);
-                alert("Copied!");
-            };
-
-            if (CLAIM_ID && CLAIM_ID.length > 5 && CLAIM_ID !== "{{CLAIM_ID}}") document.getElementById('claim-card').classList.remove('hidden');
-            const existing = "{{EXISTING_KEY_VAL}}";
-            if (existing && existing.length > 10 && existing !== "{{EXISTING_KEY_VAL}}") document.getElementById('link-status-text').innerText = "Linked ✅";
-            
-        } catch (e) {
-            updateProgress("CRITICAL LOAD ERROR: " + e.message);
-        }
+            if (!window.freighterApi) throw new Error("Freighter not installed!");
+            const address = await window.freighterApi.getPublicKey();
+            currentWallet = 'freighter';
+            showModal(false);
+            updateUI(address);
+        } catch (e) { alert(e.message); }
     }
-    window.onload = initDashboard;
+
+    async function connectAlbedo() {
+        try {
+            const res = await albedo.publicKey({ });
+            currentWallet = 'albedo';
+            showModal(false);
+            updateUI(res.pubkey);
+        } catch (e) { alert(e.message); }
+    }
+
+    // --- APP LOGIC ---
+    async function handleLink() {
+        if (!userAddress) return;
+        try {
+            notify('link-notify', "Signing Link Request...");
+            const server = new window.StellarSdk.Server(HORIZON_URL);
+            const account = await server.loadAccount(userAddress);
+            const tx = new window.StellarSdk.TransactionBuilder(account, { fee: "1000", networkPassphrase: NETWORK_PASSPHRASE })
+                .addOperation(window.StellarSdk.Operation.manageData({ name: "Link Discord", value: DISCORD_ID }))
+                .setTimeout(300).build();
+
+            let signedXDR;
+            if (currentWallet === 'freighter') {
+                signedXDR = await window.freighterApi.signTransaction(tx.toXDR(), NETWORK === 'mainnet' ? 'PUBLIC' : 'TESTNET');
+            } else {
+                const res = await albedo.tx({ xdr: tx.toXDR(), network: NETWORK === 'mainnet' ? 'public' : 'testnet' });
+                signedXDR = res.signed_envelope;
+            }
+
+            notify('link-notify', "Verifying on server...");
+            const res = await axios.post(`${API_BASE}/api/link`, {
+                token: TOKEN, public_key: userAddress, signature_xdr: signedXDR, is_approved: true
+            });
+            if (res.data.success) {
+                notify('link-notify', "✅ Wallet linked successfully!");
+                document.getElementById('link-status-text').innerText = "Linked ✅";
+                document.getElementById('btn-unlink').classList.remove('hidden');
+            }
+        } catch (e) { notify('link-notify', e.message, true); }
+    }
+
+    async function handleClaim() {
+        if (!userAddress) return;
+        try {
+            notify('claim-notify', "Preparing withdrawal...");
+            const res = await axios.get(`${API_BASE}/api/withdrawal/${CLAIM_ID}`);
+            if (!res.data.success) throw new Error(res.data.message);
+            const { amount, nonce, signature } = res.data;
+
+            const server = new window.StellarSdk.Server(HORIZON_URL);
+            const sorobanServer = new window.StellarSdk.SorobanServer(SOROBAN_URL);
+            const account = await server.loadAccount(userAddress);
+            
+            const sigBytes = Uint8Array.from(atob(signature), c => c.charCodeAt(0));
+            const amountStroops = BigInt(Math.round(amount * 10000000));
+
+            const tx = new window.StellarSdk.TransactionBuilder(account, { fee: "100000", networkPassphrase: NETWORK_PASSPHRASE })
+                .addOperation(window.StellarSdk.Operation.invokeContractFunction({
+                    contractId: SOROBAN_CONTRACT_ID,
+                    function: "claim_withdrawal",
+                    args: [
+                        window.StellarSdk.nativeToScVal(userAddress, { type: 'address' }),
+                        window.StellarSdk.nativeToScVal(amountStroops, { type: 'i128' }),
+                        window.StellarSdk.nativeToScVal(BigInt(nonce), { type: 'u64' }),
+                        window.StellarSdk.xdr.ScVal.scvBytes(sigBytes)
+                    ]
+                })).setTimeout(300).build();
+
+            notify('claim-notify', "Simulating Transaction...");
+            const sim = await sorobanServer.simulateTransaction(tx);
+            const preparedTx = await sorobanServer.prepareTransaction(tx, sim);
+
+            notify('claim-notify', "Awaiting wallet signature...");
+            let signedXDR;
+            if (currentWallet === 'freighter') {
+                signedXDR = await window.freighterApi.signTransaction(preparedTx.toXDR(), NETWORK === 'mainnet' ? 'PUBLIC' : 'TESTNET');
+            } else {
+                const res = await albedo.tx({ xdr: preparedTx.toXDR(), network: NETWORK === 'mainnet' ? 'public' : 'testnet' });
+                signedXDR = res.signed_envelope;
+            }
+
+            notify('claim-notify', "Submitting to network...");
+            const resp = await sorobanServer.sendTransaction(window.StellarSdk.TransactionBuilder.fromXDR(signedXDR, NETWORK_PASSPHRASE));
+            notify('claim-notify', "✅ Claim Successful! Tokens arriving soon.");
+            document.getElementById('btn-claim-action').classList.add('hidden');
+        } catch (e) { notify('claim-notify', e.message, true); }
+    }
+
+    // Startup check
+    window.onload = () => {
+        if (CLAIM_ID && CLAIM_ID.length > 5 && CLAIM_ID !== "{{CLAIM_ID}}") document.getElementById('claim-card').classList.remove('hidden');
+        const existing = "{{EXISTING_KEY_VAL}}";
+        if (existing && existing.length > 10 && existing !== "{{EXISTING_KEY_VAL}}") {
+            document.getElementById('link-status-text').innerText = "Linked ✅";
+            document.getElementById('btn-unlink').classList.remove('hidden');
+        }
+    };
+    
+    document.getElementById('btn-link').onclick = handleLink;
+    document.getElementById('btn-claim-action').onclick = handleClaim;
+    document.getElementById('btn-unlink').onclick = async () => {
+        if (!confirm("Unlink wallet?")) return;
+        await axios.post(`${API_BASE}/api/unlink`, { token: TOKEN });
+        location.reload();
+    };
   </script>
 </body>
 </html>
