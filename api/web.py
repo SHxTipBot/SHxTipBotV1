@@ -52,7 +52,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         )
         return response
 
-app.add_middleware(SecurityHeadersMiddleware)
+# NOTE: Disabled on Vercel — serverless functions handle CSP via vercel.json headers instead
+# app.add_middleware(SecurityHeadersMiddleware)
 
 from template_data import DASHBOARD_HTML
 
