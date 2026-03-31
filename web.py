@@ -52,9 +52,9 @@ app.add_middleware(
 
 # app.add_middleware(SecurityHeadersMiddleware)
 
-# Serve static files (index.html, etc.)
-STATIC_DIR = os.path.join(os.path.dirname(__file__), "web_static")
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+# Serve static files (managed natively by Vercel from /public)
+# STATIC_DIR = os.path.join(os.path.dirname(__file__), "web_static")
+# app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 @app.on_event("startup")

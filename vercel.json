@@ -1,15 +1,11 @@
 {
   "rewrites": [
     {
-      "source": "/static/(.*)",
-      "destination": "/web_static/$1"
-    },
-    {
       "source": "/api/(.*)",
       "destination": "/api/index.py"
     },
     {
-      "source": "/(.*)",
+      "source": "/((?!static|.*\\.js|.*\\.svg|.*\\.html|.*\\.css|albedo|stellar-sdk|axios).*)",
       "destination": "/api/index.py"
     }
   ]
