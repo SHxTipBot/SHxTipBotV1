@@ -3,32 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SHx Tip Bot Dashboard</title>
-
-  <!-- Polyfills must be at the very top of <head> -->
+  <title>SHx Tip Bot | Web Dashboard</title>
+  
   <script>
-    // Essential Buffer/Process polyfills for Stellar SDK & WalletConnect in the browser
-    window.global = window;
-    if (typeof window.Buffer === 'undefined') {
-      // Use a more robust Buffer polyfill from a CDN for WalletConnect v2
-      console.log("Buffer polyfill initialized.");
-    }
-  </script>
-  <script src="https://cdn.jsdelivr.net/npm/buffer@6.0.3/index.js"></script>
-  <script>
-    if (typeof window.Buffer === 'undefined' && typeof window.buffer !== 'undefined') {
-      window.Buffer = window.buffer.Buffer;
-    }
-    window.process = { 
-      env: { NODE_ENV: 'production' }, 
-      nextTick: (f) => setTimeout(f, 0),
-      version: 'v18.0.0',
-      versions: {},
-      browser: true
-    };
-    console.log("Enhanced polyfills initialized for WalletConnect v2.");
-
-    // Debugging utility
     function logError(msg) {
         const debug = document.getElementById('debug-log');
         if (debug) {
@@ -37,278 +14,201 @@
         }
     }
     window.onunhandledrejection = (e) => logError(`Promise Rejection: ${e.reason}`);
-    
     alert("Diagnostic: Pre-Module Script Executed");
   </script>
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  
   <style>
     :root {
       --bg: #030712;
-      --surface: rgba(17, 24, 39, 0.7);
-      --surface-hover: rgba(17, 24, 39, 0.9);
+      --card-bg: rgba(17, 24, 39, 0.7);
       --border: rgba(59, 130, 246, 0.2);
       --border-hover: rgba(59, 130, 246, 0.5);
       --text: #f9fafb;
       --text-muted: #9ca3af;
       --error: #ef4444;
-  }
-
-  #load-status {
-    position: fixed;
-    top: 10px;
-    right: 10px;
-    background: rgba(0,0,0,0.8);
-    color: #ffd700;
-    padding: 8px 15px;
-    border-radius: 8px;
-    font-size: 12px;
-    z-index: 10000;
-    border: 1px solid #ffd700;
-  }
-
-  #debug-log {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    max-height: 150px;
-    overflow-y: auto;
-    background: rgba(0,0,0,0.8);
-    color: #ff4444;
-    font-family: monospace;
-    font-size: 11px;
-    padding: 10px;
-    z-index: 9999;
-    border-top: 1px solid #ff0000;
-    display: none;
-  }
-    --radius: 20px;
     }
 
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    #load-status {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      background: rgba(0,0,0,0.8);
+      color: #ffd700;
+      padding: 8px 15px;
+      border-radius: 8px;
+      font-size: 12px;
+      z-index: 10000;
+      border: 1px solid #ffd700;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      font-family: 'Outfit', sans-serif;
-      background: var(--bg);
+      background-color: var(--bg);
       color: var(--text);
+      font-family: 'Inter', sans-serif;
       min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 40px 20px;
       overflow-x: hidden;
-      position: relative;
     }
 
-    body::before {
-      content: '';
+    .background-castle {
       position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: 
-        radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.15) 0px, transparent 50%),
-        radial-gradient(at 100% 0%, rgba(139, 92, 246, 0.1) 0px, transparent 50%),
-        radial-gradient(at 50% 100%, rgba(16, 185, 129, 0.05) 0px, transparent 50%);
+      top: 0; left: 0; width: 100%; height: 100%;
+      background-image: url('/static/stronghold_logo_watermark.svg');
+      background-repeat: no-repeat;
+      background-position: center;
+      background-size: 60%;
+      opacity: 0.15;
       z-index: -1;
-      pointer-events: none;
-    }
-
-    body::after {
-      content: '';
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      width: 60vw;
-      height: 60vh;
-      background: url('/static/stronghold_logo_watermark.svg') no-repeat center;
-      background-size: contain;
-      opacity: 0.05;
-      z-index: -1;
-      pointer-events: none;
       filter: blur(2px);
     }
 
     .container {
-      width: 100%;
-      max-width: 600px;
-      z-index: 1;
-      animation: fadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-      opacity: 0;
-      transform: translateY(30px);
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 2rem 1rem;
     }
 
-    @keyframes fadeUp {
-      to { opacity: 1; transform: translateY(0); }
+    nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 0;
+      margin-bottom: 2rem;
     }
 
-    .header { text-align: center; margin-bottom: 48px; position: relative; }
-    .header h1 { 
-      font-size: 2.8rem; 
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-family: 'Outfit', sans-serif;
       font-weight: 700;
-      margin-bottom: 12px; 
-      background: linear-gradient(to bottom right, #fff 30%, var(--accent));
-      -webkit-background-clip: text;
-      background-clip: text;
-      -webkit-text-fill-color: transparent;
-      letter-spacing: -1px;
+      font-size: 1.5rem;
+      color: #3b82f6;
     }
-    .header p { color: var(--text-muted); font-size: 1.1rem; max-width: 400px; margin: 0 auto; line-height: 1.5; }
 
-    .connect-section {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 16px;
-        margin-bottom: 40px;
+    .logo img { width: 32px; height: 32px; }
+
+    .hero {
+      text-align: center;
+      padding: 4rem 0;
+      margin-bottom: 3rem;
+    }
+
+    .hero h1 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 3.5rem;
+      margin-bottom: 1rem;
+      background: linear-gradient(135deg, #fff 0%, #3b82f6 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
     }
 
     .card {
-      background: rgba(17, 24, 39, 0.4);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: var(--radius);
-      -webkit-backdrop-filter: blur(40px);
-      backdrop-filter: blur(40px);
-      padding: 32px;
-      margin-bottom: 24px;
-      transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-      position: relative;
-      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-    }
-    
-    .card:hover { border-color: var(--border-hover); box-shadow: 0 20px 50px rgba(0,0,0,0.4), 0 0 20px var(--accent-glow); transform: translateY(-4px); }
-
-    .card-header { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
-    .card-icon { width: 44px; height: 44px; border-radius: 12px; background: rgba(59, 130, 246, 0.1); display: flex; align-items: center; justify-content: center; font-size: 1.4rem; border: 1px solid rgba(59, 130, 246, 0.2); }
-    .card-title { font-size: 1.25rem; font-weight: 600; color: #fff; }
-    .card-desc { font-size: 0.95rem; line-height: 1.6; color: var(--text-muted); margin-bottom: 24px; }
-
-    .balance-val { 
-      font-size: 3rem; font-weight: 700; color: #fff; text-align: center; margin: 10px 0;
-      background: linear-gradient(to bottom, #fff, var(--accent));
-      -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+      background: var(--card-bg);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border);
+      border-radius: 1.5rem;
+      padding: 2rem;
+      margin-bottom: 2rem;
     }
 
     .btn {
-      width: 100%; padding: 16px 24px; border-radius: 14px; border: none; font-family: inherit; font-size: 1.05rem; font-weight: 600; cursor: pointer; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-      background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center; gap: 10px;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 1rem 2rem;
+      border-radius: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
     }
-    .btn:hover { filter: brightness(1.2); transform: scale(1.02); box-shadow: 0 10px 30px rgba(59, 130, 246, 0.4); }
-    .btn:active { transform: scale(0.98); }
-    .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; filter: none; }
 
-    .btn-outline { background: transparent; border: 1px solid var(--border); color: #fff; }
-    .btn-outline:hover { background: rgba(255,255,255,0.05); border-color: #fff; box-shadow: none; }
+    .btn-primary { background: #3b82f6; color: white; }
+    .btn-secondary { background: rgba(59, 130, 246, 0.1); color: #3b82f6; border: 1px solid var(--border); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-    .btn-secondary { background: rgba(255, 255, 255, 0.05); color: #fff; border: 1px solid rgba(255, 255, 255, 0.1); }
-    .btn-secondary:hover { background: rgba(255, 255, 255, 0.1); border-color: rgba(255, 255, 255, 0.2); box-shadow: none; }
-
-    .wallet-info {
-        display: flex; align-items: center; gap: 12px; background: rgba(255,255,255,0.03); padding: 8px 16px; border-radius: 50px; border: 1px solid rgba(255,255,255,0.05);
-        font-size: 0.9rem; font-family: monospace; color: var(--accent); font-weight: 600; cursor: pointer; transition: all 0.2s;
+    #debug-log {
+      position: fixed;
+      bottom: 0; left: 0; width: 100%;
+      max-height: 200px; overflow-y: auto;
+      background: rgba(0,0,0,0.9);
+      color: #4ade80;
+      font-family: monospace;
+      font-size: 12px;
+      padding: 10px;
+      z-index: 10001;
+      display: none;
     }
-    .wallet-info:hover { background: rgba(255,255,255,0.08); border-color: var(--accent); }
-    .wallet-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); box-shadow: 0 0 10px var(--success); }
-
-    .info-grid { display: grid; grid-template-columns: 1fr; gap: 12px; margin-bottom: 24px; }
-    .info-item { background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.05); border-radius: 14px; padding: 16px; position: relative; }
-    .info-item label { display: block; font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
-    .info-item .value { font-family: monospace; font-size: 1rem; color: #fff; word-break: break-all; }
-    .copy-btn { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: rgba(59, 130, 246, 0.1); border: 1px solid var(--border); color: var(--accent); padding: 6px 12px; border-radius: 8px; font-size: 0.75rem; font-weight: 600; cursor: pointer; }
-    .copy-btn:hover { background: var(--accent); color: #fff; }
-
-    .status { margin-top: 16px; padding: 16px; border-radius: 14px; font-size: 0.95rem; text-align: center; display: none; }
-    .status.success { display: block; background: rgba(16, 185, 129, 0.1); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.2); }
-    .status.error { display: block; background: rgba(239, 68, 68, 0.1); color: var(--error); border: 1px solid rgba(239, 68, 68, 0.2); }
-
     .hidden { display: none !important; }
-    footer { text-align: center; margin-top: 40px; color: var(--text-muted); font-size: 0.85rem; opacity: 0.6; }
-
-    .claim-card { border-color: var(--success); background: linear-gradient(to bottom right, rgba(16, 185, 129, 0.05), var(--surface)); }
-    .claim-card .card-icon { background: rgba(16, 185, 129, 0.1); color: var(--success); border-color: rgba(16, 185, 129, 0.2); }
-
-    .btn-danger-outline { margin-top: 12px; color: var(--error); border-color: rgba(239, 68, 68, 0.2); }
-    .info-item-accent { border-color: var(--accent); }
-    .label-accent { color: var(--accent); }
-    .value-large { font-size: 1.4rem; font-weight: 700; }
   </style>
 </head>
 <body>
+  <div id="load-status">System: JavaScript Loading...</div>
+  <div class="background-castle"></div>
 
   <div class="container">
-    <div class="header">
-      <h1>SHx Tip Bot</h1>
-      <p>Securely link your Stellar wallet and manage your community rewards.</p>
-    </div>
-
-    <div class="connect-section" id="connect-section">
-        <button class="btn" id="btn-connect">
+    <nav>
+      <div class="logo">
+        <img src="/static/stronghold_logo_watermark.svg" alt="SHx">
+        <span>SHx Tip Bot</span>
+      </div>
+      <div id="wallet-status">
+        <button id="btn-connect" class="btn btn-secondary">
             <span>🌐</span> Connect Stellar Wallet
         </button>
         <div id="wallet-display" class="wallet-info hidden">
-  <div class="background-castle"></div>
             <span id="address-short">Loading...</span>
         </div>
-    </div>
-
-    <div class="card claim-card hidden" id="claim-card">
-        <div class="card-header">
-            <div class="card-icon">🎟️</div>
-            <div class="card-title">Pending Withdrawal</div>
-        </div>
-        <p class="card-desc">You have a pending withdrawal request from Discord. Connect your wallet to sign and claim your tokens.</p>
-        <div class="balance-val" id="claim-amount-display">{{CLAIM_AMOUNT}} SHX</div>
-        
-        <div class="info-grid">
-            <div class="info-item"><label>Network</label><div class="value">{{NETWORK}}</div></div>
-        </div>
-
-        <button class="btn" id="btn-claim-action" disabled>Claim SHx Tokens</button>
-        <button class="btn btn-outline btn-danger-outline" id="btn-cancel-action">Cancel Withdrawal</button>
-        <div id="claim-status" class="status"></div>
-    </div>
-
-    <div class="card" id="link-card">
-        <div class="card-header"><div class="card-icon">🔗</div><div class="card-title">Wallet Association</div></div>
-        <p class="card-desc">Associate your Stellar address with your Discord ID to enable zero-fee instant withdrawals and community rewards.</p>
-        
-        <div class="info-grid">
-            <div class="info-item"><label>Current Status</label><div class="value" id="link-status-text">Checking...</div></div>
-            <div class="info-item"><label>Registered Wallet</label><div class="value">{{EXISTING_KEY}}</div></div>
-        </div>
-
-        <div id="link-controls">
-            <button class="btn btn-secondary" id="btn-link" disabled>Register Connected Wallet</button>
-            <button class="btn btn-outline btn-danger-outline" id="btn-unlink">Unlink Wallet</button>
-        </div>
-        <div id="status-box" class="status"></div>
-    </div>
-
-    <div class="card">
-      <div class="card-header"><div class="card-icon">📥</div><div class="card-title">Deposit / Top-up</div></div>
-      <p class="card-desc">Fund your internal tip balance by sending SHx to the house account. <strong>Memo is required.</strong></p>
-      
-      <div class="info-grid">
-          <div id="deposit-account" class="info-item">
-              <label>House Account</label><div class="value" id="addr-text">{{HOUSE_ACCOUNT_PUBLIC}}</div>
-              <button class="copy-btn" id="btn-copy-addr">Copy</button>
-          </div>
-          <div id="deposit-memo" class="info-item info-item-accent">
-              <label class="label-accent">Your Unique Memo</label><div class="value value-large" id="memo-text">{{MEMO_ID}}</div>
-              <button class="copy-btn" id="btn-copy-memo">Copy</button>
-          </div>
       </div>
+    </nav>
+
+    <div class="hero">
+      <h1>Your Community Portal</h1>
+      <p>Securely link your wallet and manage your community rewards.</p>
     </div>
 
-    <footer>SHx Tip Bot &bull; Powered by Stronghold &bull; v2.2</footer>
+    <!-- Link Wallet Section -->
+    <div class="card">
+      <h2>Discord Verification</h2>
+      <p id="link-status-text" style="color: var(--text-muted); margin-bottom: 1.5rem;">Checking status...</p>
+      <div id="status-box" class="status hidden"></div>
+      <button id="btn-link" class="btn btn-primary" disabled>Verify & Link Wallet</button>
+      <button id="btn-unlink" class="btn btn-secondary" style="margin-left: 10px;">Unlink</button>
+    </div>
+
+    <!-- Instructions / Balance Card -->
+    <div class="card">
+        <h2>House Account Details</h2>
+        <div style="margin-top: 1rem;">
+            <p style="font-size: 0.9rem; color: var(--text-muted);">House Account Address:</p>
+            <div style="display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px; margin-top: 5px;">
+                <code id="addr-text" style="color: #4ade80;">GBX...</code>
+                <button id="btn-copy-addr" class="btn" style="padding: 5px 10px; font-size: 11px;">Copy</button>
+            </div>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 1rem;">Available Memo: <strong id="memo-text">12345</strong> <button id="btn-copy-memo" class="btn" style="padding: 2px 5px; font-size: 10px;">Copy</button></p>
+        </div>
+    </div>
+
+    <!-- Withdrawals Section (Conditionally Visible) -->
+    <div id="claim-card" class="card hidden">
+      <h2>Pending Withdrawal</h2>
+      <div id="claim-status" class="status hidden"></div>
+      <button id="btn-claim-action" class="btn btn-primary" style="background: #10b981; width: 100%; justify-content: center; margin-top: 1rem;">
+        Claim SHx Rewards
+      </button>
+    </div>
   </div>
 
-  <!-- Scripts -->
+  <div id="debug-log"></div>
+
   <script src="https://cdn.jsdelivr.net/npm/@stellar/stellar-sdk/dist/stellar-sdk.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
   <script>
     async function initDashboard() {
         alert("Standard Script: Initializing Dashboard...");
@@ -326,34 +226,21 @@
         try {
             updateProgress("Starting library downloads...");
             
-            // Explicitly load the core SDK
-            updateProgress("Fetching Stellar Wallets Kit core...");
+            updateProgress("Fetching Stellar Wallets Kit core bundle...");
             const sdk = await import("https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0?bundle");
-            updateProgress("Core kit loaded.");
+            updateProgress("Kit loaded.");
 
-            updateProgress("Fetching Freighter module...");
             const freighter = await import("https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0/modules/freighter?bundle");
-            
-            updateProgress("Fetching Albedo module...");
             const albedo = await import("https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0/modules/albedo?bundle");
-            
-            updateProgress("Fetching WalletConnect module...");
             const wc = await import("https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0/modules/walletconnect?bundle");
 
-            const { 
-                StellarWalletsKit, 
-                WalletNetwork, 
-                KitEventType,
-                SwkAppDarkTheme
-            } = sdk;
-
+            const { StellarWalletsKit, WalletNetwork, KitEventType, SwkAppDarkTheme } = sdk;
             const { FreighterModule } = freighter;
             const { AlbedoModule } = albedo;
             const { WalletConnectModule } = wc;
 
-            updateProgress("All modules loaded successfully! ✅");
+            updateProgress("All modules loaded successfully!");
             if (status) status.innerText = "System: JavaScript Ready ✅";
-            alert("SUCCESS: All Libraries Loaded!");
 
             // -- APP LOGIC START --
             const urlParams = new URLSearchParams(window.location.search);
@@ -405,10 +292,13 @@
                         document.getElementById('wallet-display').classList.remove('hidden');
                         document.getElementById('address-short').innerText = `${userAddress.substring(0,6)}...${userAddress.substring(52)}`;
                         document.getElementById('btn-link').disabled = false;
+                        const claimBtn = document.getElementById('btn-claim-action');
+                        if (claimBtn) claimBtn.disabled = false;
                     } else {
                         userAddress = null;
                         document.getElementById('btn-connect').classList.remove('hidden');
                         document.getElementById('wallet-display').classList.add('hidden');
+                        document.getElementById('btn-link').disabled = true;
                     }
                 });
                 return _kit;
@@ -421,25 +311,102 @@
                         modalTitle: "Connect Your Wallet",
                         modalDescription: "Choose your favorite Stellar wallet.",
                     });
-                } catch (e) { 
-                    alert("Modal error: " + e.message);
-                }
+                } catch (e) { alert("Modal error: " + e.message); }
             };
-            
-            // Wire up UI
+
+            async function handleLink() {
+                if (!userAddress) return;
+                try {
+                    updateLinkStatus("Signing link request...", false);
+                    const server = new window.StellarSdk.Server(HORIZON_URL);
+                    const account = await server.loadAccount(userAddress);
+                    const tx = new window.StellarSdk.TransactionBuilder(account, { fee: "1000", networkPassphrase: NETWORK_PASSPHRASE })
+                        .addOperation(window.StellarSdk.Operation.manageData({ name: "Link Discord", value: DISCORD_ID }))
+                        .setTimeout(300).build();
+
+                    const kit = initKit();
+                    const { signedTxXdr } = await kit.signTransaction(tx.toXDR(), {
+                        networkPassphrase: NETWORK_PASSPHRASE, address: userAddress
+                    });
+                    updateLinkStatus("Verifying on server...", false);
+                    const res = await axios.post(`${API_BASE}/api/link`, { token: TOKEN, public_key: userAddress, signature_xdr: signedTxXdr, is_approved: true });
+                    if (res.data.success) {
+                        updateLinkStatus("✅ Wallet linked successfully!", false);
+                        document.getElementById('link-status-text').innerText = "Linked ✅";
+                    }
+                } catch (e) { updateLinkStatus(e.message, true); }
+            }
+
+            async function claimWithdrawal() {
+                if (!userAddress) return;
+                try {
+                    updateClaimStatus("Preparing claim...", false);
+                    const res = await axios.get(`${API_BASE}/api/withdrawal/${CLAIM_ID}`);
+                    if (!res.data.success) throw new Error(res.data.message);
+                    const { amount, nonce, signature } = res.data;
+                    const server = new window.StellarSdk.Server(HORIZON_URL);
+                    const sorobanServer = new window.StellarSdk.SorobanServer(SOROBAN_URL);
+                    const account = await server.loadAccount(userAddress);
+                    const sigBytes = Uint8Array.from(atob(signature), c => c.charCodeAt(0));
+                    const amountStroops = BigInt(Math.round(amount * 10000000));
+                    const tx = new window.StellarSdk.TransactionBuilder(account, { fee: "100000", networkPassphrase: NETWORK_PASSPHRASE })
+                        .addOperation(window.StellarSdk.Operation.invokeContractFunction({
+                            contractId: SOROBAN_CONTRACT_ID,
+                            function: "claim_withdrawal",
+                            args: [
+                                window.StellarSdk.nativeToScVal(userAddress, { type: 'address' }),
+                                window.StellarSdk.nativeToScVal(amountStroops, { type: 'i128' }),
+                                window.StellarSdk.nativeToScVal(BigInt(nonce), { type: 'u64' }),
+                                window.StellarSdk.xdr.ScVal.scvBytes(sigBytes)
+                            ]
+                        })).setTimeout(300).build();
+                    
+                    updateClaimStatus("Sumulating...", false);
+                    const sim = await sorobanServer.simulateTransaction(tx);
+                    const preparedTx = await sorobanServer.prepareTransaction(tx, sim);
+                    updateClaimStatus("Awaiting Signature...", false);
+                    const kit = initKit();
+                    const { signedTxXdr } = await kit.signTransaction(preparedTx.toXDR(), { networkPassphrase: NETWORK_PASSPHRASE, address: userAddress });
+                    updateClaimStatus("Submitting...", false);
+                    const resp = await sorobanServer.sendTransaction(window.StellarSdk.TransactionBuilder.fromXDR(signedTxXdr, NETWORK_PASSPHRASE));
+                    updateClaimStatus("✅ Claim submitted! Waiting for confirmation...", false);
+                } catch (e) { updateClaimStatus(e.message, true); }
+            }
+
+            async function cancelWithdrawal() {
+                if (!confirm("Cancel?")) return;
+                try {
+                    await axios.post(`${API_BASE}/api/withdrawal/${CLAIM_ID}/cancel`, { token: TOKEN });
+                    location.reload();
+                } catch (e) { alert(e.message); }
+            }
+
+            // Wire UI
             document.getElementById('btn-connect').onclick = window.connectWallet;
             document.getElementById('wallet-display').onclick = window.connectWallet;
+            document.getElementById('btn-link').onclick = handleLink;
+            document.getElementById('btn-unlink').onclick = async () => {
+                if (!confirm("Unlink?")) return;
+                await axios.post(`${API_BASE}/api/unlink`, { token: TOKEN });
+                location.reload();
+            };
+            const btnClaim = document.getElementById('btn-claim-action');
+            if (btnClaim) btnClaim.onclick = claimWithdrawal;
+            
+            document.getElementById('btn-copy-addr').onclick = () => {
+                navigator.clipboard.writeText(document.getElementById('addr-text').innerText);
+                alert("Copied!");
+            };
+
+            if (CLAIM_ID && CLAIM_ID.length > 5 && CLAIM_ID !== "{{CLAIM_ID}}") document.getElementById('claim-card').classList.remove('hidden');
+            const existing = "{{EXISTING_KEY_VAL}}";
+            if (existing && existing.length > 10 && existing !== "{{EXISTING_KEY_VAL}}") document.getElementById('link-status-text').innerText = "Linked ✅";
             
         } catch (e) {
             updateProgress("CRITICAL LOAD ERROR: " + e.message);
-            alert("Load Fail: " + e.message);
-            if (status) status.innerText = "System: Critical Error ❌";
         }
     }
-
-    // Start initialization when page is ready
     window.onload = initDashboard;
   </script>
-  <div id="debug-log"></div>
 </body>
 </html>
