@@ -52,13 +52,7 @@ app.add_middleware(
 
 # app.add_middleware(SecurityHeadersMiddleware)
 
-# Serve static files (Templates in /api, assets in /public)
-# STATIC_DIR now points to where the Python script lives (api/)
-STATIC_DIR = os.path.dirname(__file__)
-# Fallback for local development if running from root instead of api/
-if not os.path.exists(os.path.join(STATIC_DIR, "index.html")):
-    STATIC_DIR = os.path.join(os.path.dirname(__file__), "api")
-
+from api.template_data import DASHBOARD_HTML
 
 @app.on_event("startup")
 async def startup():
@@ -72,18 +66,10 @@ async def shutdown():
     await stellar.close_session()
     logger.info("Web application stopped.")
 
-
 @app.get("/")
 async def root():
     return {"status": "SHx Tip Bot API is active (Vercel Backend)", "docs": "/health"}
 
-
-# ── Registration Page ─────────────────────────────────────────────────────────
-
-    # Get optional claim_id for User-Paid withdrawal
-    # We allow the root /register to be used for both linking and claiming
-    claim_id = ""
-    claim_total = "0.00"
 @app.get("/api/health")
 async def health_check():
     return {"status": "ok", "environment": "vercel"}
@@ -91,8 +77,6 @@ async def health_check():
 @app.get("/register", response_class=HTMLResponse)
 async def register_page(token: str = "", claim_id: str = ""):
     """Serve the wallet-linking / claim HTML page."""
-    # If no token, we might be in 'Claim Only' mode, but usually users come from /link
-    # If no token AND no claim_id, it's invalid.
     if not token and not claim_id:
          return HTMLResponse("<h1>Missing session identifier.</h1>", status_code=400)
 
@@ -102,7 +86,6 @@ async def register_page(token: str = "", claim_id: str = ""):
     elif token:
         discord_id = await db.validate_link_token(token)
     
-    # NEW: Auto-detect pending withdrawal if claim_id is missing
     is_auto_detected = "false"
     if discord_id and not claim_id:
         pending = await db.get_latest_pending_withdrawal(discord_id)
@@ -110,7 +93,6 @@ async def register_page(token: str = "", claim_id: str = ""):
             claim_id = pending["id"]
             is_auto_detected = "true"
 
-    # If we have a claim_id, we can also derive the discord_id from the withdrawal record
     claim_amount_str = "0.00"
     if claim_id:
         claim_data = await db.get_withdrawal(claim_id)
@@ -125,16 +107,13 @@ async def register_page(token: str = "", claim_id: str = ""):
             status_code=400,
         )
 
-    # Get user details for dashboard
     user_data = await db.get_or_create_user(discord_id)
     memo_id = user_data["memo_id"]
     internal_balance = await db.get_internal_balance(discord_id)
     existing_key = await db.get_user_stellar_key(discord_id)
 
-    # Read and serve the HTML file, injecting variables
-    html_path = os.path.join(STATIC_DIR, "index.html")
-    with open(html_path, "r", encoding="utf-8") as f:
-        html = f.read()
+    # Use the inlined HTML template
+    html = DASHBOARD_HTML
 
     # Inject runtime values into the page
     html = html.replace("{{TOKEN}}", token.strip())
