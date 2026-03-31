@@ -75,6 +75,7 @@ async def health_check():
     return {"status": "ok", "environment": "vercel"}
 
 @app.get("/register", response_class=HTMLResponse)
+@app.get("/link", response_class=HTMLResponse)
 async def register_page(token: str = "", claim_id: str = ""):
     """Serve the wallet-linking / claim HTML page."""
     if not token and not claim_id:
