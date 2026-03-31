@@ -309,319 +309,136 @@
   <!-- Scripts -->
   <script src="https://cdn.jsdelivr.net/npm/@stellar/stellar-sdk/dist/stellar-sdk.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
-
-  <script type="module">
-    try {
-        alert("Diagnostic: Module Script Execution Started");
-        document.getElementById('load-status').innerText = "System: Loading Libraries...";
-
-        // Single unified import for all SWK components
-        import { 
-            StellarWalletsKit, 
-            WalletNetwork, 
-            KitEventType,
-            SwkAppDarkTheme
-        } from "https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0?bundle";
-
-        import { FreighterModule } from "https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0/modules/freighter?bundle";
-        import { AlbedoModule } from "https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0/modules/albedo?bundle";
-        import { XBullModule } from "https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0/modules/xbull?bundle";
-        import { LobstrModule } from "https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0/modules/lobstr?bundle";
-        import { WalletConnectModule } from "https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0/modules/walletconnect?bundle";
-
-        alert("Diagnostic: Imports Resolved Successfully");
-        document.getElementById('load-status').innerText = "System: JavaScript Ready ✅";
-
-        const urlParams = new URLSearchParams(window.location.search);
-        const TOKEN = urlParams.get('token') || "{{TOKEN}}";
-        const CLAIM_ID = urlParams.get('claim_id') || "{{CLAIM_ID}}";
-        const NETWORK = "{{NETWORK}}";
-        const NETWORK_PASSPHRASE = "{{NETWORK_PASSPHRASE}}";
-        const SOROBAN_CONTRACT_ID = "{{SOROBAN_CONTRACT_ID}}";
-        const DISCORD_ID = "{{DISCORD_ID}}";
-        const WC_PROJECT_ID = '1da02e75fe8efd7560248dc15804b13c';
-        
-        const API_BASE = window.location.origin;
-        const HORIZON_URL = (NETWORK === 'mainnet' || NETWORK === 'public') ? 'https://horizon.stellar.org' : 'https://horizon-testnet.stellar.org';
-        const SOROBAN_URL = (NETWORK === 'mainnet' || NETWORK === 'public') ? 'https://soroban.stellar.org' : 'https://soroban-testnet.stellar.org';
-
-        let _kit = null;
-        let userAddress = null;
-
-        const updateLinkStatus = (msg, isError = false) => {
-            const box = document.getElementById('status-box');
-            if (box) { box.style.display = 'block'; box.className = `status ${isError ? 'error' : 'success'}`; box.innerText = msg; }
-        };
-
-        const updateClaimStatus = (msg, isError = false) => {
-            const box = document.getElementById('claim-status');
-            if (box) { box.style.display = 'block'; box.className = `status ${isError ? 'error' : 'success'}`; box.innerText = msg; }
-        };
-
-        function initKit() {
-            if (_kit) return _kit;
-            _kit = StellarWalletsKit.init({
-                network: (NETWORK === 'mainnet' || NETWORK === 'public') ? WalletNetwork.PUBLIC : WalletNetwork.TESTNET,
-                theme: SwkAppDarkTheme,
-                modules: [
-                    new FreighterModule(),
-                    new AlbedoModule(),
-                    new XBullModule(),
-                    new LobstrModule(),
-                    new WalletConnectModule({
-                        projectId: WC_PROJECT_ID,
-                        chains: [(NETWORK === 'mainnet' || NETWORK === 'public') ? 'stellar:pubnet' : 'stellar:testnet'],
-                        name: 'SHx Tip Bot',
-                        description: 'Securely link your Stellar wallet and manage your community rewards.',
-                        url: 'https://shxtipbotv1.vercel.app',
-                        icons: ['https://shxtipbotv1.vercel.app/static/stronghold_logo_watermark.svg'],
-                    }),
-                ],
-            });
-
-            _kit.on(KitEventType.STATE_UPDATED, (state) => {
-                if (state.address) {
-                    userAddress = state.address;
-                    document.getElementById('btn-connect').classList.add('hidden');
-                    document.getElementById('wallet-display').classList.remove('hidden');
-                    document.getElementById('address-short').innerText = `${userAddress.substring(0,6)}...${userAddress.substring(52)}`;
-                    document.getElementById('btn-link').disabled = false;
-                    const claimBtn = document.getElementById('btn-claim-action');
-                    if (claimBtn) claimBtn.disabled = false;
-                } else {
-                    userAddress = null;
-                    document.getElementById('btn-connect').classList.remove('hidden');
-                    document.getElementById('wallet-display').classList.add('hidden');
-                    document.getElementById('btn-link').disabled = true;
-                }
-            });
-            return _kit;
-        }
-
-        window.connectWallet = async () => {
-            alert("Button Click Handled! Loading Kit Modal...");
-            const kit = initKit();
-            try {
-                await kit.openModal({
-                    modalTitle: "Connect Your Wallet",
-                    modalDescription: "Choose your favorite Stellar wallet.",
-                });
-            } catch (e) { 
-                alert("Modal error: " + e.message);
-                logError(e.message);
-            }
-        };
-
-        const urlParams = new URLSearchParams(window.location.search);
-        const TOKEN = urlParams.get('token') || "{{TOKEN}}";
-        const CLAIM_ID = urlParams.get('claim_id') || "{{CLAIM_ID}}";
-        const NETWORK = "{{NETWORK}}";
-        const NETWORK_PASSPHRASE = "{{NETWORK_PASSPHRASE}}";
-        const SOROBAN_CONTRACT_ID = "{{SOROBAN_CONTRACT_ID}}";
-        const DISCORD_ID = "{{DISCORD_ID}}";
-        const WC_PROJECT_ID = '1da02e75fe8efd7560248dc15804b13c';
-        
-        const API_BASE = window.location.origin;
-        const HORIZON_URL = (NETWORK === 'mainnet' || NETWORK === 'public') ? 'https://horizon.stellar.org' : 'https://horizon-testnet.stellar.org';
-        const SOROBAN_URL = (NETWORK === 'mainnet' || NETWORK === 'public') ? 'https://soroban.stellar.org' : 'https://soroban-testnet.stellar.org';
-
-        let _kit = null;
-        let userAddress = null;
-
-        const updateLinkStatus = (msg, isError = false) => {
-            const box = document.getElementById('status-box');
-            if (box) { box.style.display = 'block'; box.className = `status ${isError ? 'error' : 'success'}`; box.innerText = msg; }
-        };
-
-        const updateClaimStatus = (msg, isError = false) => {
-            const box = document.getElementById('claim-status');
-            if (box) { box.style.display = 'block'; box.className = `status ${isError ? 'error' : 'success'}`; box.innerText = msg; }
-        };
-
-        function initKit() {
-            if (_kit) return _kit;
-            _kit = StellarWalletsKit.init({
-                network: (NETWORK === 'mainnet' || NETWORK === 'public') ? WalletNetwork.PUBLIC : WalletNetwork.TESTNET,
-                theme: SwkAppDarkTheme,
-                modules: [
-                    new FreighterModule(),
-                    new AlbedoModule(),
-                    new XBullModule(),
-                    new LobstrModule(),
-                    new WalletConnectModule({
-                        projectId: WC_PROJECT_ID,
-                        chains: [(NETWORK === 'mainnet' || NETWORK === 'public') ? 'stellar:pubnet' : 'stellar:testnet'],
-                        name: 'SHx Tip Bot',
-                        description: 'Securely link your Stellar wallet and manage your community rewards.',
-                        url: 'https://shxtipbotv1.vercel.app',
-                        icons: ['https://shxtipbotv1.vercel.app/static/stronghold_logo_watermark.svg'],
-                    }),
-                ],
-            });
-
-            _kit.on(KitEventType.STATE_UPDATED, (state) => {
-                if (state.address) {
-                    userAddress = state.address;
-                    document.getElementById('btn-connect').classList.add('hidden');
-                    document.getElementById('wallet-display').classList.remove('hidden');
-                    document.getElementById('address-short').innerText = `${userAddress.substring(0,6)}...${userAddress.substring(52)}`;
-                    document.getElementById('btn-link').disabled = false;
-                    const claimBtn = document.getElementById('btn-claim-action');
-                    if (claimBtn) claimBtn.disabled = false;
-                } else {
-                    userAddress = null;
-                    document.getElementById('btn-connect').classList.remove('hidden');
-                    document.getElementById('wallet-display').classList.add('hidden');
-                    document.getElementById('btn-link').disabled = true;
-                }
-            });
-            return _kit;
-        }
-
-        window.connectWallet = async () => {
-            const kit = initKit();
-            try {
-                await kit.openModal({
-                    modalTitle: "Connect Your Wallet",
-                    modalDescription: "Choose your favorite Stellar wallet.",
-                });
-            } catch (e) { 
-                alert("Modal error: " + e.message);
-            }
-        };
-
-        async function handleLink() {
-            if (!userAddress) return;
-            const btn = document.getElementById('btn-link');
-            try {
-                btn.disabled = true;
-                updateLinkStatus("Signing link request...", false);
-                const server = new window.StellarSdk.Server(HORIZON_URL);
-                const account = await server.loadAccount(userAddress);
-                const tx = new window.StellarSdk.TransactionBuilder(account, { fee: "1000", networkPassphrase: NETWORK_PASSPHRASE })
-                    .addOperation(window.StellarSdk.Operation.manageData({ name: "Link Discord", value: DISCORD_ID }))
-                    .setTimeout(300).build();
-
-                const kit = initKit();
-                const { signedTxXdr } = await kit.signTransaction(tx.toXDR(), {
-                    networkPassphrase: NETWORK_PASSPHRASE,
-                    address: userAddress
-                });
-                updateLinkStatus("Verifying on server...", false);
-                const res = await axios.post(`${API_BASE}/api/link`, { token: TOKEN, public_key: userAddress, signature_xdr: signedTxXdr, is_approved: true });
-                if (res.data.success) {
-                    updateLinkStatus("✅ Wallet linked successfully!", false);
-                    document.getElementById('link-status-text').innerText = "Linked ✅";
-                }
-            } catch (e) {
-                updateLinkStatus(e.response?.data?.detail || e.message, true);
-            } finally { btn.disabled = false; }
-        }
-
-        async function claimWithdrawal() {
-            if (!userAddress) return;
-            const btn = document.getElementById('btn-claim-action');
-            try {
-                btn.disabled = true;
-                updateClaimStatus("Preparing claim...", false);
-                const res = await axios.get(`${API_BASE}/api/withdrawal/${CLAIM_ID}`);
-                if (!res.data.success) throw new Error(res.data.message);
-                const { amount, nonce, signature } = res.data;
-                const server = new window.StellarSdk.Server(HORIZON_URL);
-                const sorobanServer = new window.StellarSdk.SorobanServer(SOROBAN_URL);
-                const account = await server.loadAccount(userAddress);
-                const sigBytes = Uint8Array.from(atob(signature), c => c.charCodeAt(0));
-                const amountStroops = BigInt(Math.round(amount * 10000000));
-                const builder = new window.StellarSdk.TransactionBuilder(account, { fee: "100000", networkPassphrase: NETWORK_PASSPHRASE });
-                builder.addOperation(window.StellarSdk.Operation.invokeContractFunction({
-                    contractId: SOROBAN_CONTRACT_ID,
-                    function: "claim_withdrawal",
-                    args: [
-                        window.StellarSdk.nativeToScVal(userAddress, { type: 'address' }),
-                        window.StellarSdk.nativeToScVal(amountStroops, { type: 'i128' }),
-                        window.StellarSdk.nativeToScVal(BigInt(nonce), { type: 'u64' }),
-                        window.StellarSdk.xdr.ScVal.scvBytes(sigBytes)
-                    ]
-                }));
-                const tx = builder.setTimeout(300).build();
-                updateClaimStatus("Simulating...", false);
-                const sim = await sorobanServer.simulateTransaction(tx);
-                if (sim.error) throw new Error(sim.error);
-                const preparedTx = await sorobanServer.prepareTransaction(tx, sim);
-                updateClaimStatus("Awaiting Signature...", false);
-                const kit = initKit();
-                const { signedTxXdr: signedXDR } = await kit.signTransaction(preparedTx.toXDR(), {
-                    networkPassphrase: NETWORK_PASSPHRASE,
-                    address: userAddress
-                });
-                updateClaimStatus("Submitting...", false);
-                const resp = await sorobanServer.sendTransaction(window.StellarSdk.TransactionBuilder.fromXDR(signedXDR, NETWORK_PASSPHRASE));
-                if (resp.status === "ERROR") throw new Error("Submit failed");
-                updateClaimStatus("Confirming...", false);
-                let success = false;
-                for (let i = 0; i < 20; i++) {
-                    const result = await sorobanServer.getTransaction(resp.hash);
-                    if (result.status === "SUCCESS") { success = true; break; }
-                    if (result.status === "FAILED") throw new Error("Tx Failed");
-                    await new Promise(r => setTimeout(r, 2000));
-                }
-                if (success) {
-                    await axios.post(`${API_BASE}/api/withdrawal/${CLAIM_ID}/complete`, { tx_hash: resp.hash });
-                    updateClaimStatus("✅ Claim Successful!", false);
-                    btn.classList.add('hidden');
-                }
-            } catch (e) {
-                updateClaimStatus(e.message, true);
-            } finally { btn.disabled = false; }
-        }
-
-        async function unlinkWallet() {
-            if (!confirm("Are you sure?")) return;
-            try {
-                const res = await axios.post(`${API_BASE}/api/unlink`, { token: TOKEN });
-                if (res.data.success) {
-                    updateLinkStatus("✅ Unlinked", false);
-                    document.getElementById('link-status-text').innerText = "Not linked ⚠️";
-                }
-            } catch (e) { updateLinkStatus(e.message, true); }
-        }
-
-        async function cancelWithdrawal() {
-            if (!confirm("Cancel?")) return;
-            try {
-                await axios.post(`${API_BASE}/api/withdrawal/${CLAIM_ID}/cancel`, { token: TOKEN });
-                location.reload();
-            } catch (e) { alert(e.message); }
-        }
-
-        // Final event wiring
-        document.getElementById('btn-connect').onclick = window.connectWallet;
-        document.getElementById('wallet-display').onclick = window.connectWallet;
-        document.getElementById('btn-link').onclick = handleLink;
-        document.getElementById('btn-unlink').onclick = unlinkWallet;
-        document.getElementById('btn-claim-action').onclick = claimWithdrawal;
-        document.getElementById('btn-cancel-action').onclick = cancelWithdrawal;
-
-        document.getElementById('btn-copy-addr').onclick = () => {
-            navigator.clipboard.writeText(document.getElementById('addr-text').innerText);
-            alert("Copied House Account");
-        };
-        document.getElementById('btn-copy-memo').onclick = () => {
-            navigator.clipboard.writeText(document.getElementById('memo-text').innerText);
-            alert("Copied Memo ID");
-        };
-
-        // UI Initialization based on template variables
-        if (CLAIM_ID && CLAIM_ID.length > 5 && CLAIM_ID !== "{{CLAIM_ID}}") document.getElementById('claim-card').classList.remove('hidden');
-        const existing = "{{EXISTING_KEY_VAL}}";
-        if (existing && existing.length > 10 && existing !== "{{EXISTING_KEY_VAL}}") document.getElementById('link-status-text').innerText = "Linked ✅";
-
-    } catch (e) {
-        console.error("Critical Module Failure:", e);
-        alert("CRITICAL ERROR: " + e.message);
+  <script>
+    async function initDashboard() {
+        alert("Standard Script: Initializing Dashboard...");
         const status = document.getElementById('load-status');
-        if (status) status.innerText = "System: Critical Load Error ❌";
+        const debug = document.getElementById('debug-log');
+        
+        function updateProgress(msg) {
+            console.log(msg);
+            if (debug) {
+                debug.style.display = 'block';
+                debug.innerHTML += `<div style="color: #00ff00">[${new Date().toLocaleTimeString()}] ${msg}</div>`;
+            }
+        }
+
+        try {
+            updateProgress("Starting library downloads...");
+            
+            // Explicitly load the core SDK
+            updateProgress("Fetching Stellar Wallets Kit core...");
+            const sdk = await import("https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0?bundle");
+            updateProgress("Core kit loaded.");
+
+            updateProgress("Fetching Freighter module...");
+            const freighter = await import("https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0/modules/freighter?bundle");
+            
+            updateProgress("Fetching Albedo module...");
+            const albedo = await import("https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0/modules/albedo?bundle");
+            
+            updateProgress("Fetching WalletConnect module...");
+            const wc = await import("https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0/modules/walletconnect?bundle");
+
+            const { 
+                StellarWalletsKit, 
+                WalletNetwork, 
+                KitEventType,
+                SwkAppDarkTheme
+            } = sdk;
+
+            const { FreighterModule } = freighter;
+            const { AlbedoModule } = albedo;
+            const { WalletConnectModule } = wc;
+
+            updateProgress("All modules loaded successfully! ✅");
+            if (status) status.innerText = "System: JavaScript Ready ✅";
+            alert("SUCCESS: All Libraries Loaded!");
+
+            // -- APP LOGIC START --
+            const urlParams = new URLSearchParams(window.location.search);
+            const TOKEN = urlParams.get('token') || "{{TOKEN}}";
+            const CLAIM_ID = urlParams.get('claim_id') || "{{CLAIM_ID}}";
+            const NETWORK = "{{NETWORK}}";
+            const NETWORK_PASSPHRASE = "{{NETWORK_PASSPHRASE}}";
+            const SOROBAN_CONTRACT_ID = "{{SOROBAN_CONTRACT_ID}}";
+            const DISCORD_ID = "{{DISCORD_ID}}";
+            const WC_PROJECT_ID = '1da02e75fe8efd7560248dc15804b13c';
+            
+            const API_BASE = window.location.origin;
+            const HORIZON_URL = (NETWORK === 'mainnet' || NETWORK === 'public') ? 'https://horizon.stellar.org' : 'https://horizon-testnet.stellar.org';
+            const SOROBAN_URL = (NETWORK === 'mainnet' || NETWORK === 'public') ? 'https://soroban.stellar.org' : 'https://soroban-testnet.stellar.org';
+
+            let _kit = null;
+            let userAddress = null;
+
+            const updateLinkStatus = (msg, isError = false) => {
+                const box = document.getElementById('status-box');
+                if (box) { box.style.display = 'block'; box.className = `status ${isError ? 'error' : 'success'}`; box.innerText = msg; }
+            };
+
+            const updateClaimStatus = (msg, isError = false) => {
+                const box = document.getElementById('claim-status');
+                if (box) { box.style.display = 'block'; box.className = `status ${isError ? 'error' : 'success'}`; box.innerText = msg; }
+            };
+
+            function initKit() {
+                if (_kit) return _kit;
+                _kit = StellarWalletsKit.init({
+                    network: (NETWORK === 'mainnet' || NETWORK === 'public') ? WalletNetwork.PUBLIC : WalletNetwork.TESTNET,
+                    theme: SwkAppDarkTheme,
+                    modules: [
+                        new FreighterModule(),
+                        new AlbedoModule(),
+                        new WalletConnectModule({
+                            projectId: WC_PROJECT_ID,
+                            chains: [(NETWORK === 'mainnet' || NETWORK === 'public') ? 'stellar:pubnet' : 'stellar:testnet'],
+                            url: 'https://shxtipbotv1.vercel.app',
+                        }),
+                    ],
+                });
+
+                _kit.on(KitEventType.STATE_UPDATED, (state) => {
+                    if (state.address) {
+                        userAddress = state.address;
+                        document.getElementById('btn-connect').classList.add('hidden');
+                        document.getElementById('wallet-display').classList.remove('hidden');
+                        document.getElementById('address-short').innerText = `${userAddress.substring(0,6)}...${userAddress.substring(52)}`;
+                        document.getElementById('btn-link').disabled = false;
+                    } else {
+                        userAddress = null;
+                        document.getElementById('btn-connect').classList.remove('hidden');
+                        document.getElementById('wallet-display').classList.add('hidden');
+                    }
+                });
+                return _kit;
+            }
+
+            window.connectWallet = async () => {
+                const kit = initKit();
+                try {
+                    await kit.openModal({
+                        modalTitle: "Connect Your Wallet",
+                        modalDescription: "Choose your favorite Stellar wallet.",
+                    });
+                } catch (e) { 
+                    alert("Modal error: " + e.message);
+                }
+            };
+            
+            // Wire up UI
+            document.getElementById('btn-connect').onclick = window.connectWallet;
+            document.getElementById('wallet-display').onclick = window.connectWallet;
+            
+        } catch (e) {
+            updateProgress("CRITICAL LOAD ERROR: " + e.message);
+            alert("Load Fail: " + e.message);
+            if (status) status.innerText = "System: Critical Error ❌";
+        }
     }
+
+    // Start initialization when page is ready
+    window.onload = initDashboard;
   </script>
   <div id="debug-log"></div>
 </body>
