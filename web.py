@@ -52,11 +52,12 @@ app.add_middleware(
 
 # app.add_middleware(SecurityHeadersMiddleware)
 
-# Serve static files (managed natively by Vercel from /public)
-STATIC_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "public"))
-# For local development where public is one level up from api/
-if not os.path.exists(STATIC_DIR):
-    STATIC_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "public"))
+# Serve static files (Templates in /api, assets in /public)
+# STATIC_DIR now points to where the Python script lives (api/)
+STATIC_DIR = os.path.dirname(__file__)
+# Fallback for local development if running from root instead of api/
+if not os.path.exists(os.path.join(STATIC_DIR, "index.html")):
+    STATIC_DIR = os.path.join(os.path.dirname(__file__), "api")
 
 
 @app.on_event("startup")

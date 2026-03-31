@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SHx Tip Bot | Web Dashboard</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  
+  <style>
+    :root {
+      --bg: #030712;
+      --card-bg: rgba(17, 24, 39, 0.7);
+      --border: rgba(59, 130, 246, 0.2);
+      --border-hover: rgba(59, 130, 246, 0.5);
+      --text: #f9fafb;
+      --text-muted: #9ca3af;
+      --accent: #3b82f6;
+      --error: #ef4444;
+      --success: #10b981;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .background-castle {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background-image: url('/stronghold_logo_watermark.svg');
+      background-repeat: no-repeat;
+      background-position: center;
+      background-size: 60%;
+      opacity: 0.15;
+      z-index: -1;
+      filter: blur(2px);
+    }
+
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 1.5rem;
+      flex: 1;
+    }
+
+    nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 0;
+      margin-bottom: 2rem;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-family: 'Outfit', sans-serif;
+      font-weight: 700;
+      font-size: 1.5rem;
+      color: #3b82f6;
+    }
+
+    .logo img { width: 32px; height: 32px; }
+
+    .hero {
+      text-align: center;
+      padding: 3rem 0;
+      margin-bottom: 2rem;
+    }
+
+    .hero h1 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 3rem;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(135deg, #fff 0%, #3b82f6 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .card {
+      background: var(--card-bg);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border);
+      border-radius: 1.5rem;
+      padding: 2rem;
+      margin-bottom: 1.5rem;
+      transition: border-color 0.3s ease;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.875rem 1.75rem;
+      border-radius: 0.75rem;
+      font-weight: 600;
+      font-size: 1rem;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      color: white;
+    }
+
+    .btn-primary { background-color: var(--accent); box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3); }
+    .btn-primary:hover { background-color: #2563eb; transform: translateY(-1px); }
+    .btn-secondary { background: rgba(59, 130, 246, 0.1); color: var(--accent); border: 1px solid var(--border); }
+    .btn-secondary:hover { border-color: var(--accent); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+    .status {
+      padding: 1rem; border-radius: 0.75rem; margin-bottom: 1.5rem; font-size: 0.95rem; font-weight: 500;
+    }
+    .status.success { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }
+    .status.error { background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
+
+    /* Custom Wallet Selection Modal */
+    .modal-overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.85); backdrop-filter: blur(8px);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 1000; opacity: 0; pointer-events: none; transition: opacity 0.3s;
+    }
+    .modal-overlay.active { opacity: 1; pointer-events: auto; }
+    .modal {
+      background: #0f172a; border: 1px solid var(--border); border-radius: 1.5rem;
+      width: 400px; max-width: 90%; padding: 2rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+    }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+    .modal-options { display: flex; flex-direction: column; gap: 0.75rem; }
+    .wallet-option {
+      display: flex; align-items: center; gap: 1rem; padding: 1rem;
+      border-radius: 1rem; border: 1px solid var(--border); cursor: pointer; transition: all 0.2s;
+    }
+    .wallet-option:hover { border-color: var(--accent); background: rgba(59, 130, 246, 0.05); }
+    .wallet-option img { width: 32px; height: 32px; }
+    .close-modal { color: var(--text-muted); cursor: pointer; font-size: 1.5rem; }
+
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="background-castle"></div>
+
+  <div class="container">
+    <nav>
+      <div class="logo">
+        <img src="/static/stronghold_logo_watermark.svg" alt="SHx">
+        <span>SHx Tip Bot</span>
+      </div>
+      <div>
+        <button id="btn-connect" class="btn btn-secondary">🌐 Connect Wallet</button>
+        <div id="wallet-display" class="hidden" style="text-align: right;">
+          <code id="address-short" style="color: var(--accent); font-weight: 600;">G...</code>
+        </div>
+      </div>
+    </nav>
+
+    <div class="hero">
+      <h1>Community Portal</h1>
+      <p style="color: var(--text-muted);">Securely link your Discord and manage claims.</p>
+    </div>
+
+    <!-- Link Card -->
+    <div class="card">
+      <h2 style="margin-bottom: 0.5rem; font-family: 'Outfit';">Discord Status</h2>
+      <p id="link-status-text" style="color: var(--text-muted); margin-bottom: 1.25rem;">Checking status...</p>
+      <div id="link-notify" class="status hidden"></div>
+      <button id="btn-link" class="btn btn-primary" style="width: 100%; justify-content: center;" disabled>Verify & Link Wallet</button>
+      <p id="btn-unlink" style="color: var(--error); cursor: pointer; font-size: 0.85rem; text-align: center; margin-top: 1rem;" class="hidden">Unlink Wallet</p>
+    </div>
+
+    <!-- Claim Card -->
+    <div id="claim-card" class="card hidden">
+      <h2 style="margin-bottom: 0.5rem; font-family: 'Outfit';">Pending Withdrawal</h2>
+      <div id="claim-notify" class="status hidden"></div>
+      <button id="btn-claim-action" class="btn btn-primary" style="background: var(--success); width: 100%; justify-content: center;" disabled>Claim SHx Rewards</button>
+    </div>
+
+    <!-- Info Card -->
+    <div class="card">
+      <h2 style="margin-bottom: 1rem; font-family: 'Outfit';">House Account</h2>
+      <div style="background: rgba(0,0,0,0.3); padding: 1rem; border-radius: 0.75rem; border: 1px solid var(--border);">
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem;">Address:</p>
+        <code id="house-addr" style="color: var(--success); display: block; overflow-wrap: break-word;">{{HOUSE_ACCOUNT}}</code>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 1rem;">Available Memo:</p>
+        <code id="memo-val" style="color: #fff;">{{MEMO}}</code>
+      </div>
+    </div>
+  </div>
+
+  <!-- Wallet Modal -->
+  <div id="wallet-modal" class="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 style="font-family: 'Outfit';">Connect Wallet</h3>
+        <span class="close-modal">&times;</span>
+      </div>
+      <div class="modal-options">
+        <div class="wallet-option" onclick="connectFreighter()">
+          <img src="https://www.freighter.app/freighter_logo_dark.png" alt="Freighter">
+          <div>
+            <div style="font-weight: 600;">Freighter</div>
+            <div style="font-size: 0.8rem; color: var(--text-muted);">Official Stellar Browser Wallet</div>
+          </div>
+        </div>
+        <div class="wallet-option" onclick="connectAlbedo()">
+          <img src="https://albedo.link/static/images/logo.svg" alt="Albedo">
+          <div>
+            <div style="font-weight: 600;">Albedo</div>
+            <div style="font-size: 0.8rem; color: var(--text-muted);">Web-based Stellar Login</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/stellar-sdk.js"></script>
+  <script src="/axios.js"></script>
+  <script src="/albedo.js"></script>
+
+  <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const TOKEN = urlParams.get('token') || "{{TOKEN}}";
+    const CLAIM_ID = urlParams.get('claim_id') || "{{CLAIM_ID}}";
+    const NETWORK = "{{NETWORK}}";
+    const NETWORK_PASSPHRASE = (NETWORK === 'mainnet' || NETWORK === 'public') ? 'Public Global Stellar Network ; September 2015' : 'Test SDF Network ; September 2015';
+    
+    // Global Error Catcher to stop silent failures
+    window.onerror = function(msg, url, line) {
+        alert("CRITICAL ERROR: " + msg + " at " + line);
+        return false;
+    };
+    const SOROBAN_CONTRACT_ID = "{{SOROBAN_CONTRACT_ID}}";
+    const DISCORD_ID = "{{DISCORD_ID}}";
+    
+    const API_BASE = window.location.origin;
+    const HORIZON_URL = (NETWORK === 'mainnet' || NETWORK === 'public') ? 'https://horizon.stellar.org' : 'https://horizon-testnet.stellar.org';
+    const SOROBAN_URL = (NETWORK === 'mainnet' || NETWORK === 'public') ? 'https://soroban.stellar.org' : 'https://soroban-testnet.stellar.org';
+
+    let userAddress = null;
+    let currentWallet = null;
+
+    // --- UI HELPERS ---
+    const showModal = (active) => document.getElementById('wallet-modal').classList.toggle('active', active);
+    document.getElementById('btn-connect').onclick = () => showModal(true);
+    document.querySelector('.close-modal').onclick = () => showModal(false);
+
+    const updateUI = (address) => {
+      userAddress = address;
+      if (address) {
+        document.getElementById('btn-connect').classList.add('hidden');
+        document.getElementById('wallet-display').classList.remove('hidden');
+        document.getElementById('address-short').innerText = `${address.substring(0,5)}...${address.substring(51)}`;
+        document.getElementById('btn-link').disabled = false;
+        const claimBtn = document.getElementById('btn-claim-action');
+        if (claimBtn) claimBtn.disabled = false;
+      }
+    };
+
+    const notify = (id, msg, isError = false) => {
+        const div = document.getElementById(id);
+        div.classList.remove('hidden', 'success', 'error');
+        div.classList.add(isError ? 'error' : 'success');
+        div.innerText = msg;
+    };
+
+    // --- WALLET CONNECTORS ---
+    async function connectFreighter() {
+        try {
+            // DEEP PROBE: Wait up to 2 seconds for injection
+            let attempts = 0;
+            const findFreighter = () => window.freighterApi || window.stellarLumens || window.stellar;
+            
+            while (!findFreighter() && attempts < 20) {
+                await new Promise(r => setTimeout(r, 100)); // 100ms intervals
+                attempts++;
+            }
+
+            const freighter = findFreighter();
+            if (!freighter) {
+                // Diagnostic Alert
+                const seenKeys = Object.keys(window).filter(k => k.toLowerCase().includes('freighter') || k.toLowerCase().includes('stellar'));
+                throw new Error("Freighter not detected after 2s probe. (Seen: " + (seenKeys.join(',') || 'none') + "). Please ensure the extension is 'Allowed' for this domain in your browser settings.");
+            }
+            
+            const address = await freighter.getPublicKey();
+            currentWallet = 'freighter';
+            showModal(false);
+            updateUI(address);
+        } catch (e) { 
+            alert("FREIGHTER ERROR: " + e.message); 
+        }
+    }
+
+    async function connectAlbedo() {
+        try {
+            const res = await albedo.publicKey({ });
+            currentWallet = 'albedo';
+            showModal(false);
+            updateUI(res.pubkey);
+        } catch (e) { alert(e.message); }
+    }
+
+    // --- APP LOGIC ---
+    async function handleLink() {
+        if (!userAddress) return;
+        try {
+            notify('link-notify', "Signing Link Request...");
+            const server = new window.StellarSdk.Server(HORIZON_URL);
+            const account = await server.loadAccount(userAddress);
+            const tx = new window.StellarSdk.TransactionBuilder(account, { fee: "1000", networkPassphrase: NETWORK_PASSPHRASE })
+                .addOperation(window.StellarSdk.Operation.manageData({ name: "Link Discord", value: DISCORD_ID }))
+                .setTimeout(300).build();
+
+            let signedXDR;
+            if (currentWallet === 'freighter') {
+                signedXDR = await window.freighterApi.signTransaction(tx.toXDR(), NETWORK === 'mainnet' ? 'PUBLIC' : 'TESTNET');
+            } else {
+                const res = await albedo.tx({ xdr: tx.toXDR(), network: NETWORK === 'mainnet' ? 'public' : 'testnet' });
+                signedXDR = res.signed_envelope;
+            }
+
+            notify('link-notify', "Verifying on server...");
+            const res = await axios.post(`${API_BASE}/api/link`, {
+                token: TOKEN, public_key: userAddress, signature_xdr: signedXDR, is_approved: true
+            });
+            if (res.data.success) {
+                notify('link-notify', "✅ Wallet linked successfully!");
+                document.getElementById('link-status-text').innerText = "Linked ✅";
+                document.getElementById('btn-unlink').classList.remove('hidden');
+            }
+        } catch (e) { notify('link-notify', e.message, true); }
+    }
+
+    async function handleClaim() {
+        if (!userAddress) return;
+        try {
+            notify('claim-notify', "Preparing withdrawal...");
+            const res = await axios.get(`${API_BASE}/api/withdrawal/${CLAIM_ID}`);
+            if (!res.data.success) throw new Error(res.data.message);
+            const { amount, nonce, signature } = res.data;
+
+            const server = new window.StellarSdk.Server(HORIZON_URL);
+            const sorobanServer = new window.StellarSdk.SorobanServer(SOROBAN_URL);
+            const account = await server.loadAccount(userAddress);
+            
+            const sigBytes = Uint8Array.from(atob(signature), c => c.charCodeAt(0));
+            const amountStroops = BigInt(Math.round(amount * 10000000));
+
+            const tx = new window.StellarSdk.TransactionBuilder(account, { fee: "100000", networkPassphrase: NETWORK_PASSPHRASE })
+                .addOperation(window.StellarSdk.Operation.invokeContractFunction({
+                    contractId: SOROBAN_CONTRACT_ID,
+                    function: "claim_withdrawal",
+                    args: [
+                        window.StellarSdk.nativeToScVal(userAddress, { type: 'address' }),
+                        window.StellarSdk.nativeToScVal(amountStroops, { type: 'i128' }),
+                        window.StellarSdk.nativeToScVal(BigInt(nonce), { type: 'u64' }),
+                        window.StellarSdk.xdr.ScVal.scvBytes(sigBytes)
+                    ]
+                })).setTimeout(300).build();
+
+            notify('claim-notify', "Simulating Transaction...");
+            const sim = await sorobanServer.simulateTransaction(tx);
+            const preparedTx = await sorobanServer.prepareTransaction(tx, sim);
+
+            notify('claim-notify', "Awaiting wallet signature...");
+            let signedXDR;
+            if (currentWallet === 'freighter') {
+                signedXDR = await window.freighterApi.signTransaction(preparedTx.toXDR(), NETWORK === 'mainnet' ? 'PUBLIC' : 'TESTNET');
+            } else {
+                const res = await albedo.tx({ xdr: preparedTx.toXDR(), network: NETWORK === 'mainnet' ? 'public' : 'testnet' });
+                signedXDR = res.signed_envelope;
+            }
+
+            notify('claim-notify', "Submitting to network...");
+            const resp = await sorobanServer.sendTransaction(window.StellarSdk.TransactionBuilder.fromXDR(signedXDR, NETWORK_PASSPHRASE));
+            notify('claim-notify', "✅ Claim Successful! Tokens arriving soon.");
+            document.getElementById('btn-claim-action').classList.add('hidden');
+        } catch (e) { notify('claim-notify', e.message, true); }
+    }
+
+    // Startup check
+    window.onload = () => {
+        if (CLAIM_ID && CLAIM_ID.length > 5 && CLAIM_ID !== "{{CLAIM_ID}}") document.getElementById('claim-card').classList.remove('hidden');
+        const existing = "{{EXISTING_KEY_VAL}}";
+        if (existing && existing.length > 10 && existing !== "{{EXISTING_KEY_VAL}}") {
+            document.getElementById('link-status-text').innerText = "Linked ✅";
+            document.getElementById('btn-unlink').classList.remove('hidden');
+        }
+    };
+    
+    document.getElementById('btn-link').onclick = handleLink;
+    document.getElementById('btn-claim-action').onclick = handleClaim;
+    document.getElementById('btn-unlink').onclick = async () => {
+        if (!confirm("Unlink wallet?")) return;
+        await axios.post(`${API_BASE}/api/unlink`, { token: TOKEN });
+        location.reload();
+    };
+  </script>
+</body>
+</html>
