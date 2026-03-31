@@ -276,18 +276,20 @@
     // --- WALLET CONNECTORS ---
     async function connectFreighter() {
         try {
-            // Wait up to 1 second for injection
+            // DEEP PROBE: Wait up to 2 seconds for injection
             let attempts = 0;
-            const findFreighter = () => window.freighterApi || window.stellarLumens;
+            const findFreighter = () => window.freighterApi || window.stellarLumens || window.stellar;
             
-            while (!findFreighter() && attempts < 10) {
-                await new Promise(r => setTimeout(r, 100));
+            while (!findFreighter() && attempts < 20) {
+                await new Promise(r => setTimeout(r, 100)); // 100ms intervals
                 attempts++;
             }
 
             const freighter = findFreighter();
             if (!freighter) {
-                throw new Error("Freighter not detected. Please make sure the extension is installed and 'Allowed' for this site.");
+                // Diagnostic Alert
+                const seenKeys = Object.keys(window).filter(k => k.toLowerCase().includes('freighter') || k.toLowerCase().includes('stellar'));
+                throw new Error("Freighter not detected after 2s probe. (Seen: " + (seenKeys.join(',') || 'none') + "). Please ensure the extension is 'Allowed' for this domain in your browser settings.");
             }
             
             const address = await freighter.getPublicKey();
