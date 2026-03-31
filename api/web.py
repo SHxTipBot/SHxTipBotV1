@@ -14,8 +14,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
-import database as db
-import stellar_utils as stellar
+from . import database as db
+from . import stellar_utils as stellar
 
 load_dotenv()
 
@@ -52,7 +52,7 @@ app.add_middleware(
 
 # app.add_middleware(SecurityHeadersMiddleware)
 
-from api.template_data import DASHBOARD_HTML
+from .template_data import DASHBOARD_HTML
 
 @app.on_event("startup")
 async def startup():
