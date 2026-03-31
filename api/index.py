@@ -1,16 +1,13 @@
 import os
 import sys
 
-# Ensure the CURRENT directory (api/) is in the path so relative imports work
+# Add the api/ directory to Python's path so we can import sibling modules
 api_dir = os.path.dirname(os.path.abspath(__file__))
 if api_dir not in sys.path:
-    sys.path.append(api_dir)
+    sys.path.insert(0, api_dir)
 
-# Import app as expected by Vercel's Python runtime
-# Now importing from the local web.py instead of the root
-from .web import app
+# Import app using absolute import (NOT relative - Vercel doesn't support it)
+from web import app
 
 # Export for Vercel
-# The serverless function entry point is /api/index.py.
-# Vercel needs 'app' to be defined here.
 app = app
