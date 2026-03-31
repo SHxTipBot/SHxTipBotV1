@@ -232,7 +232,13 @@
     const TOKEN = urlParams.get('token') || "{{TOKEN}}";
     const CLAIM_ID = urlParams.get('claim_id') || "{{CLAIM_ID}}";
     const NETWORK = "{{NETWORK}}";
-    const NETWORK_PASSPHRASE = ({{NETWORK}} === 'mainnet' || {{NETWORK}} === 'public') ? 'Public Global Stellar Network ; September 2015' : 'Test SDF Network ; September 2015';
+    const NETWORK_PASSPHRASE = (NETWORK === 'mainnet' || NETWORK === 'public') ? 'Public Global Stellar Network ; September 2015' : 'Test SDF Network ; September 2015';
+    
+    // Global Error Catcher to stop silent failures
+    window.onerror = function(msg, url, line) {
+        alert("CRITICAL ERROR: " + msg + " at " + line);
+        return false;
+    };
     const SOROBAN_CONTRACT_ID = "{{SOROBAN_CONTRACT_ID}}";
     const DISCORD_ID = "{{DISCORD_ID}}";
     
