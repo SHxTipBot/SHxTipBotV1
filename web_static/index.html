@@ -223,16 +223,28 @@
             }
         }
 
-        try {
-            updateProgress("Starting library downloads...");
-            
-            updateProgress("Fetching Stellar Wallets Kit core bundle...");
-            const sdk = await import("https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0?bundle");
-            updateProgress("Kit loaded.");
+        async function retryImport(url, name, retries = 3) {
+            for (let i = 0; i < retries; i++) {
+                try {
+                    updateProgress(`Fetching ${name} (Attempt ${i+1}/${retries})...`);
+                    const module = await import(url);
+                    updateProgress(`${name} loaded.`);
+                    return module;
+                } catch (e) {
+                    if (i === retries - 1) throw e;
+                    updateProgress(`Retrying ${name}...`);
+                    await new Promise(r => setTimeout(r, 2000));
+                }
+            }
+        }
 
-            const freighter = await import("https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0/modules/freighter?bundle");
-            const albedo = await import("https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0/modules/albedo?bundle");
-            const wc = await import("https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0/modules/walletconnect?bundle");
+        try {
+            updateProgress("Starting library downloads via JSDelivr...");
+            
+            const sdk = await retryImport("https://cdn.jsdelivr.net/npm/@creit-tech/stellar-wallets-kit@2.1.0/dist/index.mjs", "Core SDK");
+            const freighter = await retryImport("https://cdn.jsdelivr.net/npm/@creit-tech/stellar-wallets-kit@2.1.0/dist/modules/freighter.mjs", "Freighter");
+            const albedo = await retryImport("https://cdn.jsdelivr.net/npm/@creit-tech/stellar-wallets-kit@2.1.0/dist/modules/albedo.mjs", "Albedo");
+            const wc = await retryImport("https://cdn.jsdelivr.net/npm/@creit-tech/stellar-wallets-kit@2.1.0/dist/modules/walletconnect.mjs", "WalletConnect");
 
             const { StellarWalletsKit, WalletNetwork, KitEventType, SwkAppDarkTheme } = sdk;
             const { FreighterModule } = freighter;
