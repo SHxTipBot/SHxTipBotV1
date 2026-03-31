@@ -32,25 +32,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        response = await call_next(request)
-        response.headers["X-Frame-Options"] = "DENY"
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-XSS-Protection"] = "1; mode=block"
-        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-        response.headers["Content-Security-Policy"] = (
-            "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; "
-            "script-src * 'unsafe-inline' 'unsafe-eval' blob:; "
-            "connect-src * 'unsafe-inline' 'unsafe-eval' wss:; "
-            "style-src * 'unsafe-inline'; "
-            "img-src * data: blob:; "
-            "font-src * data:; "
-            "frame-src *; "
-        )
-        return response
+# class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+#     async def dispatch(self, request: Request, call_next):
+#         response = await call_next(request)
+#         response.headers["X-Frame-Options"] = "DENY"
+#         response.headers["X-Content-Type-Options"] = "nosniff"
+#         response.headers["X-XSS-Protection"] = "1; mode=block"
+#         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+#         response.headers["Content-Security-Policy"] = (
+#             "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; "
+#             "script-src * 'unsafe-inline' 'unsafe-eval' blob:; "
+#             "connect-src * 'unsafe-inline' 'unsafe-eval' wss:; "
+#             "style-src * 'unsafe-inline'; "
+#             "img-src * data: blob:; "
+#             "font-src * data:; "
+#             "frame-src *; "
+#         )
+#         return response
 
-app.add_middleware(SecurityHeadersMiddleware)
+# app.add_middleware(SecurityHeadersMiddleware)
 
 # Serve static files (index.html, etc.)
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "web_static")
@@ -81,11 +81,9 @@ async def root():
     # We allow the root /register to be used for both linking and claiming
     claim_id = ""
     claim_total = "0.00"
-    
-    # Try to get claim_id from request params if available (FastAPI handles this via token: str = "")
-    # However, since I named the param token, I should probably check for claim_id explicitly.
-    # I'll modify the signature to accept both.
-    pass
+@app.get("/api/health")
+async def health_check():
+    return {"status": "ok", "environment": "vercel"}
 
 @app.get("/register", response_class=HTMLResponse)
 async def register_page(token: str = "", claim_id: str = ""):
