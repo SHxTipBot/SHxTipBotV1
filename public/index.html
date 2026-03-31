@@ -122,7 +122,7 @@
     .btn-secondary:hover { border-color: var(--accent); }
     .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
-    /* Utility Helpers to replace inline styles */
+    /* Utility Helpers */
     .w-full { width: 100%; }
     .text-center { text-align: center; }
     .text-right { text-align: right; }
@@ -146,34 +146,12 @@
     .status.success { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }
     .status.error { background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
 
-    /* Custom Wallet Selection Modal */
-    .modal-overlay {
-      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(0,0,0,0.85); 
-      -webkit-backdrop-filter: blur(8px);
-      backdrop-filter: blur(8px);
-      display: flex; align-items: center; justify-content: center;
-      z-index: 1000; opacity: 0; pointer-events: none; transition: opacity 0.3s;
-    }
-    .modal-overlay.active { opacity: 1; pointer-events: auto; }
-    .modal {
-      background: #0f172a; border: 1px solid var(--border); border-radius: 1.5rem;
-      width: 400px; max-width: 90%; padding: 2rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
-    }
-    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
-    .modal-header h3 { font-family: 'Outfit'; }
-    .modal-options { display: flex; flex-direction: column; gap: 0.75rem; }
-    .wallet-option {
-      display: flex; align-items: center; gap: 1rem; padding: 1rem;
-      border-radius: 1rem; border: 1px solid var(--border); cursor: pointer; transition: all 0.2s;
-    }
-    .wallet-option:hover { border-color: var(--accent); background: rgba(59, 130, 246, 0.05); }
-    .wallet-option img { width: 32px; height: 32px; }
-    .wallet-name { font-weight: 600; }
-    .wallet-desc { font-size: 0.8rem; color: var(--text-muted); }
-    .close-modal { color: var(--text-muted); cursor: pointer; font-size: 1.5rem; }
-
     .hidden { display: none !important; }
+
+    /* SWK Button Wrapper Styling */
+    #swk-button-wrapper {
+      display: inline-block;
+    }
   </style>
 </head>
 <body>
@@ -186,7 +164,8 @@
         <span>SHx Tip Bot</span>
       </div>
       <div>
-        <button id="btn-connect" class="btn btn-secondary">🌐 Connect Wallet</button>
+        <!-- SWK renders its own connect/disconnect button here -->
+        <div id="swk-button-wrapper"></div>
         <div id="wallet-display" class="hidden text-right">
           <code id="address-short" class="text-accent text-bold">G...</code>
         </div>
@@ -226,46 +205,23 @@
     </div>
   </div>
 
-  <!-- Wallet Modal -->
-  <div id="wallet-modal" class="modal-overlay">
-    <div class="modal">
-      <div class="modal-header">
-        <h3>Connect Wallet</h3>
-        <span class="close-modal">&times;</span>
-      </div>
-      <div class="modal-options">
-        <div class="wallet-option" onclick="connectFreighter()">
-          <img src="https://www.freighter.app/freighter_logo_dark.png" alt="Freighter">
-          <div>
-            <div class="wallet-name">Freighter</div>
-            <div class="wallet-desc">Official Stellar Browser Wallet</div>
-          </div>
-        </div>
-        <div class="wallet-option" onclick="connectAlbedo()">
-          <img src="https://albedo.link/static/images/logo.svg" alt="Albedo">
-          <div>
-            <div class="wallet-name">Albedo</div>
-            <div class="wallet-desc">Web-based Stellar Login</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
+  <!-- Load Stellar SDK first (SWK needs it externalized) -->
   <script src="/stellar-sdk.js"></script>
   <script src="/axios.js"></script>
-  <script src="/albedo.js"></script>
+  <!-- Stellar Wallets Kit UMD Bundle (includes Freighter, Albedo, xBull, LOBSTR/WalletConnect, Hana, etc.) -->
+  <script src="/wallet-kit-bundle.umd.js"></script>
 
   <script>
+    // ── Template Variables (injected by Python backend) ──
     const urlParams = new URLSearchParams(window.location.search);
     const TOKEN = urlParams.get('token') || "{{TOKEN}}";
     const CLAIM_ID = urlParams.get('claim_id') || "{{CLAIM_ID}}";
     const NETWORK = "{{NETWORK}}";
     const NETWORK_PASSPHRASE = (NETWORK === 'mainnet' || NETWORK === 'public') ? 'Public Global Stellar Network ; September 2015' : 'Test SDF Network ; September 2015';
     
-    // Global Error Catcher to stop silent failures
+    // Global Error Catcher
     window.onerror = function(msg, url, line) {
-        alert("CRITICAL ERROR: " + msg + " at " + line);
+        console.error("CRITICAL ERROR:", msg, "at", line);
         return false;
     };
     const SOROBAN_CONTRACT_ID = "{{SOROBAN_CONTRACT_ID}}";
@@ -276,22 +232,22 @@
     const SOROBAN_URL = (NETWORK === 'mainnet' || NETWORK === 'public') ? 'https://soroban.stellar.org' : 'https://soroban-testnet.stellar.org';
 
     let userAddress = null;
-    let currentWallet = null;
 
-    // --- UI HELPERS ---
-    const showModal = (active) => document.getElementById('wallet-modal').classList.toggle('active', active);
-    document.getElementById('btn-connect').onclick = () => showModal(true);
-    document.querySelector('.close-modal').onclick = () => showModal(false);
-
+    // ── UI HELPERS ──
     const updateUI = (address) => {
       userAddress = address;
       if (address) {
-        document.getElementById('btn-connect').classList.add('hidden');
         document.getElementById('wallet-display').classList.remove('hidden');
         document.getElementById('address-short').innerText = `${address.substring(0,5)}...${address.substring(51)}`;
         document.getElementById('btn-link').disabled = false;
         const claimBtn = document.getElementById('btn-claim-action');
         if (claimBtn) claimBtn.disabled = false;
+      } else {
+        document.getElementById('wallet-display').classList.add('hidden');
+        document.getElementById('address-short').innerText = 'G...';
+        document.getElementById('btn-link').disabled = true;
+        const claimBtn = document.getElementById('btn-claim-action');
+        if (claimBtn) claimBtn.disabled = true;
       }
     };
 
@@ -302,44 +258,27 @@
         div.innerText = msg;
     };
 
-    // --- WALLET CONNECTORS ---
-    async function connectFreighter() {
-        try {
-            // DEEP PROBE: Wait up to 2 seconds for injection
-            let attempts = 0;
-            const findFreighter = () => window.freighterApi || window.stellarLumens || window.stellar;
-            
-            while (!findFreighter() && attempts < 20) {
-                await new Promise(r => setTimeout(r, 100)); // 100ms intervals
-                attempts++;
-            }
+    // ── STELLAR WALLETS KIT INITIALIZATION ──
+    const { StellarWalletsKit, KitEventType, SwkAppDarkTheme, defaultModules } = window.StellarKit;
 
-            const freighter = findFreighter();
-            if (!freighter) {
-                // Diagnostic Alert
-                const seenKeys = Object.keys(window).filter(k => k.toLowerCase().includes('freighter') || k.toLowerCase().includes('stellar'));
-                throw new Error("Freighter not detected after 2s probe. (Seen: " + (seenKeys.join(',') || 'none') + "). Please ensure the extension is 'Allowed' for this domain in your browser settings.");
-            }
-            
-            const address = await freighter.getPublicKey();
-            currentWallet = 'freighter';
-            showModal(false);
-            updateUI(address);
-        } catch (e) { 
-            alert("FREIGHTER ERROR: " + e.message); 
-        }
-    }
+    // Initialize SWK with dark theme and all default wallet modules
+    // defaultModules() includes: Freighter, Albedo, xBull, LOBSTR (WalletConnect), Hana, Hot Wallet, etc.
+    StellarWalletsKit.init({
+      theme: SwkAppDarkTheme,
+      modules: defaultModules(),
+    });
 
-    async function connectAlbedo() {
-        try {
-            const res = await albedo.publicKey({ });
-            currentWallet = 'albedo';
-            showModal(false);
-            updateUI(res.pubkey);
-        } catch (e) { alert(e.message); }
-    }
+    // Create the built-in wallet connect button
+    const buttonWrapper = document.getElementById('swk-button-wrapper');
+    StellarWalletsKit.createButton(buttonWrapper);
 
-    // --- APP LOGIC ---
+    // Listen for wallet state changes (connect/disconnect)
+    StellarWalletsKit.on(KitEventType.STATE_UPDATED, (event) => {
+      const address = event.payload.address;
+      updateUI(address || null);
+    });
+
+    // ── APP LOGIC ──
     async function handleLink() {
         if (!userAddress) return;
         try {
@@ -350,24 +289,23 @@
                 .addOperation(window.StellarSdk.Operation.manageData({ name: "Link Discord", value: DISCORD_ID }))
                 .setTimeout(300).build();
 
-            let signedXDR;
-            if (currentWallet === 'freighter') {
-                signedXDR = await window.freighterApi.signTransaction(tx.toXDR(), NETWORK === 'mainnet' ? 'PUBLIC' : 'TESTNET');
-            } else {
-                const res = await albedo.tx({ xdr: tx.toXDR(), network: NETWORK === 'mainnet' ? 'public' : 'testnet' });
-                signedXDR = res.signed_envelope;
-            }
+            // Use SWK's unified signing — works with ANY connected wallet
+            notify('link-notify', "Awaiting wallet signature...");
+            const { signedTxXdr } = await StellarWalletsKit.signTransaction(tx.toXDR(), {
+                networkPassphrase: NETWORK_PASSPHRASE,
+                address: userAddress,
+            });
 
             notify('link-notify', "Verifying on server...");
             const res = await axios.post(`${API_BASE}/api/link`, {
-                token: TOKEN, public_key: userAddress, signature_xdr: signedXDR, is_approved: true
+                token: TOKEN, public_key: userAddress, signature_xdr: signedTxXdr, is_approved: true
             });
             if (res.data.success) {
                 notify('link-notify', "✅ Wallet linked successfully!");
                 document.getElementById('link-status-text').innerText = "Linked ✅";
                 document.getElementById('btn-unlink').classList.remove('hidden');
             }
-        } catch (e) { notify('link-notify', e.message, true); }
+        } catch (e) { notify('link-notify', e.message || String(e), true); }
     }
 
     async function handleClaim() {
@@ -401,20 +339,18 @@
             const sim = await sorobanServer.simulateTransaction(tx);
             const preparedTx = await sorobanServer.prepareTransaction(tx, sim);
 
+            // Use SWK's unified signing for the claim transaction too
             notify('claim-notify', "Awaiting wallet signature...");
-            let signedXDR;
-            if (currentWallet === 'freighter') {
-                signedXDR = await window.freighterApi.signTransaction(preparedTx.toXDR(), NETWORK === 'mainnet' ? 'PUBLIC' : 'TESTNET');
-            } else {
-                const res = await albedo.tx({ xdr: preparedTx.toXDR(), network: NETWORK === 'mainnet' ? 'public' : 'testnet' });
-                signedXDR = res.signed_envelope;
-            }
+            const { signedTxXdr } = await StellarWalletsKit.signTransaction(preparedTx.toXDR(), {
+                networkPassphrase: NETWORK_PASSPHRASE,
+                address: userAddress,
+            });
 
             notify('claim-notify', "Submitting to network...");
-            const resp = await sorobanServer.sendTransaction(window.StellarSdk.TransactionBuilder.fromXDR(signedXDR, NETWORK_PASSPHRASE));
+            const resp = await sorobanServer.sendTransaction(window.StellarSdk.TransactionBuilder.fromXDR(signedTxXdr, NETWORK_PASSPHRASE));
             notify('claim-notify', "✅ Claim Successful! Tokens arriving soon.");
             document.getElementById('btn-claim-action').classList.add('hidden');
-        } catch (e) { notify('claim-notify', e.message, true); }
+        } catch (e) { notify('claim-notify', e.message || String(e), true); }
     }
 
     // Startup check

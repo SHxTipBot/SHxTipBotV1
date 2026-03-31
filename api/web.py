@@ -32,25 +32,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-#     async def dispatch(self, request: Request, call_next):
-#         response = await call_next(request)
-#         response.headers["X-Frame-Options"] = "DENY"
-#         response.headers["X-Content-Type-Options"] = "nosniff"
-#         response.headers["X-XSS-Protection"] = "1; mode=block"
-#         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-#         response.headers["Content-Security-Policy"] = (
-#             "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; "
-#             "script-src * 'unsafe-inline' 'unsafe-eval' blob:; "
-#             "connect-src * 'unsafe-inline' 'unsafe-eval' wss:; "
-#             "style-src * 'unsafe-inline'; "
-#             "img-src * data: blob:; "
-#             "font-src * data:; "
-#             "frame-src *; "
-#         )
-#         return response
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        # Permissive CSP — required for WalletConnect v2 relay (wss://relay.walletconnect.com)
+        # and Stellar Wallets Kit Web Components
+        response.headers["Content-Security-Policy"] = (
+            "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; "
+            "script-src * 'unsafe-inline' 'unsafe-eval' blob:; "
+            "connect-src * wss: ws:; "
+            "style-src * 'unsafe-inline'; "
+            "img-src * data: blob:; "
+            "font-src * data:; "
+            "frame-src *; "
+        )
+        return response
 
-# app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
 
 from template_data import DASHBOARD_HTML
 

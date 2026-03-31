@@ -134,3 +134,7 @@ shx_tip_bot.log
 .DS_Store
 .vercel
 node_modules
+
+# SWK UMD bundle builder (only the output in public/ is needed)
+swk-builder/node_modules/
+swk-builder/dist/
