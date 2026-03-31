@@ -53,8 +53,10 @@ app.add_middleware(
 # app.add_middleware(SecurityHeadersMiddleware)
 
 # Serve static files (managed natively by Vercel from /public)
-# STATIC_DIR = os.path.join(os.path.dirname(__file__), "web_static")
-# app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+STATIC_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "public"))
+# For local development where public is one level up from api/
+if not os.path.exists(STATIC_DIR):
+    STATIC_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "public"))
 
 
 @app.on_event("startup")
