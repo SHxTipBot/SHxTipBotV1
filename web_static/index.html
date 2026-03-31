@@ -36,8 +36,9 @@
             debug.innerHTML += `<div>[${new Date().toLocaleTimeString()}] ${msg}</div>`;
         }
     }
-    window.onerror = (m, s, l, c, e) => logError(`Error: ${m} at ${s}:${l}`);
     window.onunhandledrejection = (e) => logError(`Promise Rejection: ${e.reason}`);
+    
+    alert("Diagnostic: Pre-Module Script Executed");
   </script>
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -51,10 +52,20 @@
       --border-hover: rgba(59, 130, 246, 0.5);
       --text: #f9fafb;
       --text-muted: #9ca3af;
-      --accent: #3b82f6;
-    --accent-hover: #2563eb;
-    --success: #10b981;
-    --error: #ef4444;
+      --error: #ef4444;
+  }
+
+  #load-status {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    background: rgba(0,0,0,0.8);
+    color: #ffd700;
+    padding: 8px 15px;
+    border-radius: 8px;
+    font-size: 12px;
+    z-index: 10000;
+    border: 1px solid #ffd700;
   }
 
   #debug-log {
@@ -238,7 +249,7 @@
             <span>🌐</span> Connect Stellar Wallet
         </button>
         <div id="wallet-display" class="wallet-info hidden">
-            <div class="wallet-dot"></div>
+  <div class="background-castle"></div>
             <span id="address-short">Loading...</span>
         </div>
     </div>
@@ -300,7 +311,8 @@
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
 
   <script type="module">
-    alert("Script Loading: Module Start");
+    document.getElementById('load-status').innerText = "System: JavaScript Ready ✅";
+    alert("Diagnostic: Module Script Executed");
     import { 
         StellarWalletsKit, 
         WalletNetwork, 
