@@ -10,21 +10,14 @@
     // Essential Buffer/Process polyfills for Stellar SDK & WalletConnect in the browser
     window.global = window;
     if (typeof window.Buffer === 'undefined') {
-      window.Buffer = {
-        isBuffer: (obj) => obj && !!obj._isBuffer,
-        from: (data) => {
-          if (typeof data === 'string') return new TextEncoder().encode(data);
-          return new Uint8Array(data);
-        },
-        alloc: (size) => new Uint8Array(size),
-        concat: (list) => {
-          let total = list.reduce((a, b) => a + b.length, 0);
-          let res = new Uint8Array(total);
-          let off = 0;
-          for (let b of list) { res.set(b, off); off += b.length; }
-          return res;
-        }
-      };
+      // Use a more robust Buffer polyfill from a CDN for WalletConnect v2
+      console.log("Buffer polyfill initialized.");
+    }
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/buffer@6.0.3/index.js"></script>
+  <script>
+    if (typeof window.Buffer === 'undefined' && typeof window.buffer !== 'undefined') {
+      window.Buffer = window.buffer.Buffer;
     }
     window.process = { 
       env: { NODE_ENV: 'production' }, 
@@ -307,18 +300,21 @@
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
 
   <script type="module">
+    alert("Script Loading: Module Start");
     import { 
         StellarWalletsKit, 
         WalletNetwork, 
         KitEventType,
         SwkAppDarkTheme
-    } from "https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0";
+    } from "https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0?bundle";
 
-    import { FreighterModule } from "https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0/modules/freighter";
-    import { AlbedoModule } from "https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0/modules/albedo";
-    import { XBullModule } from "https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0/modules/xbull";
-    import { LobstrModule } from "https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0/modules/lobstr";
-    import { WalletConnectModule } from "https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0/modules/walletconnect";
+    import { FreighterModule } from "https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0/modules/freighter?bundle";
+    import { AlbedoModule } from "https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0/modules/albedo?bundle";
+    import { XBullModule } from "https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0/modules/xbull?bundle";
+    import { LobstrModule } from "https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0/modules/lobstr?bundle";
+    import { WalletConnectModule } from "https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0/modules/walletconnect?bundle";
+
+    alert("Script Loaded: Imports Success");
 
     const urlParams = new URLSearchParams(window.location.search);
     const TOKEN = urlParams.get('token') || "{{TOKEN}}";
@@ -407,6 +403,7 @@
     }
 
     async function connectWallet() {
+        alert("Connect Clicked: Opening Modal...");
         console.log("Opening wallet modal...");
         const kit = initKit();
         try {
