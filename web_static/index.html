@@ -34,6 +34,17 @@
       browser: true
     };
     console.log("Enhanced polyfills initialized for WalletConnect v2.");
+
+    // Debugging utility
+    function logError(msg) {
+        const debug = document.getElementById('debug-log');
+        if (debug) {
+            debug.style.display = 'block';
+            debug.innerHTML += `<div>[${new Date().toLocaleTimeString()}] ${msg}</div>`;
+        }
+    }
+    window.onerror = (m, s, l, c, e) => logError(`Error: ${m} at ${s}:${l}`);
+    window.onunhandledrejection = (e) => logError(`Promise Rejection: ${e.reason}`);
   </script>
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -48,10 +59,28 @@
       --text: #f9fafb;
       --text-muted: #9ca3af;
       --accent: #3b82f6;
-      --accent-glow: rgba(59, 130, 246, 0.4);
-      --success: #10b981;
-      --error: #ef4444;
-      --radius: 20px;
+    --accent-hover: #2563eb;
+    --success: #10b981;
+    --error: #ef4444;
+  }
+
+  #debug-log {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    max-height: 150px;
+    overflow-y: auto;
+    background: rgba(0,0,0,0.8);
+    color: #ff4444;
+    font-family: monospace;
+    font-size: 11px;
+    padding: 10px;
+    z-index: 9999;
+    border-top: 1px solid #ff0000;
+    display: none;
+  }
+    --radius: 20px;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -278,19 +307,18 @@
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
 
   <script type="module">
-    // Using the stable Stellar Wallets Kit v2 bundle
     import { 
         StellarWalletsKit, 
         WalletNetwork, 
         KitEventType,
         SwkAppDarkTheme
-    } from "https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0?bundle";
+    } from "https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0";
 
-    import { FreighterModule } from "https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0/modules/freighter?bundle";
-    import { AlbedoModule } from "https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0/modules/albedo?bundle";
-    import { XBullModule } from "https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0/modules/xbull?bundle";
-    import { LobstrModule } from "https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0/modules/lobstr?bundle";
-    import { WalletConnectModule } from "https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0/modules/walletconnect?bundle";
+    import { FreighterModule } from "https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0/modules/freighter";
+    import { AlbedoModule } from "https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0/modules/albedo";
+    import { XBullModule } from "https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0/modules/xbull";
+    import { LobstrModule } from "https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0/modules/lobstr";
+    import { WalletConnectModule } from "https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0/modules/walletconnect";
 
     const urlParams = new URLSearchParams(window.location.search);
     const TOKEN = urlParams.get('token') || "{{TOKEN}}";
@@ -341,7 +369,6 @@
             ],
         });
 
-        // Listen for state changes (v2 event-driven approach)
         _kit.on(KitEventType.STATE_UPDATED, (state) => {
             console.log("SWK State Updated:", state);
             if (state.address) {
@@ -361,7 +388,6 @@
                 const claimBtn = document.getElementById('btn-claim-action');
                 if (claimBtn) claimBtn.disabled = false;
             } else {
-                // Handle disconnection
                 userAddress = null;
                 const btnConnect = document.getElementById('btn-connect');
                 if (btnConnect) btnConnect.classList.remove('hidden');
@@ -384,8 +410,6 @@
         console.log("Opening wallet modal...");
         const kit = initKit();
         try {
-            // In v2, openModal returns the selected wallet if needed, 
-            // but we rely on the STATE_UPDATED listener for the address.
             await kit.openModal({
                 modalTitle: "Connect Your Wallet",
                 modalDescription: "Choose your favorite Stellar wallet. Extensions or WalletConnect are recommended.",
@@ -527,5 +551,6 @@
         };
     });
   </script>
+  <div id="debug-log"></div>
 </body>
 </html>
