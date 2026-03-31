@@ -284,13 +284,13 @@
         WalletNetwork, 
         KitEventType,
         SwkAppDarkTheme
-    } from "https://esm.sh/@creit.tech/stellar-wallets-kit@2.1.0?bundle";
+    } from "https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0?bundle";
 
-    import { FreighterModule } from "https://esm.sh/@creit.tech/stellar-wallets-kit@2.1.0/modules/freighter?bundle";
-    import { AlbedoModule } from "https://esm.sh/@creit.tech/stellar-wallets-kit@2.1.0/modules/albedo?bundle";
-    import { XBullModule } from "https://esm.sh/@creit.tech/stellar-wallets-kit@2.1.0/modules/xbull?bundle";
-    import { LobstrModule } from "https://esm.sh/@creit.tech/stellar-wallets-kit@2.1.0/modules/lobstr?bundle";
-    import { WalletConnectProvider } from "https://esm.sh/@creit.tech/stellar-wallets-kit@2.1.0/modules/walletconnect?bundle";
+    import { FreighterModule } from "https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0/modules/freighter?bundle";
+    import { AlbedoModule } from "https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0/modules/albedo?bundle";
+    import { XBullModule } from "https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0/modules/xbull?bundle";
+    import { LobstrModule } from "https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0/modules/lobstr?bundle";
+    import { WalletConnectModule } from "https://esm.sh/@creit-tech/stellar-wallets-kit@2.1.0/modules/walletconnect?bundle";
 
     const urlParams = new URLSearchParams(window.location.search);
     const TOKEN = urlParams.get('token') || "{{TOKEN}}";
@@ -302,8 +302,8 @@
     const WC_PROJECT_ID = '1da02e75fe8efd7560248dc15804b13c';
     
     const API_BASE = window.location.origin;
-    const HORIZON_URL = NETWORK === 'mainnet' ? 'https://horizon.stellar.org' : 'https://horizon-testnet.stellar.org';
-    const SOROBAN_URL = NETWORK === 'mainnet' ? 'https://soroban.stellar.org' : 'https://soroban-testnet.stellar.org';
+    const HORIZON_URL = (NETWORK === 'mainnet' || NETWORK === 'public') ? 'https://horizon.stellar.org' : 'https://horizon-testnet.stellar.org';
+    const SOROBAN_URL = (NETWORK === 'mainnet' || NETWORK === 'public') ? 'https://soroban.stellar.org' : 'https://soroban-testnet.stellar.org';
 
     let _kit = null;
     let userAddress = null;
@@ -323,20 +323,20 @@
         console.log("Initializing Stellar Wallets Kit v2 with Project ID:", WC_PROJECT_ID);
         
         _kit = StellarWalletsKit.init({
-            network: NETWORK === 'mainnet' ? WalletNetwork.PUBLIC : WalletNetwork.TESTNET,
+            network: (NETWORK === 'mainnet' || NETWORK === 'public') ? WalletNetwork.PUBLIC : WalletNetwork.TESTNET,
             theme: SwkAppDarkTheme,
             modules: [
                 new FreighterModule(),
                 new AlbedoModule(),
                 new XBullModule(),
                 new LobstrModule(),
-                new WalletConnectProvider({
+                new WalletConnectModule({
                     projectId: WC_PROJECT_ID,
-                    chains: [NETWORK === 'mainnet' ? 'stellar:pubnet' : 'stellar:testnet'],
+                    chains: [(NETWORK === 'mainnet' || NETWORK === 'public') ? 'stellar:pubnet' : 'stellar:testnet'],
                     name: 'SHx Tip Bot',
                     description: 'Securely link your Stellar wallet and manage your community rewards.',
-                    url: window.location.origin,
-                    icons: ['https://stronghold.co/favicon.ico'], // Placeholder icon
+                    url: 'https://shxtipbotv1.vercel.app',
+                    icons: ['https://shxtipbotv1.vercel.app/static/stronghold_logo_watermark.svg'],
                 }),
             ],
         });
