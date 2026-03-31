@@ -223,36 +223,24 @@
             }
         }
 
-        async function retryImport(url, name, retries = 3) {
-            for (let i = 0; i < retries; i++) {
-                try {
-                    updateProgress(`Fetching ${name} (Attempt ${i+1}/${retries})...`);
-                    const module = await import(url);
-                    updateProgress(`${name} loaded.`);
-                    return module;
-                } catch (e) {
-                    if (i === retries - 1) throw e;
-                    updateProgress(`Retrying ${name}...`);
-                    await new Promise(r => setTimeout(r, 2000));
-                }
-            }
-        }
-
         try {
-            updateProgress("Starting library downloads via JSDelivr...");
-            
-            const sdk = await retryImport("https://cdn.jsdelivr.net/npm/@creit-tech/stellar-wallets-kit@2.1.0/dist/index.mjs", "Core SDK");
-            const freighter = await retryImport("https://cdn.jsdelivr.net/npm/@creit-tech/stellar-wallets-kit@2.1.0/dist/modules/freighter.mjs", "Freighter");
-            const albedo = await retryImport("https://cdn.jsdelivr.net/npm/@creit-tech/stellar-wallets-kit@2.1.0/dist/modules/albedo.mjs", "Albedo");
-            const wc = await retryImport("https://cdn.jsdelivr.net/npm/@creit-tech/stellar-wallets-kit@2.1.0/dist/modules/walletconnect.mjs", "WalletConnect");
+            updateProgress("Loading locally-hosted Stellar Wallets Kit...");
+            // Use the local bundle we just downloaded
+            const sdk = await import("/static/lib/swk_bundle.mjs");
+            updateProgress("Local bundle loaded successfully! ✅");
 
-            const { StellarWalletsKit, WalletNetwork, KitEventType, SwkAppDarkTheme } = sdk;
-            const { FreighterModule } = freighter;
-            const { AlbedoModule } = albedo;
-            const { WalletConnectModule } = wc;
+            const { 
+                StellarWalletsKit, 
+                WalletNetwork, 
+                KitEventType,
+                SwkAppDarkTheme,
+                FreighterModule, 
+                AlbedoModule, 
+                WalletConnectModule 
+            } = sdk;
 
-            updateProgress("All modules loaded successfully!");
             if (status) status.innerText = "System: JavaScript Ready ✅";
+            alert("SUCCESS: Dashboard Fully Loaded (Local Mode)");
 
             // -- APP LOGIC START --
             const urlParams = new URLSearchParams(window.location.search);
