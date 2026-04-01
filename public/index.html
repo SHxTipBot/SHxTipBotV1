@@ -305,7 +305,10 @@
                 document.getElementById('link-status-text').innerText = "Linked ✅";
                 document.getElementById('btn-unlink').classList.remove('hidden');
             }
-        } catch (e) { notify('link-notify', e.message || String(e), true); }
+        } catch (e) {
+            const msg = e.response?.data?.detail || e.message || String(e);
+            notify('link-notify', msg, true); 
+        }
     }
 
     async function handleClaim() {
@@ -350,7 +353,10 @@
             const resp = await sorobanServer.sendTransaction(window.StellarSdk.TransactionBuilder.fromXDR(signedTxXdr, NETWORK_PASSPHRASE));
             notify('claim-notify', "✅ Claim Successful! Tokens arriving soon.");
             document.getElementById('btn-claim-action').classList.add('hidden');
-        } catch (e) { notify('claim-notify', e.message || String(e), true); }
+        } catch (e) {
+            const msg = e.response?.data?.detail || e.message || String(e);
+            notify('claim-notify', msg, true); 
+        }
     }
 
     // Startup check
