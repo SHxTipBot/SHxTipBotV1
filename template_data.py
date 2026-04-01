@@ -201,6 +201,17 @@ DASHBOARD_HTML = r'''<!DOCTYPE html>
       <button id="btn-claim-action" class="btn btn-primary bg-success w-full justify-center" disabled>Claim SHx Rewards</button>
     </div>
 
+    <!-- Withdraw Card -->
+    <div id="withdraw-card" class="card hidden">
+      <h2>Web Withdrawal</h2>
+      <p class="text-sm text-muted mb-6">Withdraw SHx directly from your Discord balance to your linked wallet.</p>
+      <div style="margin-bottom: 1rem;">
+        <input type="number" id="withdraw-amount-input" placeholder="Amount (e.g. 1000)" style="width: 100%; padding: 0.75rem; border-radius: 0.5rem; border: 1px solid var(--border); background: rgba(0,0,0,0.5); color: white; margin-bottom: 0.5rem;">
+      </div>
+      <div id="withdraw-notify" class="status hidden"></div>
+      <button id="btn-web-withdraw" class="btn btn-primary w-full justify-center" disabled>Prepare Withdrawal</button>
+    </div>
+
   </div>
 
   <script src="/stellar-sdk.js?v={{APP_VERSION}}"></script>
@@ -210,7 +221,7 @@ DASHBOARD_HTML = r'''<!DOCTYPE html>
   <script>
     const urlParams = new URLSearchParams(window.location.search);
     const TOKEN = urlParams.get('token') || "{{TOKEN}}";
-    const CLAIM_ID = urlParams.get('claim_id') || "{{CLAIM_ID}}";
+    let CLAIM_ID = urlParams.get('claim_id') || "{{CLAIM_ID}}";
     const NETWORK = "{{NETWORK}}";
     const WC_PROJECT_ID = "{{WC_PROJECT_ID}}";
     const APP_VERSION = "{{APP_VERSION}}";
@@ -270,6 +281,8 @@ DASHBOARD_HTML = r'''<!DOCTYPE html>
         document.getElementById('btn-link').disabled = false;
         const claimBtn = document.getElementById('btn-claim-action');
         if (claimBtn) claimBtn.disabled = false;
+        const withdrawBtn = document.getElementById('btn-web-withdraw');
+        if (withdrawBtn) withdrawBtn.disabled = false;
         setStatus("Connected ✅");
       } else {
         document.getElementById('wallet-display').classList.add('hidden');
@@ -277,6 +290,8 @@ DASHBOARD_HTML = r'''<!DOCTYPE html>
         document.getElementById('btn-link').disabled = true;
         const claimBtn = document.getElementById('btn-claim-action');
         if (claimBtn) claimBtn.disabled = true;
+        const withdrawBtn = document.getElementById('btn-web-withdraw');
+        if (withdrawBtn) withdrawBtn.disabled = true;
       }
     };
 
@@ -402,11 +417,51 @@ DASHBOARD_HTML = r'''<!DOCTYPE html>
 
             notify('claim-notify', "Submitting to network...");
             const resp = await sorobanServer.sendTransaction(window.StellarSdk.TransactionBuilder.fromXDR(signedTxXdr, NETWORK_PASSPHRASE));
-            notify('claim-notify', "✅ Claim Successful! Tokens arriving soon.");
+            
+            const txHash = resp.hash;
+            const networkPrefix = NETWORK === 'mainnet' || NETWORK === 'public' ? 'public' : 'testnet';
+            const explorerUrl = `https://stellar.expert/explorer/${networkPrefix}/tx/${txHash}`;
+            
+            const notifyEl = document.getElementById('claim-notify');
+            notifyEl.classList.remove('hidden', 'error');
+            notifyEl.classList.add('success');
+            notifyEl.innerHTML = `✅ Claim Successful!<br><a href="${explorerUrl}" target="_blank" style="color:var(--accent); text-decoration: underline; margin-top: 0.5rem; display: inline-block;">View on Stellar.Expert</a>`;
+            
             document.getElementById('btn-claim-action').classList.add('hidden');
+            fetchBalance();
         } catch (e) {
             const msg = e.response?.data?.detail || e.message || String(e);
             notify('claim-notify', msg, true); 
+        }
+    }
+
+    async function handleWebWithdraw() {
+        if (!userAddress) return;
+        const amountEl = document.getElementById('withdraw-amount-input');
+        const amount = amountEl.value;
+        if (!amount || amount <= 0) {
+            notify('withdraw-notify', "Please enter a valid amount.", true);
+            return;
+        }
+
+        try {
+            document.getElementById('btn-web-withdraw').disabled = true;
+            notify('withdraw-notify', "Initializing withdrawal. Please wait...");
+            
+            const res = await axios.post(`${API_BASE}/api/web-withdraw`, { token: TOKEN, amount: amount });
+            if (!res.data.success) throw new Error("Failed to initialize withdrawal");
+            
+            CLAIM_ID = res.data.id;
+            
+            document.getElementById('withdraw-card').classList.add('hidden');
+            document.getElementById('claim-card').classList.remove('hidden');
+            
+            notify('claim-notify', "Withdrawal ticket ready. Awaiting your wallet signature to claim...");
+            handleClaim();
+        } catch (e) {
+            document.getElementById('btn-web-withdraw').disabled = false;
+            const msg = e.response?.data?.detail || e.message || String(e);
+            notify('withdraw-notify', msg, true); 
         }
     }
 
@@ -418,13 +473,19 @@ DASHBOARD_HTML = r'''<!DOCTYPE html>
             document.getElementById('btn-unlink').classList.remove('hidden');
             document.getElementById('discord-balance-card').classList.remove('hidden');
             fetchBalance(); // Fetch latest balance if linked
-        } else {
-            setStatus("Not Linked ❌");
+        if (CLAIM_ID && CLAIM_ID.length > 5 && CLAIM_ID !== "{{CLAIM_ID}}") {
+            document.getElementById('claim-card').classList.remove('hidden');
+        } else if (existing && existing.length > 10 && existing !== "{{EXISTING_KEY_VAL}}") {
+            // Unhide withdraw card only if no pending claim
+            document.getElementById('withdraw-card').classList.remove('hidden');
         }
     };
     
     document.getElementById('btn-link').onclick = handleLink;
     document.getElementById('btn-claim-action').onclick = handleClaim;
+    const webWithdrawBtn = document.getElementById('btn-web-withdraw');
+    if (webWithdrawBtn) webWithdrawBtn.onclick = handleWebWithdraw;
+    
     document.getElementById('btn-unlink').onclick = async () => {
         if (!confirm("Unlink wallet?")) return;
         await axios.post(`${API_BASE}/api/unlink`, { token: TOKEN });

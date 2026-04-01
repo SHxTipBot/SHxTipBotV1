@@ -6,6 +6,9 @@ Deploy: 2026-03-29 (Stabilization Fix)
 
 import os
 import logging
+import time
+import secrets
+from pydantic import BaseModel
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, HTTPException
@@ -63,7 +66,9 @@ STARTUP_ERROR = None
 async def startup():
     global STARTUP_ERROR
     try:
-        await db.init_db()
+        # Prevent Neon DB wake-up timeouts on Vercel cold starts by skipping DDL
+        if not os.getenv("VERCEL") == "1":
+            await db.init_db()
         await stellar.get_session()
         logger.info("Web application started.")
     except Exception as e:
@@ -380,6 +385,75 @@ async def api_cancel_withdrawal(withdrawal_id: str, request: Request):
     logger.info(f"WITHDRAWAL CANCELLED | ID: {withdrawal_id} | User: {withdrawal['discord_id']}")
     return {"success": True, "message": "Withdrawal cancelled. SHx refunded to Discord."}
 
+
+class WebWithdrawRequest(BaseModel):
+    token: str
+    amount: str
+
+@app.post("/api/web-withdraw")
+async def api_web_withdraw(req: WebWithdrawRequest):
+    """
+    Direct web-based withdrawal. Validates token, internal balance, and HOUSE ACCOUNT allowance.
+    Returns the generated withdrawal ID, nonce, signature, and amount.
+    """
+    token = req.token.strip()
+    discord_id = await db.validate_link_token(token)
+    if not discord_id:
+        raise HTTPException(400, "Invalid or expired session. Please re-link via Discord.")
+
+    destination = await db.get_user_stellar_key(discord_id)
+    if not destination:
+        raise HTTPException(400, "No linked stellar wallet found.")
+
+    try:
+        amount_f = float(req.amount)
+        if amount_f <= 0:
+            raise ValueError()
+    except ValueError:
+        raise HTTPException(400, "Invalid withdrawal amount.")
+
+    current_bal = await db.get_internal_balance(discord_id)
+    if amount_f > current_bal:
+        raise HTTPException(400, f"Insufficient internal balance. You have {current_bal:,.2f} SHx.")
+
+    # Check House Account Liquidity
+    house_bal = stellar.get_shx_balance(stellar.HOUSE_ACCOUNT_PUBLIC)
+    if house_bal < amount_f:
+        logger.error(f"HOUSE ACCOUNT LIQUIDITY LOW. Need {amount_f}, have {house_bal}")
+        raise HTTPException(400, "The bot's House Account does not have enough on-chain liquidity. Please notify an admin.")
+
+    # Check House Account Allowance (Auto-Approve if needed)
+    allowance = stellar.check_shx_allowance(stellar.HOUSE_ACCOUNT_PUBLIC, stellar.SOROBAN_CONTRACT_ID)
+    if allowance < amount_f:
+        logger.warning(f"HOUSE ACCOUNT ALLOWANCE LOW ({allowance}). Auto-approving...")
+        approve_res = stellar.approve_shx(stellar.HOUSE_ACCOUNT_SECRET, stellar.SOROBAN_CONTRACT_ID, 1000000.0)
+        if approve_res and approve_res.get("success"):
+            logger.info("Auto-approve successful.")
+        else:
+            logger.error(f"AUTO-APPROVE FAILED | {approve_res.get('error') if approve_res else 'Unknown'}")
+            raise HTTPException(400, "The bot's House Account has technical permission issues (low allowance). Please notify an admin.")
+
+    withdrawal_id = secrets.token_hex(16)
+    nonce = int(time.time() * 1000)
+
+    try:
+        signature = stellar.sign_withdrawal(destination, amount_f, nonce)
+    except Exception as e:
+        logger.error(f"Failed to sign withdrawal for {discord_id}: {e}")
+        raise HTTPException(500, "System error generating withdrawal ticket.")
+
+    # Atomic Balance Deduction
+    await db.add_deposit(discord_id, f"WD_PENDING_{withdrawal_id}", -amount_f)
+    await db.create_withdrawal(withdrawal_id, discord_id, destination, amount_f, nonce, signature)
+
+    return {
+        "success": True,
+        "id": withdrawal_id,
+        "amount": amount_f,
+        "nonce": nonce,
+        "signature": signature,
+        "destination": destination
+    }
 
 # ── Health Check ──────────────────────────────────────────────────────────────
 
