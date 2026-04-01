@@ -12,16 +12,21 @@ try:
     # Import app using absolute import (NOT relative - Vercel doesn't support it)
     from web import app
 except Exception as e:
-    import logging
-    from fastapi import FastAPI, Request
-    from fastapi.responses import HTMLResponse
-    
-    app = FastAPI()
     error_msg = traceback.format_exc()
     
-    @app.api_route("/{path_name:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"])
-    async def catch_all(request: Request, path_name: str):
-        return HTMLResponse(content=f"<h1>Startup Error</h1><pre>{error_msg}</pre>", status_code=500)
+    async def app(scope, receive, send):
+        assert scope['type'] == 'http'
+        await send({
+            'type': 'http.response.start',
+            'status': 500,
+            'headers': [
+                [b'content-type', b'text/html'],
+            ]
+        })
+        await send({
+            'type': 'http.response.body',
+            'body': f"<h1>Startup Error</h1><pre>{error_msg}</pre>".encode('utf-8')
+        })
 
 # Export for Vercel
 app = app
