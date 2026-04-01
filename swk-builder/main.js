@@ -16,11 +16,15 @@ import {
   defaultModules 
 } from '@creit-tech/stellar-wallets-kit/modules/utils';
 
+// Import WalletConnect specific module to expose it for manual configuration
+import { WalletConnectModule } from '@creit-tech/stellar-wallets-kit/modules/wallet-connect';
+
 // 4. Export them all for the UMD bundle (becomes window.StellarKit)
 export {
   StellarWalletsKit,
   KitEventType,
   SwkAppDarkTheme,
   SwkAppLightTheme,
-  defaultModules
+  defaultModules,
+  WalletConnectModule
 };

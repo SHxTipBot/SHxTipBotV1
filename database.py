@@ -35,9 +35,13 @@ async def get_pool() -> asyncpg.Pool:
         
         # ── Sanitize URL for asyncpg ──
         # asyncpg does not support 'sslmode', 'channel_binding', etc. in the connection string.
+        requires_ssl = False
         try:
             parsed = urlparse(raw_url)
             query = parse_qs(parsed.query)
+            
+            if 'sslmode' in query and any('require' in v.lower() for v in query['sslmode']):
+                requires_ssl = True
             
             # Remove unsupported fields
             unsupported = ['sslmode', 'channel_binding']
@@ -50,11 +54,14 @@ async def get_pool() -> asyncpg.Pool:
         except Exception as e:
             logger.warning(f"URL sanitization failed (using raw): {e}")
             url = raw_url
-
+            if 'sslmode=require' in raw_url.lower():
+                requires_ssl = True
+                
         try:
             # statement_cache_size=0 prevents "cached statement plan is invalid" errors
             # after ALTER TABLE migrations run
-            _pool = await asyncpg.create_pool(url, statement_cache_size=0)
+            ssl_ctx = 'require' if requires_ssl else None
+            _pool = await asyncpg.create_pool(url, statement_cache_size=0, ssl=ssl_ctx)
             logger.info("Database connection pool established.")
         except Exception as e:
             logger.error(f"Failed to establish database connection pool: {e}")

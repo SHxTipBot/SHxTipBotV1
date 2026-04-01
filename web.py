@@ -151,6 +151,15 @@ async def register_page(token: str = "", claim_id: str = ""):
     html = html.replace("{{SHX_SAC_CONTRACT_ID}}", stellar.SHX_SAC_CONTRACT_ID.strip())
     html = html.replace("{{SOROBAN_CONTRACT_ID}}", stellar.SOROBAN_CONTRACT_ID.strip())
     html = html.replace("{{IS_AUTO_DETECTED}}", is_auto_detected)
+    
+    # WalletConnect Project ID injection
+    wc_project_id = os.getenv("WC_PROJECT_ID", "1da02e75fe8efd7560248dc15804b13c")
+    html = html.replace("{{WC_PROJECT_ID}}", wc_project_id.strip())
+    
+    # Cache busting version
+    html = html.replace("{{APP_VERSION}}", "1.0.2")
+    
+    logger.info(f"DASHBOARD | Serving dashboard for {discord_id} | WC_ID: {wc_project_id[:8]}...")
 
     return HTMLResponse(html)
 
@@ -188,9 +197,9 @@ async def api_link(request: Request):
     if not signature_xdr:
          raise HTTPException(400, "Verification signature required. Please sign the transaction in your wallet.")
     
-    is_valid = stellar.verify_link_signature_xdr(public_key, signature_xdr, str(discord_id))
+    is_valid, error_msg = stellar.verify_link_signature_xdr(public_key, signature_xdr, str(discord_id))
     if not is_valid:
-        raise HTTPException(400, "Invalid verification signature. Ensure you sign the transaction with the correct wallet.")
+        raise HTTPException(400, f"Invalid verification signature: {error_msg}. Ensure you sign the transaction with the correct wallet.")
 
     # 2. Link the user
     try:

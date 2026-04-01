@@ -1,1 +1,435 @@
-DASHBOARD_HTML = '<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n  <title>SHx Tip Bot | Web Dashboard</title>\n  \n  <link rel="preconnect" href="https://fonts.googleapis.com">\n  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">\n  \n  <style>\n    :root {\n      --bg: #030712;\n      --card-bg: rgba(17, 24, 39, 0.7);\n      --border: rgba(59, 130, 246, 0.2);\n      --border-hover: rgba(59, 130, 246, 0.5);\n      --text: #f9fafb;\n      --text-muted: #9ca3af;\n      --accent: #3b82f6;\n      --error: #ef4444;\n      --success: #10b981;\n    }\n\n    * { margin: 0; padding: 0; box-sizing: border-box; }\n    body {\n      background-color: var(--bg);\n      color: var(--text);\n      font-family: \'Inter\', sans-serif;\n      min-height: 100vh;\n      display: flex;\n      flex-direction: column;\n    }\n\n    .background-castle {\n      position: fixed;\n      top: 0; left: 0; width: 100%; height: 100%;\n      background-image: url(\'/stronghold_logo_watermark.svg\');\n      background-repeat: no-repeat;\n      background-position: center;\n      background-size: 60%;\n      opacity: 0.15;\n      z-index: -1;\n      filter: blur(2px);\n    }\n\n    .container {\n      max-width: 1000px;\n      margin: 0 auto;\n      padding: 1.5rem;\n      flex: 1;\n    }\n\n    nav {\n      display: flex;\n      justify-content: space-between;\n      align-items: center;\n      padding: 1rem 0;\n      margin-bottom: 2rem;\n    }\n\n    .logo {\n      display: flex;\n      align-items: center;\n      gap: 0.75rem;\n      font-family: \'Outfit\', sans-serif;\n      font-weight: 700;\n      font-size: 1.5rem;\n      color: #3b82f6;\n    }\n\n    .logo img { width: 32px; height: 32px; }\n\n    .hero {\n      text-align: center;\n      padding: 3rem 0;\n      margin-bottom: 2rem;\n    }\n\n    .hero h1 {\n      font-family: \'Outfit\', sans-serif;\n      font-size: 3rem;\n      margin-bottom: 0.5rem;\n      background: linear-gradient(135deg, #fff 0%, #3b82f6 100%);\n      -webkit-background-clip: text;\n      background-clip: text;\n      -webkit-text-fill-color: transparent;\n    }\n\n    .hero p { color: var(--text-muted); }\n\n    .card {\n      background: var(--card-bg);\n      -webkit-backdrop-filter: blur(12px);\n      backdrop-filter: blur(12px);\n      border: 1px solid var(--border);\n      border-radius: 1.5rem;\n      padding: 2rem;\n      margin-bottom: 1.5rem;\n      transition: border-color 0.3s ease;\n    }\n\n    .card h2 { margin-bottom: 0.5rem; font-family: \'Outfit\'; }\n\n    .btn {\n      display: inline-flex;\n      align-items: center;\n      gap: 0.5rem;\n      padding: 0.875rem 1.75rem;\n      border-radius: 0.75rem;\n      font-weight: 600;\n      font-size: 1rem;\n      cursor: pointer;\n      border: none;\n      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);\n      color: white;\n    }\n\n    .btn-primary { background-color: var(--accent); box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3); }\n    .btn-primary:hover { background-color: #2563eb; transform: translateY(-1px); }\n    .btn-secondary { background: rgba(59, 130, 246, 0.1); color: var(--accent); border: 1px solid var(--border); }\n    .btn-secondary:hover { border-color: var(--accent); }\n    .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }\n\n    /* Utility Helpers */\n    .w-full { width: 100%; }\n    .text-center { text-align: center; }\n    .text-right { text-align: right; }\n    .justify-center { justify-content: center; }\n    .mt-4 { margin-top: 1rem; }\n    .mb-6 { margin-bottom: 1.5rem; }\n    .text-sm { font-size: 0.85rem; }\n    .text-xs { font-size: 0.8rem; }\n    .text-bold { font-weight: 600; }\n    .text-accent { color: var(--accent); }\n    .text-error { color: var(--error); }\n    .text-success { color: var(--success); }\n    .text-white { color: #fff; }\n    .bg-success { background: var(--success) !important; }\n    .bg-dark-overlay { background: rgba(0,0,0,0.3); padding: 1rem; border-radius: 0.75rem; border: 1px solid var(--border); }\n    .break-word { overflow-wrap: break-word; display: block; }\n\n    .status {\n      padding: 1rem; border-radius: 0.75rem; margin-bottom: 1.5rem; font-size: 0.95rem; font-weight: 500;\n    }\n    .status.success { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }\n    .status.error { background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }\n\n    .hidden { display: none !important; }\n\n    /* SWK Button Wrapper Styling */\n    #swk-button-wrapper {\n      display: inline-block;\n    }\n  </style>\n</head>\n<body>\n  <div class="background-castle"></div>\n\n  <div class="container">\n    <nav>\n      <div class="logo">\n        <img src="/stronghold_logo_watermark.svg" alt="SHx">\n        <span>SHx Tip Bot</span>\n      </div>\n      <div>\n        <!-- SWK renders its own connect/disconnect button here -->\n        <div id="swk-button-wrapper"></div>\n        <div id="wallet-display" class="hidden text-right">\n          <code id="address-short" class="text-accent text-bold">G...</code>\n        </div>\n      </div>\n    </nav>\n\n    <div class="hero">\n      <h1>Community Portal</h1>\n      <p>Securely link your Discord and manage claims.</p>\n    </div>\n\n    <!-- Link Card -->\n    <div class="card">\n      <h2>Discord Status</h2>\n      <p id="link-status-text" class="mb-6 text-muted">Checking status...</p>\n      <div id="link-notify" class="status hidden"></div>\n      <button id="btn-link" class="btn btn-primary w-full justify-center" disabled>Verify & Link Wallet</button>\n      <p id="btn-unlink" class="text-error mt-4 text-center text-sm hidden">Unlink Wallet</p>\n    </div>\n\n    <!-- Claim Card -->\n    <div id="claim-card" class="card hidden">\n      <h2>Pending Withdrawal</h2>\n      <div id="claim-notify" class="status hidden"></div>\n      <button id="btn-claim-action" class="btn btn-primary bg-success w-full justify-center" disabled>Claim SHx Rewards</button>\n    </div>\n\n    <!-- Info Card -->\n    <div class="card">\n      <h2>House Account</h2>\n      <div class="bg-dark-overlay">\n        <p class="text-xs text-muted">Address:</p>\n        <code id="house-addr" class="text-success break-word">{{HOUSE_ACCOUNT}}</code>\n        <p class="text-xs text-muted mt-4">Available Memo:</p>\n        <code id="memo-val" class="text-white">{{MEMO}}</code>\n      </div>\n    </div>\n  </div>\n\n  <!-- Load Stellar SDK first (SWK needs it externalized) -->\n  <script src="/stellar-sdk.js"></script>\n  <script src="/axios.js"></script>\n  <!-- Stellar Wallets Kit UMD Bundle (includes Freighter, Albedo, xBull, LOBSTR/WalletConnect, Hana, etc.) -->\n  <script src="/wallet-kit-bundle.umd.js"></script>\n\n  <script>\n    // ── Template Variables (injected by Python backend) ──\n    const urlParams = new URLSearchParams(window.location.search);\n    const TOKEN = urlParams.get(\'token\') || "{{TOKEN}}";\n    const CLAIM_ID = urlParams.get(\'claim_id\') || "{{CLAIM_ID}}";\n    const NETWORK = "{{NETWORK}}";\n    const NETWORK_PASSPHRASE = (NETWORK === \'mainnet\' || NETWORK === \'public\') ? \'Public Global Stellar Network ; September 2015\' : \'Test SDF Network ; September 2015\';\n    \n    // Global Error Catcher\n    window.onerror = function(msg, url, line) {\n        console.error("CRITICAL ERROR:", msg, "at", line);\n        return false;\n    };\n    const SOROBAN_CONTRACT_ID = "{{SOROBAN_CONTRACT_ID}}";\n    const DISCORD_ID = "{{DISCORD_ID}}";\n    \n    const API_BASE = window.location.origin;\n    const HORIZON_URL = (NETWORK === \'mainnet\' || NETWORK === \'public\') ? \'https://horizon.stellar.org\' : \'https://horizon-testnet.stellar.org\';\n    const SOROBAN_URL = (NETWORK === \'mainnet\' || NETWORK === \'public\') ? \'https://soroban.stellar.org\' : \'https://soroban-testnet.stellar.org\';\n\n    let userAddress = null;\n\n    // ── UI HELPERS ──\n    const updateUI = (address) => {\n      userAddress = address;\n      if (address) {\n        document.getElementById(\'wallet-display\').classList.remove(\'hidden\');\n        document.getElementById(\'address-short\').innerText = `${address.substring(0,5)}...${address.substring(51)}`;\n        document.getElementById(\'btn-link\').disabled = false;\n        const claimBtn = document.getElementById(\'btn-claim-action\');\n        if (claimBtn) claimBtn.disabled = false;\n      } else {\n        document.getElementById(\'wallet-display\').classList.add(\'hidden\');\n        document.getElementById(\'address-short\').innerText = \'G...\';\n        document.getElementById(\'btn-link\').disabled = true;\n        const claimBtn = document.getElementById(\'btn-claim-action\');\n        if (claimBtn) claimBtn.disabled = true;\n      }\n    };\n\n    const notify = (id, msg, isError = false) => {\n        const div = document.getElementById(id);\n        div.classList.remove(\'hidden\', \'success\', \'error\');\n        div.classList.add(isError ? \'error\' : \'success\');\n        div.innerText = msg;\n    };\n\n    // ── STELLAR WALLETS KIT INITIALIZATION ──\n    const { StellarWalletsKit, KitEventType, SwkAppDarkTheme, defaultModules } = window.StellarKit;\n\n    // Initialize SWK with dark theme and all default wallet modules\n    // defaultModules() includes: Freighter, Albedo, xBull, LOBSTR (WalletConnect), Hana, Hot Wallet, etc.\n    StellarWalletsKit.init({\n      theme: SwkAppDarkTheme,\n      modules: defaultModules(),\n    });\n\n    // Create the built-in wallet connect button\n    const buttonWrapper = document.getElementById(\'swk-button-wrapper\');\n    StellarWalletsKit.createButton(buttonWrapper);\n\n    // Listen for wallet state changes (connect/disconnect)\n    StellarWalletsKit.on(KitEventType.STATE_UPDATED, (event) => {\n      const address = event.payload.address;\n      updateUI(address || null);\n    });\n\n    // ── APP LOGIC ──\n    async function handleLink() {\n        if (!userAddress) return;\n        try {\n            notify(\'link-notify\', "Signing Link Request...");\n            const server = new window.StellarSdk.Horizon.Server(HORIZON_URL);\n            const account = await server.loadAccount(userAddress);\n            const tx = new window.StellarSdk.TransactionBuilder(account, { fee: "1000", networkPassphrase: NETWORK_PASSPHRASE })\n                .addOperation(window.StellarSdk.Operation.manageData({ name: "Link Discord", value: DISCORD_ID }))\n                .setTimeout(300).build();\n\n            // Use SWK\'s unified signing — works with ANY connected wallet\n            notify(\'link-notify\', "Awaiting wallet signature...");\n            const { signedTxXdr } = await StellarWalletsKit.signTransaction(tx.toXDR(), {\n                networkPassphrase: NETWORK_PASSPHRASE,\n                address: userAddress,\n            });\n\n            notify(\'link-notify\', "Verifying on server...");\n            const res = await axios.post(`${API_BASE}/api/link`, {\n                token: TOKEN, public_key: userAddress, signature_xdr: signedTxXdr, is_approved: true\n            });\n            if (res.data.success) {\n                notify(\'link-notify\', "✅ Wallet linked successfully!");\n                document.getElementById(\'link-status-text\').innerText = "Linked ✅";\n                document.getElementById(\'btn-unlink\').classList.remove(\'hidden\');\n            }\n        } catch (e) { notify(\'link-notify\', e.message || String(e), true); }\n    }\n\n    async function handleClaim() {\n        if (!userAddress) return;\n        try {\n            notify(\'claim-notify\', "Preparing withdrawal...");\n            const res = await axios.get(`${API_BASE}/api/withdrawal/${CLAIM_ID}`);\n            if (!res.data.success) throw new Error(res.data.message);\n            const { amount, nonce, signature } = res.data;\n\n            const server = new window.StellarSdk.Horizon.Server(HORIZON_URL);\n            const sorobanServer = new window.StellarSdk.rpc.Server(SOROBAN_URL, { allowHttp: true });\n            const account = await server.loadAccount(userAddress);\n            \n            const sigBytes = Uint8Array.from(atob(signature), c => c.charCodeAt(0));\n            const amountStroops = BigInt(Math.round(amount * 10000000));\n\n            const tx = new window.StellarSdk.TransactionBuilder(account, { fee: "100000", networkPassphrase: NETWORK_PASSPHRASE })\n                .addOperation(window.StellarSdk.Operation.invokeContractFunction({\n                    contractId: SOROBAN_CONTRACT_ID,\n                    function: "claim_withdrawal",\n                    args: [\n                        window.StellarSdk.nativeToScVal(userAddress, { type: \'address\' }),\n                        window.StellarSdk.nativeToScVal(amountStroops, { type: \'i128\' }),\n                        window.StellarSdk.nativeToScVal(BigInt(nonce), { type: \'u64\' }),\n                        window.StellarSdk.xdr.ScVal.scvBytes(sigBytes)\n                    ]\n                })).setTimeout(300).build();\n\n            notify(\'claim-notify\', "Simulating Transaction...");\n            const sim = await sorobanServer.simulateTransaction(tx);\n            const preparedTx = await sorobanServer.prepareTransaction(tx, sim);\n\n            // Use SWK\'s unified signing for the claim transaction too\n            notify(\'claim-notify\', "Awaiting wallet signature...");\n            const { signedTxXdr } = await StellarWalletsKit.signTransaction(preparedTx.toXDR(), {\n                networkPassphrase: NETWORK_PASSPHRASE,\n                address: userAddress,\n            });\n\n            notify(\'claim-notify\', "Submitting to network...");\n            const resp = await sorobanServer.sendTransaction(window.StellarSdk.TransactionBuilder.fromXDR(signedTxXdr, NETWORK_PASSPHRASE));\n            notify(\'claim-notify\', "✅ Claim Successful! Tokens arriving soon.");\n            document.getElementById(\'btn-claim-action\').classList.add(\'hidden\');\n        } catch (e) { notify(\'claim-notify\', e.message || String(e), true); }\n    }\n\n    // Startup check\n    window.onload = () => {\n        if (CLAIM_ID && CLAIM_ID.length > 5 && CLAIM_ID !== "{{CLAIM_ID}}") document.getElementById(\'claim-card\').classList.remove(\'hidden\');\n        const existing = "{{EXISTING_KEY_VAL}}";\n        if (existing && existing.length > 10 && existing !== "{{EXISTING_KEY_VAL}}") {\n            document.getElementById(\'link-status-text\').innerText = "Linked ✅";\n            document.getElementById(\'btn-unlink\').classList.remove(\'hidden\');\n        }\n    };\n    \n    document.getElementById(\'btn-link\').onclick = handleLink;\n    document.getElementById(\'btn-claim-action\').onclick = handleClaim;\n    document.getElementById(\'btn-unlink\').onclick = async () => {\n        if (!confirm("Unlink wallet?")) return;\n        await axios.post(`${API_BASE}/api/unlink`, { token: TOKEN });\n        location.reload();\n    };\n  </script>\n</body>\n</html>'
+DASHBOARD_HTML = r'''<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SHx Tip Bot | Web Dashboard</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  
+  <style>
+    :root {
+      --bg: #030712;
+      --card-bg: rgba(17, 24, 39, 0.7);
+      --border: rgba(59, 130, 246, 0.2);
+      --border-hover: rgba(59, 130, 246, 0.5);
+      --text: #f9fafb;
+      --text-muted: #9ca3af;
+      --accent: #3b82f6;
+      --error: #ef4444;
+      --success: #10b981;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .background-castle {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background-image: url('/stronghold_logo_watermark.svg');
+      background-repeat: no-repeat;
+      background-position: center;
+      background-size: 60%;
+      opacity: 0.15;
+      z-index: -1;
+      filter: blur(2px);
+    }
+
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 1.5rem;
+      flex: 1;
+    }
+
+    nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 0;
+      margin-bottom: 2rem;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-family: 'Outfit', sans-serif;
+      font-weight: 700;
+      font-size: 1.5rem;
+      color: #3b82f6;
+    }
+
+    .logo img { width: 32px; height: 32px; }
+
+    .hero {
+      text-align: center;
+      padding: 3rem 0;
+      margin-bottom: 2rem;
+    }
+
+    .hero h1 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 3rem;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(135deg, #fff 0%, #3b82f6 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero p { color: var(--text-muted); }
+
+    .card {
+      background: var(--card-bg);
+      -webkit-backdrop-filter: blur(12px);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border);
+      border-radius: 1.5rem;
+      padding: 2rem;
+      margin-bottom: 1.5rem;
+      transition: border-color 0.3s ease;
+    }
+
+    .card h2 { margin-bottom: 0.5rem; font-family: 'Outfit'; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.875rem 1.75rem;
+      border-radius: 0.75rem;
+      font-weight: 600;
+      font-size: 1rem;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      color: white;
+    }
+
+    .btn-primary { background-color: var(--accent); box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3); }
+    .btn-primary:hover { background-color: #2563eb; transform: translateY(-1px); }
+    .btn-secondary { background: rgba(59, 130, 246, 0.1); color: var(--accent); border: 1px solid var(--border); }
+    .btn-secondary:hover { border-color: var(--accent); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+    /* Utility Helpers */
+    .w-full { width: 100%; }
+    .text-center { text-align: center; }
+    .text-right { text-align: right; }
+    .justify-center { justify-content: center; }
+    .mt-4 { margin-top: 1rem; }
+    .mb-6 { margin-bottom: 1.5rem; }
+    .text-sm { font-size: 0.85rem; }
+    .text-xs { font-size: 0.8rem; }
+    .text-bold { font-weight: 600; }
+    .text-accent { color: var(--accent); }
+    .text-error { color: var(--error); }
+    .text-success { color: var(--success); }
+    .text-white { color: #fff; }
+    .bg-success { background: var(--success) !important; }
+    .bg-dark-overlay { background: rgba(0,0,0,0.3); padding: 1rem; border-radius: 0.75rem; border: 1px solid var(--border); }
+    .break-word { overflow-wrap: break-word; display: block; }
+
+    .status {
+      padding: 1rem; border-radius: 0.75rem; margin-bottom: 1.5rem; font-size: 0.95rem; font-weight: 500;
+    }
+    .status.success { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }
+    .status.error { background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
+
+    .hidden { display: none !important; }
+
+    #swk-button-wrapper {
+      display: inline-block;
+    }
+  </style>
+</head>
+<body>
+  <div class="background-castle"></div>
+
+  <div class="container">
+    <nav>
+      <div class="logo">
+        <img src="/stronghold_logo_watermark.svg" alt="SHx">
+        <span>SHx Tip Bot</span>
+      </div>
+      <div>
+        <div id="swk-button-wrapper"></div>
+        <div id="wallet-display" class="hidden text-right">
+          <code id="address-short" class="text-accent text-bold">G...</code>
+        </div>
+      </div>
+    </nav>
+
+    <div class="hero">
+      <h1>Community Portal</h1>
+      <p>Securely link your Discord and manage claims.</p>
+    </div>
+
+    <!-- Link Card -->
+    <div class="card">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
+        <div>
+          <h2>Discord Status</h2>
+          <p id="link-status-text" class="text-muted">Syncing...</p>
+        </div>
+        <div id="discord-balance-card" class="text-right hidden">
+          <p class="text-xs text-muted">Discord Wallet</p>
+          <p class="text-xl text-bold text-accent"><span id="internal-balance-val">{{INTERNAL_BALANCE}}</span> <span class="text-xs">SHx</span></p>
+        </div>
+      </div>
+      
+      <p id="reset-session-link" class="mb-4 text-xs text-accent" style="cursor:pointer; text-decoration: underline;" onclick="resetSession()">Trouble connecting? Reset Session</p>
+      <div id="link-notify" class="status hidden"></div>
+      <button id="btn-link" class="btn btn-primary w-full justify-center" disabled>Verify & Link Wallet</button>
+      <p id="btn-unlink" class="text-error mt-4 text-center text-sm hidden">Unlink Wallet</p>
+    </div>
+
+    <!-- Claim Card -->
+    <div id="claim-card" class="card hidden">
+      <h2>Pending Withdrawal</h2>
+      <div id="claim-notify" class="status hidden"></div>
+      <button id="btn-claim-action" class="btn btn-primary bg-success w-full justify-center" disabled>Claim SHx Rewards</button>
+    </div>
+
+  </div>
+
+  <script src="/stellar-sdk.js?v={{APP_VERSION}}"></script>
+  <script src="/axios.js?v={{APP_VERSION}}"></script>
+  <script src="/wallet-kit-bundle.umd.js?v={{APP_VERSION}}"></script>
+
+  <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const TOKEN = urlParams.get('token') || "{{TOKEN}}";
+    const CLAIM_ID = urlParams.get('claim_id') || "{{CLAIM_ID}}";
+    const NETWORK = "{{NETWORK}}";
+    const WC_PROJECT_ID = "{{WC_PROJECT_ID}}";
+    const APP_VERSION = "{{APP_VERSION}}";
+    const NETWORK_PASSPHRASE = (NETWORK === 'mainnet' || NETWORK === 'public') ? 'Public Global Stellar Network ; September 2015' : 'Test SDF Network ; September 2015';
+    
+    // Initial balance from template injection
+    let currentBalance = "{{INTERNAL_BALANCE}}";
+
+    const setStatus = (msg, isError = false) => {
+        const el = document.getElementById('link-status-text');
+        if (!el) return;
+        el.innerText = (isError ? "❌ " : "") + msg;
+        el.className = isError ? "text-error" : "text-muted";
+    };
+
+    const fetchBalance = async () => {
+        try {
+            const res = await axios.get(`${API_BASE}/api/balance?token=${TOKEN}&claim_id=${CLAIM_ID}`);
+            if (res.data.success) {
+                currentBalance = res.data.balance;
+                const el = document.getElementById('internal-balance-val');
+                if (el) el.innerText = currentBalance;
+            }
+        } catch (e) {
+            console.error("Failed to fetch balance:", e);
+        }
+    };
+
+    const resetSession = () => {
+        if (!confirm("This will clear your local wallet connection cache and reload the page. Continue?")) return;
+        setStatus("Clearing session...");
+        for (let key in localStorage) {
+            if (key.includes('wc@2') || key.includes('walletconnect')) {
+                localStorage.removeItem(key);
+            }
+        }
+        location.reload();
+    };
+
+    window.onerror = (msg) => setStatus("Error: " + msg, true);
+    window.onunhandledrejection = (event) => setStatus("Async Error: " + (event.reason?.message || event.reason || "Unknown"), true);
+
+    const SOROBAN_CONTRACT_ID = "{{SOROBAN_CONTRACT_ID}}";
+    const DISCORD_ID = "{{DISCORD_ID}}";
+    const API_BASE = window.location.origin;
+    const HORIZON_URL = (NETWORK === 'mainnet' || NETWORK === 'public') ? 'https://horizon.stellar.org' : 'https://horizon-testnet.stellar.org';
+    const SOROBAN_URL = (NETWORK === 'mainnet' || NETWORK === 'public') ? 'https://soroban.stellar.org' : 'https://soroban-testnet.stellar.org';
+
+    let userAddress = null;
+    let kitInitialized = false;
+
+    const updateUI = (address) => {
+      userAddress = address;
+      if (address) {
+        document.getElementById('wallet-display').classList.remove('hidden');
+        document.getElementById('address-short').innerText = `${address.substring(0,5)}...${address.substring(51)}`;
+        document.getElementById('btn-link').disabled = false;
+        const claimBtn = document.getElementById('btn-claim-action');
+        if (claimBtn) claimBtn.disabled = false;
+        setStatus("Connected ✅");
+      } else {
+        document.getElementById('wallet-display').classList.add('hidden');
+        document.getElementById('address-short').innerText = 'G...';
+        document.getElementById('btn-link').disabled = true;
+        const claimBtn = document.getElementById('btn-claim-action');
+        if (claimBtn) claimBtn.disabled = true;
+      }
+    };
+
+    const notify = (id, msg, isError = false) => {
+        const div = document.getElementById(id);
+        div.classList.remove('hidden', 'success', 'error');
+        div.classList.add(isError ? 'error' : 'success');
+        div.innerText = msg;
+    };
+
+    try {
+        if (!kitInitialized) {
+            const { StellarWalletsKit, KitEventType, SwkAppDarkTheme, defaultModules, WalletConnectModule } = window.StellarKit;
+            const modules = defaultModules();
+            
+            if (WalletConnectModule && WC_PROJECT_ID) {
+                modules.push(new WalletConnectModule({
+                    projectId: WC_PROJECT_ID,
+                    projectID: WC_PROJECT_ID, 
+                    network: NETWORK,
+                    metadata: {
+                        name: "SHx Tip Bot",
+                        description: "Securely link your Discord account",
+                        url: window.location.origin,
+                        icons: ["https://shxtipbotv1.vercel.app/stronghold_logo_watermark.svg"]
+                    }
+                }));
+            }
+
+            // Initialize SWK using the static init method (standard for this UMD bundle)
+            StellarWalletsKit.init({
+                theme: SwkAppDarkTheme,
+                modules: modules,
+                network: NETWORK === 'mainnet' ? 'public' : 'testnet'
+            });
+
+            // Create the built-in wallet connect button
+            const buttonWrapper = document.getElementById('swk-button-wrapper');
+            StellarWalletsKit.createButton(buttonWrapper);
+
+            // Listen for wallet state changes
+            StellarWalletsKit.on(KitEventType.STATE_UPDATED, (event) => {
+                updateUI(event.payload.address || null);
+            });
+            
+            kitInitialized = true;
+        }
+    } catch (err) {
+        console.error("SWK INIT FAILED:", err);
+        setStatus("Connection Error: " + (err.message || "Kit not found"), true);
+    }
+
+    // ── APP LOGIC ──
+    async function handleLink() {
+        if (!userAddress) return;
+        try {
+            notify('link-notify', "Signing Link Request...");
+            const server = new window.StellarSdk.Horizon.Server(HORIZON_URL);
+            const account = await server.loadAccount(userAddress);
+            const tx = new window.StellarSdk.TransactionBuilder(account, { fee: "1000", networkPassphrase: NETWORK_PASSPHRASE })
+                .addOperation(window.StellarSdk.Operation.manageData({ name: "link_discord", value: DISCORD_ID }))
+                .setTimeout(300).build();
+
+            notify('link-notify', "Awaiting wallet signature...");
+            const { signedTxXdr } = await window.StellarKit.StellarWalletsKit.signTransaction(tx.toXDR(), {
+                networkPassphrase: NETWORK_PASSPHRASE,
+                address: userAddress,
+            });
+
+            notify('link-notify', "Verifying on server...");
+            const res = await axios.post(`${API_BASE}/api/link`, {
+                token: TOKEN, public_key: userAddress, signature_xdr: signedTxXdr, is_approved: true
+            });
+            if (res.data.success) {
+                notify('link-notify', "✅ Wallet linked successfully!");
+                setStatus("Linked ✅");
+                document.getElementById('btn-unlink').classList.remove('hidden');
+                document.getElementById('discord-balance-card').classList.remove('hidden');
+                fetchBalance(); // Refresh balance after link
+            }
+        } catch (e) {
+            const msg = e.response?.data?.detail || e.message || String(e);
+            notify('link-notify', msg, true); 
+        }
+    }
+
+    async function handleClaim() {
+        if (!userAddress) return;
+        try {
+            notify('claim-notify', "Preparing withdrawal...");
+            const res = await axios.get(`${API_BASE}/api/withdrawal/${CLAIM_ID}`);
+            if (!res.data.success) throw new Error(res.data.message);
+            const { amount, nonce, signature } = res.data;
+
+            const server = new window.StellarSdk.Horizon.Server(HORIZON_URL);
+            const sorobanServer = new window.StellarSdk.rpc.Server(SOROBAN_URL, { allowHttp: true });
+            const account = await server.loadAccount(userAddress);
+            
+            const sigBytes = Uint8Array.from(atob(signature), c => c.charCodeAt(0));
+            const amountStroops = BigInt(Math.round(amount * 10000000));
+
+            const tx = new window.StellarSdk.TransactionBuilder(account, { fee: "100000", networkPassphrase: NETWORK_PASSPHRASE })
+                .addOperation(window.StellarSdk.Operation.invokeContractFunction({
+                    contractId: SOROBAN_CONTRACT_ID,
+                    function: "claim_withdrawal",
+                    args: [
+                        window.StellarSdk.nativeToScVal(userAddress, { type: 'address' }),
+                        window.StellarSdk.nativeToScVal(amountStroops, { type: 'i128' }),
+                        window.StellarSdk.nativeToScVal(BigInt(nonce), { type: 'u64' }),
+                        window.StellarSdk.xdr.ScVal.scvBytes(sigBytes)
+                    ]
+                })).setTimeout(300).build();
+
+            notify('claim-notify', "Simulating Transaction...");
+            const sim = await sorobanServer.simulateTransaction(tx);
+            const preparedTx = await sorobanServer.prepareTransaction(tx, sim);
+
+            notify('claim-notify', "Awaiting wallet signature...");
+            const { signedTxXdr } = await window.StellarKit.StellarWalletsKit.signTransaction(preparedTx.toXDR(), {
+                networkPassphrase: NETWORK_PASSPHRASE,
+                address: userAddress,
+            });
+
+            notify('claim-notify', "Submitting to network...");
+            const resp = await sorobanServer.sendTransaction(window.StellarSdk.TransactionBuilder.fromXDR(signedTxXdr, NETWORK_PASSPHRASE));
+            notify('claim-notify', "✅ Claim Successful! Tokens arriving soon.");
+            document.getElementById('btn-claim-action').classList.add('hidden');
+        } catch (e) {
+            const msg = e.response?.data?.detail || e.message || String(e);
+            notify('claim-notify', msg, true); 
+        }
+    }
+
+    window.onload = () => {
+        if (CLAIM_ID && CLAIM_ID.length > 5 && CLAIM_ID !== "{{CLAIM_ID}}") document.getElementById('claim-card').classList.remove('hidden');
+        const existing = "{{EXISTING_KEY_VAL}}";
+        if (existing && existing.length > 10 && existing !== "{{EXISTING_KEY_VAL}}") {
+            setStatus("Linked ✅");
+            document.getElementById('btn-unlink').classList.remove('hidden');
+            document.getElementById('discord-balance-card').classList.remove('hidden');
+            fetchBalance(); // Fetch latest balance if linked
+        } else {
+            setStatus("Not Linked ❌");
+        }
+    };
+    
+    document.getElementById('btn-link').onclick = handleLink;
+    document.getElementById('btn-claim-action').onclick = handleClaim;
+    document.getElementById('btn-unlink').onclick = async () => {
+        if (!confirm("Unlink wallet?")) return;
+        await axios.post(`${API_BASE}/api/unlink`, { token: TOKEN });
+        location.reload();
+    };
+  </script>
+</body>
+</html>'''

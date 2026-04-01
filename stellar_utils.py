@@ -121,8 +121,14 @@ async def check_shx_allowance(owner_public_key: str, spender_contract_id: str) -
         )
         if result is None:
             return 0.0
-        # Convert scval i128 to float
-        stroops = int(result.i128.lo) + (int(result.i128.hi) << 64)
+        # result is the xdr string from simulation
+        scval_obj = stellar_xdr.SCVal.from_xdr(result)
+        if scval_obj.type != stellar_xdr.SCValType.SCV_I128:
+            return 0.0
+            
+        # Accessing i128 parts: lo is Uint64, hi is Int64
+        parts = scval_obj.i128
+        stroops = int(parts.lo.uint64) + (int(parts.hi.int64) << 64)
         return stroops / 10_000_000
     except Exception as e:
         logger.error(f"Error checking allowance for {owner_public_key[:8]}: {e}")
@@ -833,43 +839,96 @@ def get_house_pubkey_hex() -> str:
     kp = Keypair.from_public_key(HOUSE_ACCOUNT_PUBLIC)
     return kp.raw_public_key().hex()
 
-def verify_link_signature_xdr(public_key: str, signature_xdr: str, expected_discord_id: str) -> bool:
+def verify_link_signature_xdr(public_key: str, signature_xdr: str, expected_discord_id: str) -> tuple[bool, str]:
     """
     Verify a signed transaction XDR for wallet linking.
-    The transaction must:
-    1. Have the provided public_key as the source account.
-    2. Contain a ManageData operation with key 'link_discord' and value 'expected_discord_id'.
-    3. Have a valid signature from the public_key.
+    Returns (success, error_message).
     """
     try:
-        from stellar_sdk import TransactionEnvelope, xdr as stellar_xdr
-        te = TransactionEnvelope.from_xdr(signature_xdr, NETWORK_PASSPHRASE)
+        from stellar_sdk import TransactionEnvelope, Keypair
+        logger.info(f"Verify Link | Starting verification for {public_key[:8]}...")
+        
+        # 1. Parse Transaction Envelope
+        try:
+            te = TransactionEnvelope.from_xdr(signature_xdr, NETWORK_PASSPHRASE)
+        except Exception as parse_err:
+            msg = f"XDR Parse Error: {parse_err}"
+            logger.error(f"Verify Link | {msg}")
+            return False, msg
+
         tx = te.transaction
         
-        # 1. Verify source account
-        if tx.source.public_key != public_key:
-            logger.warning(f"Verify Link | Source mismatch: {tx.source.public_key} != {public_key}")
-            return False
+        # 2. Verify source account (handle Muxed Addresses)
+        tx_source_raw = tx.source
+        # Normalize both keys to G-addresses for comparison
+        try:
+            source_key_g = Keypair.from_public_key(str(tx_source_raw.account_id if hasattr(tx_source_raw, "account_id") else tx_source_raw)).public_key
+            provided_key_g = Keypair.from_public_key(public_key).public_key
+        except Exception as key_err:
+            msg = f"Key normalization error: {key_err}"
+            logger.error(f"Verify Link | {msg}")
+            return False, msg
+
+        if source_key_g != provided_key_g:
+            msg = f"Source mismatch: {source_key_g[:8]} != {provided_key_g[:8]}"
+            logger.warning(f"Verify Link | {msg}")
+            return False, msg
             
-        # 2. Verify operations
-        found_op = False
-        for op in tx.operations:
-            # Check for ManageData operation
-            # In stellar_sdk Transaction, operations are higher level objects
+        # 3. Verify operations
+        found_link_op = False
+        operation_names = []
+        for op_idx, op in enumerate(tx.operations):
+            op_type = type(op).__name__
+            op_name = getattr(op, "data_name", None)
+            operation_names.append(f"{op_type}({op_name})" if op_name else op_type)
+            
             if hasattr(op, "data_name") and op.data_name == "link_discord":
-                if op.data_value.decode() == expected_discord_id:
-                    found_op = True
-                    break
+                if op.data_value is not None:
+                    # Some JS SDKs send value as string, others as base64-encoded bytes in XDR
+                    val = op.data_value.decode("utf-8", errors="ignore").strip("\x00")
+                    if val == str(expected_discord_id):
+                        found_link_op = True
+                        break
+                    else:
+                        msg = f"Data value mismatch: '{val}' != '{expected_discord_id}'"
+                        logger.warning(f"Verify Link | {msg}")
+                        return False, msg
         
-        if not found_op:
-            logger.warning(f"Verify Link | Expected ManageData op 'link_discord' not found or value mismatch for {expected_discord_id}")
-            return False
+        if not found_link_op:
+            msg = f"Required op 'link_discord' not found. Ops seen: {operation_names}"
+            logger.warning(f"Verify Link | {msg}")
+            return False, msg
             
-        # 3. Verify signature
-        te.verify(public_key)
-        return True
+        # 4. Verify Signature Math
+        try:
+            tx_hash = te.hash()
+            kp = Keypair.from_public_key(provided_key_g)
+            
+            # Check all signatures in the envelope for a match
+            is_signed_correctly = False
+            for sig in te.signatures:
+                try:
+                    kp.verify(tx_hash, sig.signature)
+                    is_signed_correctly = True
+                    break
+                except Exception:
+                    continue
+            
+            if not is_signed_correctly:
+                msg = "No valid signature found matching the provided public key for this transaction."
+                logger.warning(f"Verify Link | {msg}")
+                return False, msg
+                
+        except Exception as sig_err:
+            msg = f"Signature verification failure: {sig_err}"
+            logger.warning(f"Verify Link | {msg}")
+            return False, msg
+
+        logger.info(f"Verify Link | SUCCESS | {public_key[:8]} linked successfully.")
+        return True, "Success"
     except Exception as e:
-        logger.error(f"Verify Link | Error: {e}")
-        return False
+        msg = f"Verification logic error: {type(e).__name__}: {e}"
+        logger.error(f"Verify Link | {msg}", exc_info=True)
+        return False, msg
 
 

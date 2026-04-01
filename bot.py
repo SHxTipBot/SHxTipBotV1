@@ -425,10 +425,23 @@ async def withdraw_command(interaction: Interaction, amount: str, destination: s
     # 2.6 Check House Account Allowance
     allowance = await stellar.check_shx_allowance(stellar.HOUSE_ACCOUNT_PUBLIC, stellar.SOROBAN_CONTRACT_ID)
     if allowance < amount_f:
-        logger.error(f"HOUSE ACCOUNT LOW ALLOWANCE | Needs {amount_f} but has {allowance}")
-        # Note: In a production environment, you might trigger an auto-approve here if the secret is available
-        await interaction.followup.send("❌ The bot's House Account has technical permission issues (low allowance). Please notify an admin.", ephemeral=True)
-        return
+        logger.info(f"HOUSE ACCOUNT LOW ALLOWANCE | Needs {amount_f} but has {allowance}. Attempting auto-approve...")
+        # Auto-approve a large buffer (1M SHx) to minimize future calls
+        approve_res = await stellar.approve_shx(stellar.HOUSE_ACCOUNT_SECRET, amount=1_000_000)
+        if approve_res.get("success"):
+            logger.info(f"AUTO-APPROVE SUCCESS | Hash: {approve_res.get('hash')}")
+            # Quick sleep to allow the ledger to update before the next check/transaction
+            await asyncio.sleep(3)
+            # Re-check allowance just to be safe
+            allowance = await stellar.check_shx_allowance(stellar.HOUSE_ACCOUNT_PUBLIC, stellar.SOROBAN_CONTRACT_ID)
+            if allowance < amount_f:
+                 await interaction.followup.send("❌ Auto-approval failed to propagate in time. Please try again in a few seconds.", ephemeral=True)
+                 return
+        else:
+            logger.error(f"AUTO-APPROVE FAILED | {approve_res.get('error')}")
+            await interaction.followup.send("❌ The bot's House Account has technical permission issues (low allowance). Please notify an admin.", ephemeral=True)
+            return
+
     withdrawal_id = secrets.token_hex(16)
     nonce = int(time.time() * 1000)
     

@@ -259,13 +259,28 @@
     };
 
     // ── STELLAR WALLETS KIT INITIALIZATION ──
-    const { StellarWalletsKit, KitEventType, SwkAppDarkTheme, defaultModules } = window.StellarKit;
+    const { StellarWalletsKit, KitEventType, SwkAppDarkTheme, defaultModules, WalletConnectModule } = window.StellarKit;
 
-    // Initialize SWK with dark theme and all default wallet modules
-    // defaultModules() includes: Freighter, Albedo, xBull, LOBSTR (WalletConnect), Hana, Hot Wallet, etc.
+    // Replace this with a real Project ID from cloud.walletconnect.com for production
+    const wcProjectId = "1da02e75fe8efd7560248dc15804b13c";
+
+    const modules = defaultModules();
+    
+    // Explicitly add WalletConnectModule (required for LOBSTR)
+    modules.push(new WalletConnectModule({
+      projectId: wcProjectId,
+      metadata: {
+        name: "SHx Tip Bot",
+        description: "Securely link your Discord account",
+        url: window.location.origin,
+        icons: ["https://shxtipbotv1.vercel.app/stronghold_logo_watermark.svg"]
+      }
+    }));
+
+    // Initialize SWK with dark theme and all wallet modules
     StellarWalletsKit.init({
       theme: SwkAppDarkTheme,
-      modules: defaultModules(),
+      modules: modules,
     });
 
     // Create the built-in wallet connect button
