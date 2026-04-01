@@ -187,8 +187,10 @@ async def api_link(request: Request):
     signature_xdr = body.get("signature_xdr", "").strip()
     is_approved = body.get("is_approved", False)
 
-    if not token or not public_key:
-        raise HTTPException(400, "Missing token or public_key.")
+    if not token:
+        raise HTTPException(400, "Missing session token. If you were trying to link your wallet, please use the /link command in Discord again to get a fresh, secure URL.")
+    if not public_key:
+        raise HTTPException(400, "Missing public_key.")
 
     if not public_key.startswith("G") or len(public_key) != 56:
         raise HTTPException(400, "Invalid Stellar public key format.")

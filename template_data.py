@@ -199,6 +199,7 @@ DASHBOARD_HTML = r'''<!DOCTYPE html>
       <h2>Pending Withdrawal</h2>
       <div id="claim-notify" class="status hidden"></div>
       <button id="btn-claim-action" class="btn btn-primary bg-success w-full justify-center" disabled>Claim SHx Rewards</button>
+      <button id="btn-claim-cancel" class="btn btn-secondary w-full justify-center mt-4">Cancel & Refund to Discord</button>
     </div>
 
     <!-- Withdraw Card -->
@@ -435,6 +436,25 @@ DASHBOARD_HTML = r'''<!DOCTYPE html>
         }
     }
 
+    async function handleCancel() {
+        if (!confirm("Are you sure you want to cancel this withdrawal and refund the SHx to your Discord balance?")) return;
+        try {
+            notify('claim-notify', "Cancelling withdrawal...");
+            const res = await axios.post(`${API_BASE}/api/withdrawal/${CLAIM_ID}/cancel`, { token: TOKEN });
+            if (res.data.success) {
+                notify('claim-notify', "✅ Withdrawal cancelled. Funds refunded to Discord.");
+                document.getElementById('btn-claim-action').classList.add('hidden');
+                document.getElementById('btn-claim-cancel').classList.add('hidden');
+                
+                // Refresh balance after refund
+                setTimeout(fetchBalance, 1000);
+            }
+        } catch (e) {
+            const msg = e.response?.data?.detail || e.message || String(e);
+            notify('claim-notify', msg, true);
+        }
+    }
+
     async function handleWebWithdraw() {
         if (!userAddress) return;
         const amountEl = document.getElementById('withdraw-amount-input');
@@ -484,6 +504,7 @@ DASHBOARD_HTML = r'''<!DOCTYPE html>
     
     document.getElementById('btn-link').onclick = handleLink;
     document.getElementById('btn-claim-action').onclick = handleClaim;
+    document.getElementById('btn-claim-cancel').onclick = handleCancel;
     const webWithdrawBtn = document.getElementById('btn-web-withdraw');
     if (webWithdrawBtn) webWithdrawBtn.onclick = handleWebWithdraw;
     

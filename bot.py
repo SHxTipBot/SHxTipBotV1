@@ -458,7 +458,8 @@ async def withdraw_command(interaction: Interaction, amount: str, destination: s
     await db.create_withdrawal(withdrawal_id, discord_id, destination, amount_f, nonce, signature)
 
     # 5. Build and Send Response
-    claim_url = f"{WEB_BASE_URL}/register?claim_id={withdrawal_id}"
+    token = await db.create_link_token(discord_id)
+    claim_url = f"{WEB_BASE_URL}/register?claim_id={withdrawal_id}&token={token}"
     
     embed = _footer(discord.Embed(
         title="🎟️ Withdrawal Ticket Created",
