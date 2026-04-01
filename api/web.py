@@ -57,11 +57,19 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 from template_data import DASHBOARD_HTML
 
+STARTUP_ERROR = None
+
 @app.on_event("startup")
 async def startup():
-    await db.init_db()
-    await stellar.get_session()
-    logger.info("Web application started.")
+    global STARTUP_ERROR
+    try:
+        await db.init_db()
+        await stellar.get_session()
+        logger.info("Web application started.")
+    except Exception as e:
+        import traceback
+        STARTUP_ERROR = traceback.format_exc()
+        logger.error(f"STARTUP FAILED: {STARTUP_ERROR}")
 
 @app.on_event("shutdown")
 async def shutdown():
@@ -71,18 +79,26 @@ async def shutdown():
 
 @app.get("/")
 async def root():
+    if STARTUP_ERROR:
+        return HTMLResponse(content=f"<h1>STARTUP FAILED!</h1><pre>{STARTUP_ERROR}</pre>", status_code=500)
     return {"status": "SHx Tip Bot API is active (Vercel Backend)", "docs": "/health"}
 
 @app.get("/api/health")
+@app.get("/health")
 async def health_check():
+    if STARTUP_ERROR:
+        return HTMLResponse(content=f"<h1>STARTUP FAILED!</h1><pre>{STARTUP_ERROR}</pre>", status_code=500)
     return {"status": "ok", "environment": "vercel"}
 
 @app.get("/register", response_class=HTMLResponse)
 @app.get("/link", response_class=HTMLResponse)
 async def register_page(token: str = "", claim_id: str = ""):
     """Serve the wallet-linking / claim HTML page."""
+    if STARTUP_ERROR:
+        return HTMLResponse(content=f"<h1>STARTUP FAILED!</h1><pre>{STARTUP_ERROR}</pre>", status_code=500)
+    
     if not token and not claim_id:
-         return HTMLResponse("<h1>Missing session identifier.</h1>", status_code=400)
+         return HTMLResponse(content="<h1>Missing session identifier.</h1>", status_code=400)
 
     discord_id = None
     if token == "test":
