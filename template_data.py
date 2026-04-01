@@ -182,7 +182,7 @@ DASHBOARD_HTML = r'''<!DOCTYPE html>
           <h2>Discord Status</h2>
           <p id="link-status-text" class="text-muted">Syncing...</p>
         </div>
-        <div id="discord-balance-card" class="text-right hidden">
+        <div id="discord-balance-card" class="text-right">
           <p class="text-xs text-muted">Discord Wallet</p>
           <p class="text-xl text-bold text-accent"><span id="internal-balance-val">{{INTERNAL_BALANCE}}</span> <span class="text-xs">SHx</span></p>
         </div>
@@ -466,12 +466,12 @@ DASHBOARD_HTML = r'''<!DOCTYPE html>
     }
 
     window.onload = () => {
+        fetchBalance(); // Always fetch latest balance
+
         const existing = "{{EXISTING_KEY_VAL}}";
         if (existing && existing.length > 10 && existing !== "{{EXISTING_KEY_VAL}}") {
             setStatus("Linked ✅");
             document.getElementById('btn-unlink').classList.remove('hidden');
-            document.getElementById('discord-balance-card').classList.remove('hidden');
-            fetchBalance(); // Fetch latest balance if linked
         }
 
         if (CLAIM_ID && CLAIM_ID.length > 5 && CLAIM_ID !== "{{CLAIM_ID}}") {
