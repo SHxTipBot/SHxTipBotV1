@@ -306,7 +306,21 @@ async def api_get_balance(token: str = "", claim_id: str = ""):
         raise HTTPException(400, "Invalid session.")
         
     balance = await db.get_internal_balance(discord_id)
-    return {"success": True, "balance": f"{balance:,.2f}"}
+    
+    # Auto-detect latest pending withdrawal for this user
+    pending = await db.get_latest_pending_withdrawal(discord_id)
+    pending_info = None
+    if pending:
+        pending_info = {
+            "id": pending["id"],
+            "amount": f"{pending['amount']:,g}"
+        }
+        
+    return {
+        "success": True, 
+        "balance": f"{balance:,.2f}",
+        "pending_withdrawal": pending_info
+    }
 
 
 # ── API: Withdrawals ─────────────────────────────────────────────────────────
@@ -334,6 +348,31 @@ async def api_get_withdrawal(withdrawal_id: str):
         "stellar_address": data["stellar_address"],
         "created_at": data["created_at"]
     })
+
+@app.post("/api/withdrawal/{withdrawal_id}/cancel")
+async def api_cancel_withdrawal(withdrawal_id: str, request: Request):
+    """Cancel a pending withdrawal and refund the SHx."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+        
+    token = body.get("token", "").strip()
+    if not token:
+        raise HTTPException(400, "Missing session token.")
+        
+    # Security: Verify the token belongs to the same user as the withdrawal
+    discord_id = await db.validate_link_token(token)
+    withdrawal = await db.get_withdrawal(withdrawal_id)
+    
+    if not withdrawal or not discord_id or withdrawal["discord_id"] != discord_id:
+        raise HTTPException(403, "Unauthorized or withdrawal not found.")
+        
+    success = await db.cancel_withdrawal(withdrawal_id)
+    if success:
+        return {"success": True, "message": "Withdrawal cancelled and refunded."}
+    else:
+        raise HTTPException(400, "Withdrawal could not be cancelled (already completed or not found).")
 
 @app.post("/api/withdrawal/{withdrawal_id}/complete")
 async def api_complete_withdrawal(withdrawal_id: str, request: Request):

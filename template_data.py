@@ -245,6 +245,16 @@ DASHBOARD_HTML = r'''<!DOCTYPE html>
                 currentBalance = res.data.balance;
                 const el = document.getElementById('internal-balance-val');
                 if (el) el.innerText = currentBalance;
+                
+                // Auto-detect pending withdrawal if we're not already viewing one
+                if (res.data.pending_withdrawal && (!CLAIM_ID || CLAIM_ID.length < 5)) {
+                    CLAIM_ID = res.data.pending_withdrawal.id;
+                    const claimCard = document.getElementById('claim-card');
+                    if (claimCard) {
+                        claimCard.classList.remove('hidden');
+                        notify('claim-notify', `Auto-detected pending withdrawal: ${res.data.pending_withdrawal.amount} SHx`);
+                    }
+                }
             }
         } catch (e) {
             console.error("Failed to fetch balance:", e);
