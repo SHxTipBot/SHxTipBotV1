@@ -295,7 +295,7 @@ async def api_get_balance(token: str = "", claim_id: str = ""):
     """Fetch current internal balance for a user."""
     discord_id = None
     if token:
-        discord_id = "768342085644320799" if token == "test" else await db.validate_link_token(token)
+        discord_id = await db.validate_link_token(token)
     
     if not discord_id and claim_id:
         claim_data = await db.get_withdrawal(claim_id)

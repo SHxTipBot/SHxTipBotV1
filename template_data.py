@@ -239,14 +239,19 @@ DASHBOARD_HTML = r'''<!DOCTYPE html>
     };
 
     const fetchBalance = async () => {
-        console.log("Fetching balance... TOKEN:", TOKEN, "CLAIM_ID:", CLAIM_ID);
         try {
             const res = await axios.get(`${API_BASE}/api/balance?token=${TOKEN}&claim_id=${CLAIM_ID}`);
-            console.log("Balance Response:", res.data);
             if (res.data.success) {
                 currentBalance = res.data.balance;
                 const el = document.getElementById('internal-balance-val');
                 if (el) el.innerText = currentBalance;
+                
+                // Clear "Syncing..." status if not already set by window.onload
+                const statusEl = document.getElementById('link-status-text');
+                if (statusEl && (statusEl.innerText === "Syncing..." || statusEl.innerText.includes("Connected"))) {
+                    statusEl.innerText = "Connected ✅";
+                    statusEl.className = "text-success";
+                }
                 
                 // Auto-detect pending withdrawal if we're not already viewing one
                 if (res.data.pending_withdrawal && (!CLAIM_ID || CLAIM_ID.length < 5)) {
@@ -498,7 +503,6 @@ DASHBOARD_HTML = r'''<!DOCTYPE html>
     }
 
     window.onload = () => {
-        console.log("Window loaded. Existing:", "{{EXISTING_KEY_VAL}}");
         fetchBalance(); // Always fetch latest balance
 
         const existing = "{{EXISTING_KEY_VAL}}";
