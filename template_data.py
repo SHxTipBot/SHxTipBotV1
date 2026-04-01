@@ -466,13 +466,14 @@ DASHBOARD_HTML = r'''<!DOCTYPE html>
     }
 
     window.onload = () => {
-        if (CLAIM_ID && CLAIM_ID.length > 5 && CLAIM_ID !== "{{CLAIM_ID}}") document.getElementById('claim-card').classList.remove('hidden');
         const existing = "{{EXISTING_KEY_VAL}}";
         if (existing && existing.length > 10 && existing !== "{{EXISTING_KEY_VAL}}") {
             setStatus("Linked ✅");
             document.getElementById('btn-unlink').classList.remove('hidden');
             document.getElementById('discord-balance-card').classList.remove('hidden');
             fetchBalance(); // Fetch latest balance if linked
+        }
+
         if (CLAIM_ID && CLAIM_ID.length > 5 && CLAIM_ID !== "{{CLAIM_ID}}") {
             document.getElementById('claim-card').classList.remove('hidden');
         } else if (existing && existing.length > 10 && existing !== "{{EXISTING_KEY_VAL}}") {
