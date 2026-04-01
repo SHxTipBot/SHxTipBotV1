@@ -283,7 +283,7 @@
         if (!userAddress) return;
         try {
             notify('link-notify', "Signing Link Request...");
-            const server = new window.StellarSdk.Server(HORIZON_URL);
+            const server = new window.StellarSdk.Horizon.Server(HORIZON_URL);
             const account = await server.loadAccount(userAddress);
             const tx = new window.StellarSdk.TransactionBuilder(account, { fee: "1000", networkPassphrase: NETWORK_PASSPHRASE })
                 .addOperation(window.StellarSdk.Operation.manageData({ name: "Link Discord", value: DISCORD_ID }))
@@ -316,8 +316,8 @@
             if (!res.data.success) throw new Error(res.data.message);
             const { amount, nonce, signature } = res.data;
 
-            const server = new window.StellarSdk.Server(HORIZON_URL);
-            const sorobanServer = new window.StellarSdk.SorobanServer(SOROBAN_URL);
+            const server = new window.StellarSdk.Horizon.Server(HORIZON_URL);
+            const sorobanServer = new window.StellarSdk.rpc.Server(SOROBAN_URL, { allowHttp: true });
             const account = await server.loadAccount(userAddress);
             
             const sigBytes = Uint8Array.from(atob(signature), c => c.charCodeAt(0));
