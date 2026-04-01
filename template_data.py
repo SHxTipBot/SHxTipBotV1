@@ -171,7 +171,7 @@ DASHBOARD_HTML = r'''<!DOCTYPE html>
     </nav>
 
     <div class="hero">
-      <h1>Community Portal</h1>
+      <h1>Community Portal <span class="text-xs" style="vertical-align: middle; opacity: 0.5;">v1.3</span></h1>
       <p>Securely link your Discord and manage claims.</p>
     </div>
 
@@ -253,8 +253,10 @@ DASHBOARD_HTML = r'''<!DOCTYPE html>
                     statusEl.className = "text-success";
                 }
                 
+                console.log("Balance data:", res.data);
+                
                 // Auto-detect pending withdrawal if we're not already viewing one
-                if (res.data.pending_withdrawal && (!CLAIM_ID || CLAIM_ID.length < 5)) {
+                if (res.data.pending_withdrawal) {
                     CLAIM_ID = res.data.pending_withdrawal.id;
                     const claimCard = document.getElementById('claim-card');
                     if (claimCard) {
