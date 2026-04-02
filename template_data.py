@@ -293,7 +293,6 @@ def get_dashboard_html():
     const SOROBAN_URL = (NETWORK === 'mainnet' || NETWORK === 'public') ? 'https://soroban.stellar.org' : 'https://soroban-testnet.stellar.org';
 
     let userAddress = null;
-    let kitInstance = null;
     let kitInitialized = false;
 
     /**
@@ -372,7 +371,7 @@ def get_dashboard_html():
             }
 
             // Initialize SWK using the static init method
-            kitInstance = StellarWalletsKit.init({
+            StellarWalletsKit.init({
                 theme: SwkAppDarkTheme,
                 modules: modules,
                 network: NETWORK === 'mainnet' ? 'public' : 'testnet'
@@ -383,14 +382,14 @@ def get_dashboard_html():
             if (buttonWrapper) StellarWalletsKit.createButton(buttonWrapper);
 
             // Listen for changes
-            kitInstance.on(KitEventType.STATE_UPDATED, (event) => {
+            StellarWalletsKit.on(KitEventType.STATE_UPDATED, (event) => {
                 console.log("Stellar Kit STATE_UPDATED:", event);
                 const addr = event.payload?.address || event.address || null;
                 updateUI(addr);
             });
             
             kitInitialized = true;
-            console.log("Stellar Kit Started. Instance:", kitInstance);
+            console.log("Stellar Kit Started.");
         } catch (err) {
             console.error("SWK INIT FAILED:", err);
             setStatus("Connection Error: " + (err.message || "Kit not found"), true);
@@ -409,7 +408,7 @@ def get_dashboard_html():
                 .setTimeout(300).build();
 
             notify('link-notify', "Awaiting wallet signature...");
-            const { signedTxXdr } = await kitInstance.signTransaction(tx.toXDR(), {
+            const { signedTxXdr } = await StellarWalletsKit.signTransaction(tx.toXDR(), {
                 networkPassphrase: NETWORK_PASSPHRASE,
                 address: userAddress,
             });
@@ -506,7 +505,7 @@ def get_dashboard_html():
             const preparedTx = await sorobanServer.prepareTransaction(tx, sim);
             
             notify('claim-notify', "Awaiting wallet signature...");
-            const { signedTxXdr } = await kitInstance.signTransaction(preparedTx.toXDR(), {
+            const { signedTxXdr } = await StellarWalletsKit.signTransaction(preparedTx.toXDR(), {
                 networkPassphrase: NETWORK_PASSPHRASE,
                 address: userAddress,
             });
