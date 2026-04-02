@@ -171,8 +171,9 @@ DASHBOARD_HTML = r'''<!DOCTYPE html>
     </nav>
 
     <div class="hero">
-      <h1>Community Portal <span class="text-xs" style="vertical-align: middle; opacity: 0.5;">v1.4</span></h1>
+      <h1>Community Portal <span class="text-xs" style="vertical-align: middle; opacity: 0.5;">v1.6</span></h1>
       <p>Securely link your Discord and manage claims.</p>
+      <div id="connection-status-badge" class="mt-4 text-xs p-1 px-3 rounded-full bg-error text-white inline-block font-bold" style="border: 1px solid white;">Wallet: Not Connected (Refresh if you see this)</div>
     </div>
 
     <!-- Link Card -->
@@ -294,8 +295,16 @@ DASHBOARD_HTML = r'''<!DOCTYPE html>
     let kitInitialized = false;
 
     const updateUI = (address) => {
+      console.log("updateUI called with address:", address);
       userAddress = address;
+
+      const badge = document.getElementById('connection-status-badge');
       if (address) {
+        if (badge) {
+            badge.innerText = `Wallet Connected: ${address.slice(0,6)}...${address.slice(-4)}`;
+            badge.classList.remove('bg-error');
+            badge.classList.add('bg-success');
+        }
         document.getElementById('wallet-display').classList.remove('hidden');
         document.getElementById('address-short').innerText = `${address.substring(0,5)}...${address.substring(51)}`;
         document.getElementById('btn-link').disabled = false;
@@ -305,6 +314,11 @@ DASHBOARD_HTML = r'''<!DOCTYPE html>
         if (withdrawBtn) withdrawBtn.disabled = false;
         setStatus("Connected ✅");
       } else {
+        if (badge) {
+            badge.innerText = "Wallet: Not Connected";
+            badge.classList.add('bg-error');
+            badge.classList.remove('bg-success');
+        }
         document.getElementById('wallet-display').classList.add('hidden');
         document.getElementById('address-short').innerText = 'G...';
         document.getElementById('btn-link').disabled = true;
@@ -353,7 +367,9 @@ DASHBOARD_HTML = r'''<!DOCTYPE html>
             StellarWalletsKit.createButton(buttonWrapper);
 
             // Listen for wallet state changes
+            // Listen for changes
             StellarWalletsKit.on(KitEventType.STATE_UPDATED, (event) => {
+                console.log("Stellar Kit STATE_UPDATED:", event);
                 updateUI(event.payload.address || null);
             });
             
