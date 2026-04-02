@@ -161,8 +161,9 @@ async def register_page(token: str = "", claim_id: str = ""):
     wc_project_id = os.getenv("WC_PROJECT_ID", "1da02e75fe8efd7560248dc15804b13c")
     html = html.replace("{{WC_PROJECT_ID}}", wc_project_id.strip())
     
-    # Cache busting version
-    html = html.replace("{{APP_VERSION}}", "1.0.3")
+    # Cache busting version using current timestamp
+    dynamic_version = str(int(time.time()))
+    html = html.replace("{{APP_VERSION}}", dynamic_version)
     
     logger.info(f"DASHBOARD | Serving dashboard for {discord_id} | WC_ID: {wc_project_id[:8]}...")
 
