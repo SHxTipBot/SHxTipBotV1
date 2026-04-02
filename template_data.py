@@ -299,10 +299,13 @@ def get_dashboard_html():
      * Defensive helper to prevent 'Unsupported address type: undefined' errors.
      */
     const parseAddress = (val, name) => {
-        if (!val || typeof val !== 'string' || val.length < 56 || val.includes('{{')) {
+        if (!val || typeof val !== 'string' || val.includes('{{')) {
             const msg = `FATAL: Invalid or unrendered Address [${name}]: ${val || 'undefined'}`;
             console.error(msg);
             throw new Error(msg);
+        }
+        if (val.length < 56) {
+             console.warn(`Warning: Address [${name}] seems short (${val.length} chars): ${val}`);
         }
         return val;
     };
@@ -486,22 +489,42 @@ def get_dashboard_html():
             console.log("Amount Stroops:", amountStroops.toString());
             console.log("Nonce (u64):", nonce.toString());
             
-            const tx = new window.StellarSdk.TransactionBuilder(account, { fee: "100000", networkPassphrase: NETWORK_PASSPHRASE })
-                .addOperation(window.StellarSdk.Operation.invokeContractFunction({
-                    contractId: parseAddress(SOROBAN_CONTRACT_ID, 'Contract'),
-                    function: "claim_withdrawal",
-                    args: args
-                })).setTimeout(300).build();
+            console.log("Preparing Transaction for network:", NETWORK, "Passphrase:", NETWORK_PASSPHRASE);
+            
+            let tx;
+            try {
+                const contractId = parseAddress(SOROBAN_CONTRACT_ID, 'Contract');
+                console.log("Using Contract ID:", contractId);
+
+                tx = new window.StellarSdk.TransactionBuilder(account, { fee: "100000", networkPassphrase: NETWORK_PASSPHRASE })
+                    .addOperation(window.StellarSdk.Operation.invokeContractFunction({
+                        contractId: contractId,
+                        function: "claim_withdrawal",
+                        args: args
+                    })).setTimeout(300).build();
+                
+                console.log("Transaction built successfully.");
+            } catch (txError) {
+                console.error("FAILED TO BUILD TRANSACTION:", txError);
+                throw new Error(`Transaction build error: ${txError.message || txError}`);
+            }
 
             notify('claim-notify', "Simulating on network...");
-            const sim = await sorobanServer.simulateTransaction(tx);
-            console.log("Simulation result:", sim);
-            
-            if (sim.error) {
-                console.error("Simulation failed. Check if ContractID is valid and initialized.");
-                throw new Error(`Simulation failed: ${sim.error}`);
+            let sim;
+            try {
+                sim = await sorobanServer.simulateTransaction(tx);
+                console.log("Simulation result:", sim);
+            } catch (simError) {
+                console.error("SIMULATION FAIL (Network/RPC):", simError);
+                throw new Error(`Simulation failed (RPC): ${simError.message || simError}`);
             }
             
+            if (sim.error) {
+                console.error("Simulation failed (Contract level). Result:", sim);
+                throw new Error(`Contract rejected: ${sim.error}`);
+            }
+            
+            notify('claim-notify', "Preparing transaction...");
             const preparedTx = await sorobanServer.prepareTransaction(tx, sim);
             
             notify('claim-notify', "Awaiting wallet signature...");
