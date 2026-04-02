@@ -821,13 +821,13 @@ def sign_withdrawal(user_address: str, amount_shx: float, nonce: int) -> str:
     kp = Keypair.from_secret(HOUSE_ACCOUNT_SECRET)
     amount_stroops = _to_stroops(amount_shx)
     
-    # Pack values exactly as Rust's .to_xdr(&env) does.
-    # In Soroban-SDK 21+, .to_xdr() on these types produces the ScVal XDR.
+    # Pack raw XDR bytes (NOT the ScVal wrapper) to match Rust contract's .to_xdr(&env).
+    # Rust Address.to_xdr(&env) produces an ScAddress (NOT an ScVal wrap).
     data = (
-        scval.to_address(SOROBAN_CONTRACT_ID).to_xdr_bytes() +
-        scval.to_address(user_address).to_xdr_bytes() +
-        scval.to_int128(amount_stroops).to_xdr_bytes() +
-        scval.to_uint64(nonce).to_xdr_bytes()
+        scval.to_address(SOROBAN_CONTRACT_ID).address.to_xdr_bytes() +
+        scval.to_address(user_address).address.to_xdr_bytes() +
+        scval.to_int128(amount_stroops).i128.to_xdr_bytes() +
+        scval.to_uint64(nonce).u64.to_xdr_bytes()
     )
     
     signature_bytes = kp.sign(data)

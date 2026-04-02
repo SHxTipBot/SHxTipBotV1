@@ -461,13 +461,15 @@ def get_dashboard_html():
                 window.StellarSdk.nativeToScVal(userAddress, { type: 'address' }),
                 // 2. Amount (i128)
                 window.StellarSdk.nativeToScVal(amountStroops, { type: 'i128' }),
-                // 3. Nonce (u128) - Must match contract!
-                window.StellarSdk.nativeToScVal(BigInt(nonce), { type: 'u128' }),
+                // 3. Nonce (u64) - Must match contract!
+                window.StellarSdk.nativeToScVal(BigInt(nonce), { type: 'u64' }),
                 // 4. Signature (Bytes)
                 window.StellarSdk.nativeToScVal(sigBytes, { type: 'bytes' })
             ];
             
             console.log("Prepared Soroban Args:", args);
+            console.log("Amount Stroops:", amountStroops.toString());
+            console.log("Nonce (u64):", nonce.toString());
             
             const tx = new window.StellarSdk.TransactionBuilder(account, { fee: "100000", networkPassphrase: NETWORK_PASSPHRASE })
                 .addOperation(window.StellarSdk.Operation.invokeContractFunction({
