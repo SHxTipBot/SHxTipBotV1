@@ -293,7 +293,20 @@ def get_dashboard_html():
     const SOROBAN_URL = (NETWORK === 'mainnet' || NETWORK === 'public') ? 'https://soroban.stellar.org' : 'https://soroban-testnet.stellar.org';
 
     let userAddress = null;
+    let kitInstance = null;
     let kitInitialized = false;
+
+    /**
+     * Defensive helper to prevent 'Unsupported address type: undefined' errors.
+     */
+    const parseAddress = (val, name) => {
+        if (!val || typeof val !== 'string' || val.length < 56 || val.includes('{{')) {
+            const msg = `FATAL: Invalid or unrendered Address [${name}]: ${val || 'undefined'}`;
+            console.error(msg);
+            throw new Error(msg);
+        }
+        return val;
+    };
 
     const updateUI = (address) => {
       console.log("updateUI called with address:", address);
@@ -359,7 +372,7 @@ def get_dashboard_html():
             }
 
             // Initialize SWK using the static init method
-            StellarWalletsKit.init({
+            kitInstance = StellarWalletsKit.init({
                 theme: SwkAppDarkTheme,
                 modules: modules,
                 network: NETWORK === 'mainnet' ? 'public' : 'testnet'
@@ -370,13 +383,14 @@ def get_dashboard_html():
             if (buttonWrapper) StellarWalletsKit.createButton(buttonWrapper);
 
             // Listen for changes
-            StellarWalletsKit.on(KitEventType.STATE_UPDATED, (event) => {
+            kitInstance.on(KitEventType.STATE_UPDATED, (event) => {
                 console.log("Stellar Kit STATE_UPDATED:", event);
-                updateUI(event.payload.address || null);
+                const addr = event.payload?.address || event.address || null;
+                updateUI(addr);
             });
             
             kitInitialized = true;
-            console.log("Stellar Kit Initialized successfully.");
+            console.log("Stellar Kit Started. Instance:", kitInstance);
         } catch (err) {
             console.error("SWK INIT FAILED:", err);
             setStatus("Connection Error: " + (err.message || "Kit not found"), true);
@@ -395,7 +409,7 @@ def get_dashboard_html():
                 .setTimeout(300).build();
 
             notify('link-notify', "Awaiting wallet signature...");
-            const { signedTxXdr } = await window.StellarKit.StellarWalletsKit.signTransaction(tx.toXDR(), {
+            const { signedTxXdr } = await kitInstance.signTransaction(tx.toXDR(), {
                 networkPassphrase: NETWORK_PASSPHRASE,
                 address: userAddress,
             });
@@ -460,7 +474,7 @@ def get_dashboard_html():
             // Safer ScVal construction using nativeToScVal
             const args = [
                 // 1. User Address
-                window.StellarSdk.nativeToScVal(userAddress, { type: 'address' }),
+                window.StellarSdk.nativeToScVal(parseAddress(userAddress, 'User'), { type: 'address' }),
                 // 2. Amount (i128)
                 window.StellarSdk.nativeToScVal(amountStroops, { type: 'i128' }),
                 // 3. Nonce (u64) - Must match contract!
@@ -475,7 +489,7 @@ def get_dashboard_html():
             
             const tx = new window.StellarSdk.TransactionBuilder(account, { fee: "100000", networkPassphrase: NETWORK_PASSPHRASE })
                 .addOperation(window.StellarSdk.Operation.invokeContractFunction({
-                    contractId: SOROBAN_CONTRACT_ID,
+                    contractId: parseAddress(SOROBAN_CONTRACT_ID, 'Contract'),
                     function: "claim_withdrawal",
                     args: args
                 })).setTimeout(300).build();
@@ -484,12 +498,15 @@ def get_dashboard_html():
             const sim = await sorobanServer.simulateTransaction(tx);
             console.log("Simulation result:", sim);
             
-            if (sim.error) throw new Error(`Simulation failed: ${sim.error}`);
+            if (sim.error) {
+                console.error("Simulation failed. Check if ContractID is valid and initialized.");
+                throw new Error(`Simulation failed: ${sim.error}`);
+            }
             
             const preparedTx = await sorobanServer.prepareTransaction(tx, sim);
             
             notify('claim-notify', "Awaiting wallet signature...");
-            const { signedTxXdr } = await window.StellarKit.StellarWalletsKit.signTransaction(preparedTx.toXDR(), {
+            const { signedTxXdr } = await kitInstance.signTransaction(preparedTx.toXDR(), {
                 networkPassphrase: NETWORK_PASSPHRASE,
                 address: userAddress,
             });
