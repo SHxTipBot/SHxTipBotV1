@@ -399,7 +399,10 @@ DASHBOARD_HTML = r'''<!DOCTYPE html>
     }
 
     async function handleClaim() {
-        if (!userAddress) return;
+        if (!userAddress || userAddress.length < 10) {
+            alert("No wallet connected. Please click 'Connect Wallet' first.");
+            return;
+        }
         try {
             notify('claim-notify', "Preparing withdrawal...");
             const res = await axios.get(`${API_BASE}/api/withdrawal/${CLAIM_ID}`);
@@ -418,7 +421,7 @@ DASHBOARD_HTML = r'''<!DOCTYPE html>
                     contractId: SOROBAN_CONTRACT_ID,
                     function: "claim_withdrawal",
                     args: [
-                        window.StellarSdk.nativeToScVal(userAddress, { type: 'address' }),
+                        window.StellarSdk.xdr.ScVal.scvAddress(window.StellarSdk.Address.fromString(userAddress).toScAddress()),
                         window.StellarSdk.nativeToScVal(amountStroops, { type: 'i128' }),
                         window.StellarSdk.nativeToScVal(BigInt(nonce), { type: 'u64' }),
                         window.StellarSdk.xdr.ScVal.scvBytes(sigBytes)
