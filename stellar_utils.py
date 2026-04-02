@@ -816,23 +816,34 @@ async def invoke_contract_function(secret: str, contract_id: str, function_name:
 def sign_withdrawal(user_address: str, amount_shx: float, nonce: int) -> str:
     """
     Generate an Ed25519 signature for a withdrawal claim.
-    Matches Soroban contract: [ContractAddress, User, Amount, Nonce] using standard .to_xdr()
+    Matches Soroban contract: [ContractAddress, User, Amount, Nonce]
+    
+    The contract appends the XDR of each element individually to a Bytes object.
+    In Soroban:
+    - Address.to_xdr(&env) produces an ScAddress (discriminant 0 for account, 1 for contract)
+    - i128.to_xdr(&env) produces the 16 bytes representing the Int128Parts
+    - u64.to_xdr(&env) produces the 8 bytes of the Uint64
     """
     kp = Keypair.from_secret(HOUSE_ACCOUNT_SECRET)
     amount_stroops = _to_stroops(amount_shx)
     
-    # Pack raw XDR bytes (NOT the ScVal wrapper) to match Rust contract's .to_xdr(&env).
-    # Rust Address.to_xdr(&env) produces an ScAddress (NOT an ScVal wrap).
-    data = (
-        scval.to_address(SOROBAN_CONTRACT_ID).address.to_xdr_bytes() +
-        scval.to_address(user_address).address.to_xdr_bytes() +
-        scval.to_int128(amount_stroops).i128.to_xdr_bytes() +
-        scval.to_uint64(nonce).u64.to_xdr_bytes()
-    )
+    # 1. Build the components using scval builders to ensure consistency
+    # We use .address.to_xdr_bytes() for SCAddress (discriminant included)
+    # and .to_xdr_bytes() for primitives.
+    contract_addr_xdr = scval.to_address(SOROBAN_CONTRACT_ID).address.to_xdr_bytes()
+    user_addr_xdr = scval.to_address(user_address).address.to_xdr_bytes()
+    amount_xdr = scval.to_int128(amount_stroops).i128.to_xdr_bytes()
+    nonce_xdr = scval.to_uint64(nonce).u64.to_xdr_bytes()
+    
+    data = contract_addr_xdr + user_addr_xdr + amount_xdr + nonce_xdr
+    
+    logger.debug(f"WITHDRAW SIGN | User: {user_address[:8]}... | Amt: {amount_stroops} | Nonce: {nonce}")
+    logger.debug(f"WITHDRAW SIGN | Payload (hex): {data.hex()}")
     
     signature_bytes = kp.sign(data)
     import base64
     return base64.b64encode(signature_bytes).decode('utf-8')
+
 
 def get_house_pubkey_hex() -> str:
     """Return the raw 32-byte public key in hex format for contract setup."""

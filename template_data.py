@@ -473,15 +473,22 @@ def get_dashboard_html():
             
             notify('claim-notify', "Building proof of claim...");
             
-            // Safer ScVal construction using nativeToScVal
+            // Safer ScVal construction
+            let userAddressVal;
+            try {
+                userAddressVal = window.StellarSdk.nativeToScVal(userAddress, { type: 'address' });
+            } catch (addrErr) {
+                console.warn("Standard 'address' type failed, falling back to manual ScVal construction:", addrErr);
+                // Fallback for older SDKs or specific environments
+                userAddressVal = window.StellarSdk.xdr.ScVal.scvAddress(
+                    window.StellarSdk.Address.fromString(userAddress).toScAddress()
+                );
+            }
+
             const args = [
-                // 1. User Address
-                window.StellarSdk.nativeToScVal(parseAddress(userAddress, 'User'), { type: 'address' }),
-                // 2. Amount (i128)
+                userAddressVal,
                 window.StellarSdk.nativeToScVal(amountStroops, { type: 'i128' }),
-                // 3. Nonce (u64) - Must match contract!
                 window.StellarSdk.nativeToScVal(BigInt(nonce), { type: 'u64' }),
-                // 4. Signature (Bytes)
                 window.StellarSdk.nativeToScVal(sigBytes, { type: 'bytes' })
             ];
             
@@ -496,7 +503,7 @@ def get_dashboard_html():
                 const contractId = parseAddress(SOROBAN_CONTRACT_ID, 'Contract');
                 console.log("Using Contract ID:", contractId);
 
-                tx = new window.StellarSdk.TransactionBuilder(account, { fee: "100000", networkPassphrase: NETWORK_PASSPHRASE })
+                tx = new window.StellarSdk.TransactionBuilder(account, { fee: "100_000", networkPassphrase: NETWORK_PASSPHRASE })
                     .addOperation(window.StellarSdk.Operation.invokeContractFunction({
                         contractId: contractId,
                         function: "claim_withdrawal",
@@ -521,6 +528,7 @@ def get_dashboard_html():
             
             if (sim.error) {
                 console.error("Simulation failed (Contract level). Result:", sim);
+                // Check for specific error messages like 'unsupported address type' in the RPC response
                 throw new Error(`Contract rejected: ${sim.error}`);
             }
             
@@ -541,7 +549,7 @@ def get_dashboard_html():
             }
             
             const txHash = resp.hash;
-            const networkPrefix = NETWORK === 'mainnet' || NETWORK === 'public' ? 'public' : 'testnet';
+            const networkPrefix = (NETWORK === 'mainnet' || NETWORK === 'public') ? 'public' : 'testnet';
             const explorerUrl = `https://stellar.expert/explorer/${networkPrefix}/tx/${txHash}`;
 
             // Polling for confirmation
@@ -577,10 +585,12 @@ def get_dashboard_html():
                 fetchBalance();
             }, 5000);
         } catch (e) {
+            console.error("CLAIM FLOW FAILED:", e);
             const msg = e.response?.data?.detail || e.message || String(e);
             notify('claim-notify', msg, true); 
         }
     }
+
 
     async function handleCancel() {
         if (!confirm("Are you sure you want to cancel this withdrawal and refund the SHx to your Discord balance?")) return;
