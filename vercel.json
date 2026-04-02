@@ -15,7 +15,7 @@
       "destination": "/api/index.py"
     },
     {
-      "source": "/((?!static|.*\\.js|.*\\.svg|.*\\.html|.*\\.css|albedo|stellar-sdk|axios).*)",
+      "source": "/((?!static|.*\\.js|.*\\.svg|.*\\.css|albedo|stellar-sdk|axios).*)",
       "destination": "/api/index.py"
     }
   ]

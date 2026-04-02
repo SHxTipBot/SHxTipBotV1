@@ -337,8 +337,10 @@ def get_dashboard_html():
         div.innerText = msg;
     };
 
-    try {
-        if (!kitInitialized) {
+    const initKit = async () => {
+        if (kitInitialized) return;
+        try {
+            console.log("Initializing Stellar Kit...");
             const { StellarWalletsKit, KitEventType, SwkAppDarkTheme, defaultModules, WalletConnectModule } = window.StellarKit;
             const modules = defaultModules();
             
@@ -356,7 +358,7 @@ def get_dashboard_html():
                 }));
             }
 
-            // Initialize SWK using the static init method (standard for this UMD bundle)
+            // Initialize SWK using the static init method
             StellarWalletsKit.init({
                 theme: SwkAppDarkTheme,
                 modules: modules,
@@ -365,9 +367,8 @@ def get_dashboard_html():
 
             // Create the built-in wallet connect button
             const buttonWrapper = document.getElementById('swk-button-wrapper');
-            StellarWalletsKit.createButton(buttonWrapper);
+            if (buttonWrapper) StellarWalletsKit.createButton(buttonWrapper);
 
-            // Listen for wallet state changes
             // Listen for changes
             StellarWalletsKit.on(KitEventType.STATE_UPDATED, (event) => {
                 console.log("Stellar Kit STATE_UPDATED:", event);
@@ -375,11 +376,12 @@ def get_dashboard_html():
             });
             
             kitInitialized = true;
+            console.log("Stellar Kit Initialized successfully.");
+        } catch (err) {
+            console.error("SWK INIT FAILED:", err);
+            setStatus("Connection Error: " + (err.message || "Kit not found"), true);
         }
-    } catch (err) {
-        console.error("SWK INIT FAILED:", err);
-        setStatus("Connection Error: " + (err.message || "Kit not found"), true);
-    }
+    };
 
     // ── APP LOGIC ──
     async function handleLink() {
@@ -591,6 +593,7 @@ def get_dashboard_html():
     }
 
     window.onload = () => {
+        initKit();
         fetchBalance(); // Always fetch latest balance
 
         const existing = "{{EXISTING_KEY_VAL}}";

@@ -82,11 +82,29 @@ async def shutdown():
     await stellar.close_session()
     logger.info("Web application stopped.")
 
-@app.get("/")
+@app.get("/", response_class=HTMLResponse)
 async def root():
     if STARTUP_ERROR:
         return HTMLResponse(content=f"<h1>STARTUP FAILED!</h1><pre>{STARTUP_ERROR}</pre>", status_code=500)
-    return {"status": "SHx Tip Bot API is active (Vercel Backend)", "docs": "/health"}
+    return HTMLResponse(content="""
+        <html>
+            <head>
+                <title>SHx Tip Bot</title>
+                <style>
+                    body{background:#0a0a0b;color:#fff;font-family:sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;} 
+                    h1{color:#fff;margin-bottom:10px;}
+                    p{color:#888;margin-bottom:20px;}
+                    a{color:#00e5ff;text-decoration:none;border:1px solid #00e5ff;padding:10px 20px;border-radius:5px;transition:0.2s;} 
+                    a:hover{background:rgba(0,229,255,0.1);}
+                </style>
+            </head>
+            <body>
+                <h1>SHx Tip Bot Dashboard</h1>
+                <p>To link your wallet or claim rewards, please use the commands in Discord.</p>
+                <a href="https://discord.com" target="_blank">Open Discord</a>
+            </body>
+        </html>
+    """)
 
 @app.get("/api/health")
 @app.get("/health")
