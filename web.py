@@ -459,16 +459,16 @@ async def api_web_withdraw(req: WebWithdrawRequest):
         raise HTTPException(400, f"Insufficient internal balance. You have {current_bal:,.2f} SHx.")
 
     # Check House Account Liquidity
-    house_bal = stellar.get_shx_balance(stellar.HOUSE_ACCOUNT_PUBLIC)
+    house_bal = await stellar.get_shx_balance(stellar.HOUSE_ACCOUNT_PUBLIC)
     if house_bal < amount_f:
         logger.error(f"HOUSE ACCOUNT LIQUIDITY LOW. Need {amount_f}, have {house_bal}")
         raise HTTPException(400, "The bot's House Account does not have enough on-chain liquidity. Please notify an admin.")
 
     # Check House Account Allowance (Auto-Approve if needed)
-    allowance = stellar.check_shx_allowance(stellar.HOUSE_ACCOUNT_PUBLIC, stellar.SOROBAN_CONTRACT_ID)
+    allowance = await stellar.check_shx_allowance(stellar.HOUSE_ACCOUNT_PUBLIC, stellar.SOROBAN_CONTRACT_ID)
     if allowance < amount_f:
         logger.warning(f"HOUSE ACCOUNT ALLOWANCE LOW ({allowance}). Auto-approving...")
-        approve_res = stellar.approve_shx(stellar.HOUSE_ACCOUNT_SECRET, stellar.SOROBAN_CONTRACT_ID, 1000000.0)
+        approve_res = await stellar.approve_shx(stellar.HOUSE_ACCOUNT_SECRET, stellar.SOROBAN_CONTRACT_ID, 1000000.0)
         if approve_res and approve_res.get("success"):
             logger.info("Auto-approve successful.")
         else:

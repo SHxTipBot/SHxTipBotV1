@@ -407,6 +407,14 @@ def get_dashboard_html():
                 setStatus("Linked ✅");
                 document.getElementById('btn-unlink').classList.remove('hidden');
                 document.getElementById('discord-balance-card').classList.remove('hidden');
+                
+                // Show withdraw card immediately after link if no pending claim
+                const withdrawCard = document.getElementById('withdraw-card');
+                const claimCard = document.getElementById('claim-card');
+                if (withdrawCard && (!claimCard || claimCard.classList.contains('hidden'))) {
+                    withdrawCard.classList.remove('hidden');
+                }
+                
                 fetchBalance(); // Refresh balance after link
             }
         } catch (e) {
@@ -422,34 +430,45 @@ def get_dashboard_html():
             return;
         }
         try {
+            console.log("--- Starting Claim Flow ---");
+            console.log("userAddress:", userAddress);
+            console.log("CLAIM_ID:", CLAIM_ID);
+            
             notify('claim-notify', "Fetching withdrawal details...");
             const res = await axios.get(`${API_BASE}/api/withdrawal/${CLAIM_ID}`);
             if (!res.data.success) throw new Error(res.data.message || "Failed to fetch withdrawal details.");
+            
             const { amount, nonce, signature } = res.data;
+            console.log("Ticket data:", { amount, nonce, signature });
 
             const server = new window.StellarSdk.Horizon.Server(HORIZON_URL);
-            const sorobanServer = new window.StellarSdk.rpc.Server(SOROBAN_URL, { allowHttp: true });
+            // Detect correct Soroban server class
+            const SorobanServerClass = window.StellarSdk.rpc?.Server || window.StellarSdk.SorobanServer;
+            const sorobanServer = new SorobanServerClass(SOROBAN_URL, { allowHttp: true });
             
             notify('claim-notify', "Loading account information...");
             const account = await server.loadAccount(userAddress);
+            console.log("Account loaded successfully. Seq:", account.sequenceNumber());
             
             const sigBytes = Uint8Array.from(atob(signature), c => c.charCodeAt(0));
             const amountStroops = BigInt(Math.round(amount * 10000000));
-
+            
             notify('claim-notify', "Building proof of claim...");
             
-            // Raw XDR ScVal construction to bypass SDK bugs
+            // Safer ScVal construction using nativeToScVal
             const args = [
-                // 1. Address
-                window.StellarSdk.xdr.ScVal.scvAddress(window.StellarSdk.Address.fromString(userAddress).toScAddress()),
-                // 2. i128 (Amount)
+                // 1. User Address
+                window.StellarSdk.nativeToScVal(userAddress, { type: 'address' }),
+                // 2. Amount (i128)
                 window.StellarSdk.nativeToScVal(amountStroops, { type: 'i128' }),
-                // 3. u64 (Nonce)
-                window.StellarSdk.nativeToScVal(BigInt(nonce), { type: 'u64' }),
-                // 4. Bytes (Signature)
-                window.StellarSdk.xdr.ScVal.scvBytes(sigBytes)
+                // 3. Nonce (u128) - Must match contract!
+                window.StellarSdk.nativeToScVal(BigInt(nonce), { type: 'u128' }),
+                // 4. Signature (Bytes)
+                window.StellarSdk.nativeToScVal(sigBytes, { type: 'bytes' })
             ];
-
+            
+            console.log("Prepared Soroban Args:", args);
+            
             const tx = new window.StellarSdk.TransactionBuilder(account, { fee: "100000", networkPassphrase: NETWORK_PASSPHRASE })
                 .addOperation(window.StellarSdk.Operation.invokeContractFunction({
                     contractId: SOROBAN_CONTRACT_ID,
@@ -457,10 +476,14 @@ def get_dashboard_html():
                     args: args
                 })).setTimeout(300).build();
 
-            notify('claim-notify', "Simulating on Network...");
+            notify('claim-notify', "Simulating on network...");
             const sim = await sorobanServer.simulateTransaction(tx);
+            console.log("Simulation result:", sim);
+            
+            if (sim.error) throw new Error(`Simulation failed: ${sim.error}`);
+            
             const preparedTx = await sorobanServer.prepareTransaction(tx, sim);
-
+            
             notify('claim-notify', "Awaiting wallet signature...");
             const { signedTxXdr } = await window.StellarKit.StellarWalletsKit.signTransaction(preparedTx.toXDR(), {
                 networkPassphrase: NETWORK_PASSPHRASE,
@@ -470,9 +493,31 @@ def get_dashboard_html():
             notify('claim-notify', "Submitting to network...");
             const resp = await sorobanServer.sendTransaction(window.StellarSdk.TransactionBuilder.fromXDR(signedTxXdr, NETWORK_PASSPHRASE));
             
+            if (resp.status === "ERROR") {
+                throw new Error(`Submission failed: ${resp.error_result_xdr}`);
+            }
+            
             const txHash = resp.hash;
             const networkPrefix = NETWORK === 'mainnet' || NETWORK === 'public' ? 'public' : 'testnet';
             const explorerUrl = `https://stellar.expert/explorer/${networkPrefix}/tx/${txHash}`;
+
+            // Polling for confirmation
+            notify('claim-notify', "Confirming on network...");
+            let txResult = await sorobanServer.getTransaction(txHash);
+            let attempts = 0;
+            while ((txResult.status === "NOT_FOUND" || txResult.status === "PENDING") && attempts < 30) {
+                await new Promise(r => setTimeout(r, 2000));
+                txResult = await sorobanServer.getTransaction(txHash);
+                attempts++;
+            }
+
+            if (txResult.status !== "SUCCESS") {
+                throw new Error(`Transaction failed with status: ${txResult.status}`);
+            }
+
+            // Sync with backend
+            notify('claim-notify', "Finalizing withdrawal...");
+            await axios.post(`${API_BASE}/api/withdrawal/${CLAIM_ID}/complete`, { tx_hash: txHash });
             
             const notifyEl = document.getElementById('claim-notify');
             notifyEl.classList.remove('hidden', 'error');
@@ -480,7 +525,14 @@ def get_dashboard_html():
             notifyEl.innerHTML = `✅ Claim Successful!<br><a href="${explorerUrl}" target="_blank" style="color:var(--accent); text-decoration: underline; margin-top: 0.5rem; display: inline-block;">View on Stellar.Expert</a>`;
             
             document.getElementById('btn-claim-action').classList.add('hidden');
-            fetchBalance();
+            document.getElementById('btn-claim-cancel').classList.add('hidden');
+            
+            // Re-show withdraw card after successful claim
+            setTimeout(() => {
+                document.getElementById('claim-card').classList.add('hidden');
+                document.getElementById('withdraw-card').classList.remove('hidden');
+                fetchBalance();
+            }, 5000);
         } catch (e) {
             const msg = e.response?.data?.detail || e.message || String(e);
             notify('claim-notify', msg, true); 
