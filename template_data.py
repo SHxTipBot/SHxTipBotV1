@@ -171,7 +171,7 @@ DASHBOARD_HTML = r'''<!DOCTYPE html>
     </nav>
 
     <div class="hero">
-      <h1>Community Portal <span class="text-xs" style="vertical-align: middle; opacity: 0.5;">v1.3</span></h1>
+      <h1>Community Portal <span class="text-xs" style="vertical-align: middle; opacity: 0.5;">v1.4</span></h1>
       <p>Securely link your Discord and manage claims.</p>
     </div>
 
@@ -404,44 +404,43 @@ DASHBOARD_HTML = r'''<!DOCTYPE html>
             alert(`No wallet connected or invalid address: ${userAddress}`);
             return;
         }
-        if (!CLAIM_ID || CLAIM_ID.length < 5) {
-            alert("No withdrawal selected. Please refresh the page.");
-            return;
-        }
-
         try {
             notify('claim-notify', "Fetching withdrawal details...");
             const res = await axios.get(`${API_BASE}/api/withdrawal/${CLAIM_ID}`);
             if (!res.data.success) throw new Error(res.data.message || "Failed to fetch withdrawal details.");
             const { amount, nonce, signature } = res.data;
-            console.log("Withdrawal details fetched:", { amount, nonce });
 
             const server = new window.StellarSdk.Horizon.Server(HORIZON_URL);
             const sorobanServer = new window.StellarSdk.rpc.Server(SOROBAN_URL, { allowHttp: true });
             
-            notify('claim-notify', "Loading account...");
+            notify('claim-notify', "Loading account information...");
             const account = await server.loadAccount(userAddress);
             
             const sigBytes = Uint8Array.from(atob(signature), c => c.charCodeAt(0));
             const amountStroops = BigInt(Math.round(amount * 10000000));
-            console.log("Building transaction...");
 
-            const claimArgs = [
-                window.StellarSdk.nativeToScVal(userAddress, { type: 'address' }),
+            notify('claim-notify', "Building proof of claim...");
+            
+            // Raw XDR ScVal construction to bypass SDK bugs
+            const args = [
+                // 1. Address
+                window.StellarSdk.xdr.ScVal.scvAddress(window.StellarSdk.Address.fromString(userAddress).toScAddress()),
+                // 2. i128 (Amount)
                 window.StellarSdk.nativeToScVal(amountStroops, { type: 'i128' }),
+                // 3. u64 (Nonce)
                 window.StellarSdk.nativeToScVal(BigInt(nonce), { type: 'u64' }),
+                // 4. Bytes (Signature)
                 window.StellarSdk.xdr.ScVal.scvBytes(sigBytes)
             ];
-            console.log("ScVal Arguments built.");
 
             const tx = new window.StellarSdk.TransactionBuilder(account, { fee: "100000", networkPassphrase: NETWORK_PASSPHRASE })
                 .addOperation(window.StellarSdk.Operation.invokeContractFunction({
                     contractId: SOROBAN_CONTRACT_ID,
                     function: "claim_withdrawal",
-                    args: claimArgs
+                    args: args
                 })).setTimeout(300).build();
 
-            notify('claim-notify', "Simulating Transaction...");
+            notify('claim-notify', "Simulating on Network...");
             const sim = await sorobanServer.simulateTransaction(tx);
             const preparedTx = await sorobanServer.prepareTransaction(tx, sim);
 

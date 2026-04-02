@@ -162,7 +162,7 @@ async def register_page(token: str = "", claim_id: str = ""):
     html = html.replace("{{WC_PROJECT_ID}}", wc_project_id.strip())
     
     # Cache busting version
-    html = html.replace("{{APP_VERSION}}", "1.0.2")
+    html = html.replace("{{APP_VERSION}}", "1.0.3")
     
     logger.info(f"DASHBOARD | Serving dashboard for {discord_id} | WC_ID: {wc_project_id[:8]}...")
 
