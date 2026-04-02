@@ -492,26 +492,31 @@ def get_dashboard_html():
                 window.StellarSdk.nativeToScVal(sigBytes, { type: 'bytes' })
             ];
             
-            console.log("Prepared Soroban Args:", args);
-            console.log("Amount Stroops:", amountStroops.toString());
-            console.log("Nonce (u64):", nonce.toString());
+            console.log("Prepared Soroban Args (Raw):", args);
+            args.forEach((arg, i) => console.log(`Arg ${i} XDR:`, arg.toXDR('base64')));
             
             console.log("Preparing Transaction for network:", NETWORK, "Passphrase:", NETWORK_PASSPHRASE);
             
             let tx;
             try {
-                const contractId = parseAddress(SOROBAN_CONTRACT_ID, 'Contract');
-                console.log("Using Contract ID:", contractId);
+                const contractIdStr = String(parseAddress(SOROBAN_CONTRACT_ID, 'Contract'));
+                console.log("Using Contract ID:", contractIdStr);
 
-                tx = new window.StellarSdk.TransactionBuilder(account, { fee: "100_000", networkPassphrase: NETWORK_PASSPHRASE })
-                    .addOperation(window.StellarSdk.Operation.invokeContractFunction({
-                        contractId: contractId,
-                        function: "claim_withdrawal",
-                        args: args
-                    })).setTimeout(300).build();
+                // Use the Contract class to build the operation safely
+                const contract = new window.StellarSdk.Contract(contractIdStr);
+                const op = contract.call("claim_withdrawal", ...args);
+
+                tx = new window.StellarSdk.TransactionBuilder(account, { 
+                    fee: "100000", 
+                    networkPassphrase: NETWORK_PASSPHRASE 
+                })
+                .addOperation(op)
+                .setTimeout(300)
+                .build();
                 
                 console.log("Transaction built successfully.");
             } catch (txError) {
+
                 console.error("FAILED TO BUILD TRANSACTION:", txError);
                 throw new Error(`Transaction build error: ${txError.message || txError}`);
             }
