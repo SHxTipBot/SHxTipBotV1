@@ -1,4 +1,5 @@
-DASHBOARD_HTML = r'''<!DOCTYPE html>
+def get_dashboard_html():
+    return r'''<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">

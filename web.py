@@ -58,7 +58,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 # NOTE: Disabled on Vercel — serverless functions handle CSP via vercel.json headers instead
 # app.add_middleware(SecurityHeadersMiddleware)
 
-from template_data import DASHBOARD_HTML
+from template_data import get_dashboard_html
 
 STARTUP_ERROR = None
 
@@ -137,8 +137,8 @@ async def register_page(token: str = "", claim_id: str = ""):
     internal_balance = await db.get_internal_balance(discord_id)
     existing_key = await db.get_user_stellar_key(discord_id)
 
-    # Use the inlined HTML template
-    html = DASHBOARD_HTML
+    # Fetch fresh HTML on every request to bypass Vercel warm-start caching
+    html = get_dashboard_html()
 
     # Inject runtime values into the page
     html = html.replace("{{TOKEN}}", token.strip())
