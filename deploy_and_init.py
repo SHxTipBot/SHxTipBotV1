@@ -66,11 +66,8 @@ async def run_deployment():
     # set_admin_pubkey(env: Env, admin: Address, new_pubkey: BytesN<32>)
     # Note: stellar_utils.get_house_pubkey_hex() returns the 32-byte raw pubkey
     pubkey_hex = stellar_utils.get_house_pubkey_hex()
-    params = [
-        scval.to_address(public),
-        scval.from_xdr_bytes(bytes.fromhex(f"0000000a00000020{pubkey_hex}")), # BytesN<32>
-    ]
-    # Wait, scval.from_xdr_bytes is for raw XDR. Let's use scval.to_bytes instead.
+    
+    # set_admin_pubkey(env: Env, admin: Address, new_pubkey: BytesN<32>)
     params = [
         scval.to_address(public),
         scval.to_bytes(bytes.fromhex(pubkey_hex)), # ScValBytes

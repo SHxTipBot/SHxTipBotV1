@@ -194,6 +194,12 @@ def get_dashboard_html():
       <div id="link-notify" class="status hidden"></div>
       <button id="btn-link" class="btn btn-primary w-full justify-center" disabled>Verify & Link Wallet</button>
       <p id="btn-unlink" class="text-error mt-4 text-center text-sm hidden">Unlink Wallet</p>
+      
+      <!-- Trustline Warning -->
+      <div id="trustline-warning" class="status error hidden text-sm mt-4">
+        ⚠️ <b>Missing SHx Trustline</b><br>
+        Your wallet is not set up to receive SHx. Please click "Verify & Link Wallet" above to fix this.
+      </div>
     </div>
 
     <!-- Claim Card -->
@@ -426,6 +432,14 @@ def get_dashboard_html():
                 document.getElementById('btn-unlink').classList.remove('hidden');
                 document.getElementById('discord-balance-card').classList.remove('hidden');
                 
+                // Show/hide trustline warning
+                const trustWarning = document.getElementById('trustline-warning');
+                if (res.data.has_shx_trustline) {
+                    trustWarning.classList.add('hidden');
+                } else {
+                    trustWarning.classList.remove('hidden');
+                }
+
                 // Show withdraw card immediately after link if no pending claim
                 const withdrawCard = document.getElementById('withdraw-card');
                 const claimCard = document.getElementById('claim-card');
@@ -532,9 +546,13 @@ def get_dashboard_html():
             }
             
             if (sim.error) {
-                console.error("Simulation failed (Contract level). Result:", sim);
-                // Check for specific error messages like 'unsupported address type' in the RPC response
-                throw new Error(`Contract rejected: ${sim.error}`);
+                console.error("Simulation failed (Contract level). Full Response:", sim);
+                // Extract more descriptive error if possible from events or diagnostic data
+                let errorDetails = sim.error;
+                if (sim.diagnosticEvents) {
+                    console.warn("Diagnostic Events:", sim.diagnosticEvents);
+                }
+                throw new Error(`Contract rejected: ${errorDetails}. This often happens if the signature is invalid or you already claimed this nonce.`);
             }
             
             notify('claim-notify', "Preparing transaction...");

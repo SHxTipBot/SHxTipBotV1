@@ -8,12 +8,16 @@ import time
 import asyncio
 import logging
 import aiohttp
+import base64
 from stellar_sdk import (
     Keypair, Network, Server, ServerAsync, AiohttpClient, TransactionBuilder, Asset,
-    SorobanServer, scval, xdr as stellar_xdr, TransactionEnvelope,
+    SorobanServer, scval, TransactionEnvelope, xdr
 )
 from stellar_sdk.soroban_rpc import GetTransactionStatus, SendTransactionStatus
 from stellar_sdk.exceptions import NotFoundError
+
+from dotenv import load_dotenv
+load_dotenv()
 
 logger = logging.getLogger("shx_tip_bot.stellar")
 
@@ -122,8 +126,8 @@ async def check_shx_allowance(owner_public_key: str, spender_contract_id: str) -
         if result is None:
             return 0.0
         # result is the xdr string from simulation
-        scval_obj = stellar_xdr.SCVal.from_xdr(result)
-        if scval_obj.type != stellar_xdr.SCValType.SCV_I128:
+        scval_obj = xdr.SCVal.from_xdr(result)
+        if scval_obj.type != xdr.SCValType.SCV_I128:
             return 0.0
             
         # Accessing i128 parts: lo is Uint64, hi is Int64
@@ -605,7 +609,7 @@ async def build_approve_tx_xdr(
     balance = await get_shx_balance(user_public_key)
     has_trustline = balance is not None and balance >= 0.0
 
-    if not has_trustline and STELLAR_NETWORK == "testnet":
+    if not has_trustline:
         logger.info(f"Adding SHX trustline for {user_public_key[:8]}... (will be included in approve tx)")
 
     allowance_stroops = _to_stroops(allowance_amount)
@@ -617,8 +621,8 @@ async def build_approve_tx_xdr(
         base_fee=100_000,
     )
 
-    # If on testnet and no trustline, add the change_trust op first
-    if not has_trustline and STELLAR_NETWORK == "testnet":
+    # If no trustline, add the change_trust op first
+    if not has_trustline:
         shx_asset = Asset(SHX_ASSET_CODE, SHX_ISSUER)
         builder.append_change_trust_op(asset=shx_asset)
 
@@ -711,7 +715,7 @@ async def deploy_contract_wasm(secret: str, wasm_path: str) -> str:
         wasm_content = f.read()
 
     account = horizon_server.load_account(kp.public_key)
-    builder = TransactionBuilder(account, NETWORK_PASSPHRASE).append_install_contract_code_op(wasm_content)
+    builder = TransactionBuilder(account, NETWORK_PASSPHRASE).append_upload_contract_wasm_op(wasm_content)
     
     tx = builder.build()
     sim = soroban_server.simulate_transaction(tx)
@@ -729,7 +733,8 @@ async def deploy_contract_wasm(secret: str, wasm_path: str) -> str:
     for _ in range(30):
         res = soroban_server.get_transaction(resp.hash)
         if res.status == GetTransactionStatus.SUCCESS:
-            return res.wasm_id
+            import hashlib
+            return hashlib.sha256(wasm_content).digest().hex()
         await asyncio.sleep(2)
     
     raise Exception("Install timed out")
@@ -744,7 +749,7 @@ async def deploy_contract_instance(secret: str, wasm_id: str) -> str:
     soroban_server = SorobanServer(SOROBAN_RPC_URL)
     
     account = horizon_server.load_account(kp.public_key)
-    builder = TransactionBuilder(account, NETWORK_PASSPHRASE).append_create_contract_with_id_op(
+    builder = TransactionBuilder(account, NETWORK_PASSPHRASE).append_create_contract_op(
         wasm_id=wasm_id,
         address=kp.public_key,
         salt=os.urandom(32)
@@ -757,15 +762,21 @@ async def deploy_contract_instance(secret: str, wasm_id: str) -> str:
         
     tx = soroban_server.prepare_transaction(tx, sim)
     tx.sign(kp)
-    
     resp = soroban_server.send_transaction(tx)
     if resp.status == SendTransactionStatus.ERROR:
         raise Exception(f"Deploy submit error: {resp.error_result_xdr}")
 
+    # Predict contract ID from simulation result (the Address return value)
+    from stellar_sdk import StrKey
+    res_xdr = sim.results[0].xdr
+    scval_obj = xdr.SCVal.from_xdr(res_xdr)
+    contract_id = StrKey.encode_contract(scval_obj.address.contract_id)
+    
+    # Wait for confirmation
     for _ in range(30):
         res = soroban_server.get_transaction(resp.hash)
         if res.status == GetTransactionStatus.SUCCESS:
-            return res.contract_id
+            return contract_id
         await asyncio.sleep(2)
         
     raise Exception("Deploy timed out")
@@ -827,9 +838,11 @@ def sign_withdrawal(user_address: str, amount_shx: float, nonce: int) -> str:
     kp = Keypair.from_secret(HOUSE_ACCOUNT_SECRET)
     amount_stroops = _to_stroops(amount_shx)
     
-    # 1. Build the components using scval builders to ensure consistency
-    # We use .address.to_xdr_bytes() for SCAddress (discriminant included)
-    # and .to_xdr_bytes() for primitives.
+    # 1. Build the components matching the Soroban contract's ToXdr behavior
+    # We extract the inner XDR bytes of each type, as the contract appends them manually.
+    # .address     -> ScAddress
+    # .i128        -> Int128Parts (16 bytes)
+    # .u64         -> Uint64 (8 bytes)
     contract_addr_xdr = scval.to_address(SOROBAN_CONTRACT_ID).address.to_xdr_bytes()
     user_addr_xdr = scval.to_address(user_address).address.to_xdr_bytes()
     amount_xdr = scval.to_int128(amount_stroops).i128.to_xdr_bytes()
@@ -841,7 +854,6 @@ def sign_withdrawal(user_address: str, amount_shx: float, nonce: int) -> str:
     logger.debug(f"WITHDRAW SIGN | Payload (hex): {data.hex()}")
     
     signature_bytes = kp.sign(data)
-    import base64
     return base64.b64encode(signature_bytes).decode('utf-8')
 
 
