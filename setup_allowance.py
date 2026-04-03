@@ -19,6 +19,7 @@ async def setup_allowance():
     horizon = stellar.Server(os.getenv("HORIZON_URL", "https://horizon-testnet.stellar.org").strip())
     
     # 1. Check Allowance
+    print(f"Contract ID: '{contract_id}'")
     print(f"Checking allowance for {kp.public_key} on contract {contract_id}...")
     # (Checking allowance via get_transaction or similar is complex, easier to just send an approve)
     
@@ -41,7 +42,7 @@ async def setup_allowance():
             function_name="approve",
             parameters=[
                 scval.to_address(kp.public_key),
-                scval.to_address(contract_id),
+                scval.to_address(contract_id.strip()),
                 scval.to_int128(amount_stroops),
                 scval.to_uint32(expiration)
             ]

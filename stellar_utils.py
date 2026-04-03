@@ -770,7 +770,21 @@ async def deploy_contract_instance(secret: str, wasm_id: str) -> str:
     from stellar_sdk import StrKey
     res_xdr = sim.results[0].xdr
     scval_obj = xdr.SCVal.from_xdr(res_xdr)
-    contract_id = StrKey.encode_contract(scval_obj.address.contract_id)
+    
+    # In stellar-sdk 13.x, xdr.Hash/ContractID must be converted to bytes 
+    # for StrKey encoding. Hex-to-bytes is the most robust way.
+    try:
+        h = scval_obj.address.contract_id.hash.hex()
+        contract_id_bytes = bytes.fromhex(h)
+    except (AttributeError, TypeError):
+        try:
+            h = scval_obj.address.contract_id.contract_id.hex()
+            contract_id_bytes = bytes.fromhex(h)
+        except (AttributeError, TypeError):
+             # Final fallback: some versions might require explicit bytes conversion
+             contract_id_bytes = bytes(scval_obj.address.contract_id)
+    
+    contract_id = StrKey.encode_contract(contract_id_bytes)
     
     # Wait for confirmation
     for _ in range(30):
