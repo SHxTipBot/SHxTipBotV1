@@ -453,7 +453,20 @@ def get_dashboard_html():
             // Listen for changes
             StellarWalletsKit.on(KitEventType.STATE_UPDATED, (event) => {
                 console.log("Stellar Kit STATE_UPDATED:", event);
-                const addr = event.payload?.address || event.address || null;
+                
+                // Defensive extraction: payload could be the address string or an object
+                let addr = null;
+                if (typeof event.payload === 'string') {
+                    addr = event.payload;
+                } else if (event.payload && event.payload.address) {
+                    addr = event.payload.address;
+                } else if (event.activeAddress) {
+                    addr = event.activeAddress;
+                } else if (event.address) {
+                    addr = event.address;
+                }
+                
+                console.log("Extracted address:", addr);
                 updateUI(addr);
             });
             
@@ -467,7 +480,25 @@ def get_dashboard_html():
 
     // ── APP LOGIC ──
     async function handleLink() {
-        if (!userAddress) return;
+        console.log("handleLink() triggered. Current userAddress:", userAddress);
+        
+        // Fallback: try to pull address directly from kit if global is missing
+        if (!userAddress && window.StellarWalletsKit) {
+            try {
+                // Some versions allow direct query
+                const state = await window.StellarWalletsKit.getState?.();
+                userAddress = state?.address || state?.activeAddress || userAddress;
+                console.log("Attempted sync from kit state:", userAddress);
+            } catch (e) {
+                console.warn("Could not sync state from kit:", e);
+            }
+        }
+
+        if (!userAddress) {
+            alert("Wallet not recognized. Please click the 'Connect Wallet' button (top right) first.");
+            return;
+        }
+        
         try {
             notify('link-notify', "Signing Link Request...");
             const server = new window.StellarSdk.Horizon.Server(HORIZON_URL);
