@@ -11,7 +11,7 @@ import aiohttp
 import base64
 from stellar_sdk import (
     Keypair, Network, Server, ServerAsync, AiohttpClient, TransactionBuilder, Asset,
-    SorobanServer, scval, TransactionEnvelope, xdr
+    SorobanServer, scval, TransactionEnvelope, xdr, StrKey
 )
 from stellar_sdk.soroban_rpc import GetTransactionStatus, SendTransactionStatus
 from stellar_sdk.exceptions import NotFoundError
@@ -55,6 +55,22 @@ def get_shx_asset() -> Asset:
     """Return the SHx Asset object."""
     return Asset(SHX_ASSET_CODE, SHX_ISSUER)
 
+
+def to_sc_address(addr: str) -> xdr.SCVal:
+    """
+    Robust address conversion for Soroban.
+    Handles both standard G-addresses and C-contract IDs.
+    """
+    if addr.startswith("C"):
+        return xdr.SCVal(
+            type=xdr.SCValType.SCV_ADDRESS,
+            address=xdr.SCAddress(
+                type=xdr.SCAddressType.SC_ADDRESS_TYPE_CONTRACT,
+                contract_id=xdr.Hash(StrKey.decode_contract(addr))
+            )
+        )
+    else:
+        return scval.to_address(addr)
 
 def get_explorer_url(tx_hash: str) -> str:
     """Get the Stellar Expert URL for a transaction."""
@@ -115,19 +131,22 @@ async def check_shx_allowance(owner_public_key: str, spender_contract_id: str) -
         soroban_server = SorobanServer(SOROBAN_RPC_URL)
         # Call SHx SAC 'allowance' function
         # allowance(owner: Address, spender: Address) -> i128
+        
         result = await _invoke_sac_read_only(
             SHX_SAC_CONTRACT_ID,
             "allowance",
             [
-                scval.to_address(owner_public_key),
-                scval.to_address(spender_contract_id),
+                to_sc_address(owner_public_key),
+                to_sc_address(spender_contract_id),
             ]
         )
         if result is None:
             return 0.0
         # result is the xdr string from simulation
+        print(f"DEBUG: check_shx_allowance raw result: {result}")
         scval_obj = xdr.SCVal.from_xdr(result)
         if scval_obj.type != xdr.SCValType.SCV_I128:
+            print(f"DEBUG: result is not i128, type: {scval_obj.type}")
             return 0.0
             
         # Accessing i128 parts: lo is Uint64, hi is Int64
@@ -174,9 +193,6 @@ async def approve_shx(secret: str, amount: float = 1_000_000):
         horizon_server = Server(HORIZON_URL)
         soroban_server = SorobanServer(SOROBAN_RPC_URL)
         
-        account = horizon_server.load_account(public_key)
-        stroops = _to_stroops(amount)
-        
         builder = TransactionBuilder(
             source_account=account,
             network_passphrase=NETWORK_PASSPHRASE,
@@ -186,8 +202,8 @@ async def approve_shx(secret: str, amount: float = 1_000_000):
             contract_id=SHX_SAC_CONTRACT_ID,
             function_name="approve",
             parameters=[
-                scval.to_address(public_key),
-                scval.to_address(SOROBAN_CONTRACT_ID),
+                to_sc_address(public_key),
+                to_sc_address(SOROBAN_CONTRACT_ID),
                 scval.to_int128(stroops),
                 scval.to_uint32(3_000_000), # expiration
             ],
@@ -772,17 +788,19 @@ async def deploy_contract_instance(secret: str, wasm_id: str) -> str:
     scval_obj = xdr.SCVal.from_xdr(res_xdr)
     
     # In stellar-sdk 13.x, xdr.Hash/ContractID must be converted to bytes 
-    # for StrKey encoding. Hex-to-bytes is the most robust way.
+    # for StrKey encoding. Slicing from raw XDR is the most resilient fallback.
     try:
-        h = scval_obj.address.contract_id.hash.hex()
-        contract_id_bytes = bytes.fromhex(h)
+        # Path: scval.address (SCAddress) -> .contract_id (ContractID) -> .contract_id (Hash) -> .hash (bytes)
+        contract_id_bytes = scval_obj.address.contract_id.contract_id.hash
     except (AttributeError, TypeError):
         try:
-            h = scval_obj.address.contract_id.contract_id.hex()
-            contract_id_bytes = bytes.fromhex(h)
+             # Fallback 1: Try common byte field names
+             contract_id_bytes = scval_obj.address.contract_id.hash
         except (AttributeError, TypeError):
-             # Final fallback: some versions might require explicit bytes conversion
-             contract_id_bytes = bytes(scval_obj.address.contract_id)
+             # Fallback 2: Raw XDR slicing (last 32 bytes of the address SCVal)
+             import base64
+             res_bytes = base64.b64decode(sim.results[0].xdr)
+             contract_id_bytes = res_bytes[-32:]
     
     contract_id = StrKey.encode_contract(contract_id_bytes)
     
@@ -857,8 +875,8 @@ def sign_withdrawal(user_address: str, amount_shx: float, nonce: int) -> str:
     # .address     -> ScAddress
     # .i128        -> Int128Parts (16 bytes)
     # .u64         -> Uint64 (8 bytes)
-    contract_addr_xdr = scval.to_address(SOROBAN_CONTRACT_ID).address.to_xdr_bytes()
-    user_addr_xdr = scval.to_address(user_address).address.to_xdr_bytes()
+    contract_addr_xdr = to_sc_address(SOROBAN_CONTRACT_ID).address.to_xdr_bytes()
+    user_addr_xdr = to_sc_address(user_address).address.to_xdr_bytes()
     amount_xdr = scval.to_int128(amount_stroops).i128.to_xdr_bytes()
     nonce_xdr = scval.to_uint64(nonce).u64.to_xdr_bytes()
     

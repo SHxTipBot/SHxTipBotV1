@@ -2,7 +2,7 @@ from stellar_sdk import scval, Address
 import os
 
 def test():
-    id = "CDTL7BBCUZTD7GPRXXZ74W4FGGH43JQEWQ4PC4IYKFQGBBH53VL525VH"
+    id = "CDN7S7T2CO2W4ZBIPIEY4VT2OLMMNIFQN4VV7BV4Z6B6E7K7SZXQTOFK"
     try:
         val = scval.to_address(id)
         print("SUCCESS with scval.to_address")

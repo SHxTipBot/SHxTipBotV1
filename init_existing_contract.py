@@ -13,7 +13,7 @@ async def run_init():
     load_dotenv()
     
     # 1. Configuration - USE THE NEW CONTRACT ID
-    contract_id = "CDN7S7T2CO2W4ZBIPIEY4VT2OLMMNIFQN4VV7BV4Z6B6E7K7SZXQTOFK"
+    contract_id = "CCQWDN7ISJLGDR6BCTXCUKZNWHZ2XG7PS2TFGBK75QJ2F2X7F4KLPNMX"
     
     secret = os.getenv("HOUSE_ACCOUNT_SECRET")
     public = os.getenv("HOUSE_ACCOUNT_PUBLIC")

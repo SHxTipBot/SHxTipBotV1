@@ -41,8 +41,8 @@ async def setup_allowance():
             contract_id=shx_sac,
             function_name="approve",
             parameters=[
-                scval.to_address(kp.public_key),
-                scval.to_address(contract_id.strip()),
+                stellar.to_sc_address(kp.public_key),
+                stellar.to_sc_address(contract_id.strip()),
                 scval.to_int128(amount_stroops),
                 scval.to_uint32(expiration)
             ]
@@ -56,24 +56,20 @@ async def setup_allowance():
     print(f"DEBUG: Raw simulation response: {sim}")
     
     # Check for errors in the response
-    if hasattr(sim, 'error'):
+    if sim.error:
         print(f"CRITICAL: Simulation Error: {sim.error}")
         return
         
-    # The SDK usually has soroban_data or it might be in results
-    soroban_data = getattr(sim, 'soroban_data', getattr(sim, 'transaction_data', None))
-    if not soroban_data:
-        print("CRITICAL: No soroban_data or transaction_data found!")
-        return
-        
-    builder.set_soroban_data(soroban_data)
-    builder.set_soroban_resource_fee(sim.min_resource_fee + 20000)
-    
     tx = builder.build()
+    tx = server.prepare_transaction(tx, sim)
     tx.sign(kp)
     print("Submitting approval...")
+    from stellar_sdk.soroban_rpc import SendTransactionStatus
     res = server.send_transaction(tx)
     print(f"Initial Status: {res.status}")
+    if res.status == SendTransactionStatus.ERROR:
+        print(f"ERROR RESPONSE: {res.__dict__}")
+        return
     tx_hash = res.hash
     
     print(f"Polling for {tx_hash}...")

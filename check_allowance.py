@@ -24,8 +24,8 @@ async def check_allowance():
             contract_id=shx_sac,
             function_name="allowance",
             parameters=[
-                scval.to_address(kp.public_key),
-                scval.to_address(contract_id)
+                stellar.to_sc_address(kp.public_key),
+                stellar.to_sc_address(contract_id)
             ]
         )
     )

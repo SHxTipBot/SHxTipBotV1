@@ -46,9 +46,9 @@ async def test_sig():
         
         try:
             kp.verify(payload, sig_bytes)
-            print("✅ SUCCESS: Signature is valid for the payload!")
+            print("SUCCESS: Signature is valid for the payload!")
         except Exception as e:
-            print(f"❌ FAILED: Local verification failed: {e}")
+            print(f"FAILED: Local verification failed: {e}")
             
     except Exception as e:
         print(f"ERROR: {e}")
