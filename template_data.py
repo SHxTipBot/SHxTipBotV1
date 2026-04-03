@@ -300,6 +300,7 @@ def get_dashboard_html():
 
     let userAddress = null;
     let kitInitialized = false;
+    let StellarWalletsKit, KitEventType, SwkAppDarkTheme, defaultModules, WalletConnectModule;
 
     /**
      * Defensive helper to prevent 'Unsupported address type: undefined' errors.
@@ -362,7 +363,7 @@ def get_dashboard_html():
         if (kitInitialized) return;
         try {
             console.log("Initializing Stellar Kit...");
-            const { StellarWalletsKit, KitEventType, SwkAppDarkTheme, defaultModules, WalletConnectModule } = window.StellarKit;
+            ({ StellarWalletsKit, KitEventType, SwkAppDarkTheme, defaultModules, WalletConnectModule } = window.StellarKit);
             const modules = defaultModules();
             
             if (WalletConnectModule && WC_PROJECT_ID) {
