@@ -1126,6 +1126,42 @@ async def bot_sync_command(interaction: Interaction):
         await interaction.followup.send(f"❌ Failed to sync: {str(e)}", ephemeral=True)
 
 
+# ── /distribute ───────────────────────────────────────────────────────────────
+
+@bot.tree.command(name="distribute", description="[Admin] Manually fund a user's internal SHx balance")
+@app_commands.describe(user="The user to fund", amount="Amount of SHx to grant")
+async def distribute_command(interaction: Interaction, user: discord.User, amount: str):
+    logger.info(f"COMMAND | /distribute | User: {interaction.user} Target: {user} Amount: {amount}")
+    await interaction.response.defer(ephemeral=True)
+    if str(interaction.user.id) not in ADMIN_DISCORD_IDS:
+        await interaction.followup.send("❌ You do not have permission to use this command.", ephemeral=True)
+        return
+        
+    parsed_amt = await parse_amount(amount)
+    if not parsed_amt or parsed_amt <= 0:
+        await interaction.followup.send("❌ Invalid amount.", ephemeral=True)
+        return
+        
+    try:
+        await db.get_or_create_user(str(user.id))
+        await db.admin_fund_internal(str(user.id), parsed_amt)
+        
+        embed = _footer(discord.Embed(title="💳 Internal Funding Complete", color=SUCCESS_COLOR))
+        embed.add_field(name="Recipient", value=user.mention, inline=True)
+        embed.add_field(name="Amount Granted", value=f"**{parsed_amt:,.2f} SHx**", inline=True)
+        embed.set_description(f"Successfully funded {user.display_name}'s internal balance from the House reserve.")
+        
+        await interaction.followup.send(embed=embed, ephemeral=True)
+        # Notify the user too!
+        try:
+            await user.send(f"🏦 An admin has credited your account with **{parsed_amt:,.2f} SHx**!")
+        except:
+            pass
+    except Exception as e:
+        logger.error(f"Distribute command error: {e}")
+        await interaction.followup.send(f"❌ Failed to distribute funds: {str(e)}", ephemeral=True)
+
+
 # ── Entry Point ───────────────────────────────────────────────────────────────
 
 def main():
