@@ -292,10 +292,11 @@ def get_dashboard_html():
         withdrawals.forEach(w => {
             const date = new Date(w.created_at * 1000).toLocaleDateString();
             html += `
-            <div class="bg-dark-overlay mb-2 p-3 rounded-lg border border-opacity-10 flex justify-between items-center" style="display:flex; justify-content:space-between; align-items:center;">
-              <div>
+            <div class="bg-dark-overlay mb-2 p-3 rounded-lg border border-opacity-10" style="display:flex; justify-content:space-between; align-items:center;">
+              <div style="flex:1;">
                 <p class="text-bold text-accent">${w.amount} SHx</p>
                 <p class="text-xs text-muted">Ticket: ...${w.id.slice(-6)} • ${date}</p>
+                <span onclick="handleCancel('${w.id}')" class="text-error text-xs" style="cursor:pointer; text-decoration: underline; margin-top: 5px; display: inline-block;">Cancel & Refund</span>
               </div>
               <button onclick="selectTicket('${w.id}', '${w.amount}')" class="btn btn-primary text-xs px-4 py-2">Select to Claim</button>
             </div>`;
@@ -309,6 +310,11 @@ def get_dashboard_html():
         document.getElementById('active-claim-view').classList.remove('hidden');
         document.getElementById('active-ticket-id').innerText = `...${id.slice(-8)}`;
         document.getElementById('active-ticket-amount').innerText = amount;
+        
+        // Ensure buttons are visible if they were hidden by a previous action
+        document.getElementById('btn-claim-action').classList.remove('hidden');
+        document.getElementById('btn-claim-cancel').classList.remove('hidden');
+        
         notify('claim-notify', "Ticket selected. Ready to claim on-chain.");
     };
 
@@ -656,10 +662,16 @@ def get_dashboard_html():
     }
 
 
-    async function handleCancel() {
+    async function handleCancel(id) {
+        if (id) CLAIM_ID = id;
         if (!confirm("Are you sure you want to cancel this withdrawal and refund the SHx to your Discord balance?")) return;
         try {
             notify('claim-notify', "Cancelling withdrawal...");
+            if (id) {
+                // If called from the list, we might need to show the notification
+                document.getElementById('claim-card').classList.remove('hidden');
+                notify('claim-notify', "Cancelling withdrawal...");
+            }
             const res = await axios.post(`${API_BASE}/api/withdrawal/${CLAIM_ID}/cancel`, { token: TOKEN });
             if (res.data.success) {
                 notify('claim-notify', "✅ Withdrawal cancelled. Funds refunded to Discord.");
