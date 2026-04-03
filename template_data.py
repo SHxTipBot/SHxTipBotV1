@@ -382,18 +382,25 @@ def get_dashboard_html():
         }
         document.getElementById('wallet-display').classList.remove('hidden');
         document.getElementById('address-short').innerText = `${address.substring(0,5)}...${address.substring(51)}`;
-        document.getElementById('btn-link').disabled = false;
-        const claimBtn = document.getElementById('btn-claim-action');
-        if (claimBtn) claimBtn.disabled = false;
         setStatus("Connected ✅");
         
-        // Show unlink container if we have an internal link too
+        // Update labels for linking/switching
+        const linkBtn = document.getElementById('btn-link');
+        if (linkBtn) {
+            linkBtn.disabled = false;
+            linkBtn.innerText = "Verify & Link Wallet";
+        }
+        
+        const claimBtn = document.getElementById('btn-claim-action');
+        if (claimBtn) claimBtn.disabled = false;
+        
+        // Show unlink container ONLY if the user is already linked in our database
         const existing = "{{EXISTING_KEY_VAL}}";
         if (existing && existing.length > 10) {
             document.getElementById('unlink-container')?.classList.remove('hidden');
             const label = document.getElementById('connected-key-label');
             if (label) label.innerText = `${existing.substring(0,8)}...${existing.substring(existing.length-8)}`;
-            document.getElementById('btn-link').innerText = "Switch / Re-link Wallet";
+            if (linkBtn) linkBtn.innerText = "Switch / Change Linked Wallet";
         }
       } else {
         if (badge) {
@@ -418,10 +425,10 @@ def get_dashboard_html():
         div.innerText = msg;
     };
 
-    const initKit = async () => {
+    async function initKit() {
         if (kitInitialized) return;
-        try {
-            console.log("Initializing Stellar Kit...");
+        kitInitialized = true;
+        console.log("Initializing Stellar Kit...");
             ({ StellarWalletsKit, KitEventType, SwkAppDarkTheme, defaultModules, WalletConnectModule } = window.StellarKit);
             const modules = defaultModules();
             
@@ -483,19 +490,18 @@ def get_dashboard_html():
         console.log("handleLink() triggered. Current userAddress:", userAddress);
         
         // Fallback: try to pull address directly from kit if global is missing
-        if (!userAddress && window.StellarWalletsKit) {
+        if (!userAddress && StellarWalletsKit) {
             try {
-                // Some versions allow direct query
-                const state = await window.StellarWalletsKit.getState?.();
-                userAddress = state?.address || state?.activeAddress || userAddress;
-                console.log("Attempted sync from kit state:", userAddress);
+                // Some versions allow direct query or have a public state
+                userAddress = StellarWalletsKit.address || StellarWalletsKit.publicKey || userAddress;
+                console.log("Attempted sync from kit properties:", userAddress);
             } catch (e) {
                 console.warn("Could not sync state from kit:", e);
             }
         }
 
-        if (!userAddress) {
-            alert("Wallet not recognized. Please click the 'Connect Wallet' button (top right) first.");
+        if (!userAddress || userAddress.length < 56) {
+            alert("Wallet not recognized. Please click the 'Connect Wallet' button (top right) and select your wallet first.");
             return;
         }
         
@@ -732,15 +738,16 @@ def get_dashboard_html():
 
 
     window.onload = () => {
-        initKit();
         fetchBalance(); 
 
         const existing = "{{EXISTING_KEY_VAL}}";
-        if (existing && existing.length > 10 && existing !== "{{EXISTING_KEY_VAL}}") {
+        // Check if existing is a valid G-address (starts with G, length 56)
+        if (existing && existing.startsWith("G") && existing.length === 56) {
             setStatus("Linked ✅");
             document.getElementById('unlink-container')?.classList.remove('hidden');
-            document.getElementById('connected-key-label').innerText = `${existing.substring(0,8)}...${existing.substring(existing.length-8)}`;
-            document.getElementById('btn-link').innerText = "Switch / Re-link Wallet";
+            const label = document.getElementById('connected-key-label');
+            if (label) label.innerText = `${existing.substring(0,8)}...${existing.substring(existing.length-8)}`;
+            document.getElementById('btn-link').innerText = "Switch / Change Linked Wallet";
         }
 
         if (CLAIM_ID && CLAIM_ID.length > 5 && CLAIM_ID !== "{{CLAIM_ID}}") {
@@ -748,6 +755,9 @@ def get_dashboard_html():
             selectTicket(CLAIM_ID, "{{CLAIM_AMOUNT}}");
         }
     };
+    
+    // Initialize kit immediately on script load
+    initKit();
     
     document.getElementById('btn-link').onclick = handleLink;
     document.getElementById('btn-claim-action').onclick = handleClaim;
