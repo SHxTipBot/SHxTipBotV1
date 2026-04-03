@@ -511,3 +511,12 @@ async def get_latest_pending_withdrawal(discord_id: str) -> Optional[Dict[str, A
     )
     return dict(row) if row else None
 
+async def get_pending_withdrawals(discord_id: str, limit: int = 5) -> List[Dict[str, Any]]:
+    """Get all pending withdrawals for a user (up to the specified limit)."""
+    pool = await get_pool()
+    rows = await pool.fetch(
+        "SELECT * FROM withdrawals WHERE discord_id = $1 AND status = 'PENDING' ORDER BY created_at DESC LIMIT $2",
+        discord_id, limit
+    )
+    return [dict(r) for r in rows]
+

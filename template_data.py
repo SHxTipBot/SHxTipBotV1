@@ -204,22 +204,25 @@ def get_dashboard_html():
 
     <!-- Claim Card -->
     <div id="claim-card" class="card hidden">
-      <h2>Pending Withdrawal</h2>
+      <h2>Pending Withdrawals</h2>
+      <p class="text-sm text-muted mb-4">You have pending SHx withdrawal tickets created from Discord. Select one to claim to your linked wallet.</p>
+      
+      <div id="withdrawal-list" class="mb-4">
+        <!-- Dynamic list of withdrawals goes here -->
+        <div class="text-center py-4 text-muted">Scanning for active tickets...</div>
+      </div>
+      
       <div id="claim-notify" class="status hidden"></div>
-      <button id="btn-claim-action" class="btn btn-primary bg-success w-full justify-center" disabled>Claim SHx Rewards</button>
-      <button id="btn-claim-cancel" class="btn btn-secondary w-full justify-center mt-4">Cancel & Refund to Discord</button>
+      
+      <div id="active-claim-view" class="hidden bg-dark-overlay mt-4">
+        <h3 class="mb-2">Claiming Ticket: <span id="active-ticket-id" class="text-accent"></span></h3>
+        <p class="mb-4">Amount: <span id="active-ticket-amount" class="text-bold text-accent"></span> SHx</p>
+        <button id="btn-claim-action" class="btn btn-primary bg-success w-full justify-center" disabled>Confirm & Claim on Stellar</button>
+        <button id="btn-claim-cancel" class="btn btn-secondary w-full justify-center mt-4">Cancel & Refund to Discord</button>
+        <p class="text-xs text-center mt-4 text-muted" onclick="showList()" style="cursor:pointer; text-decoration: underline;">← Back to List</p>
+      </div>
     </div>
 
-    <!-- Withdraw Card -->
-    <div id="withdraw-card" class="card hidden">
-      <h2>Web Withdrawal</h2>
-      <p class="text-sm text-muted mb-6">Withdraw SHx directly from your Discord balance to your linked wallet.</p>
-      <div style="margin-bottom: 1rem;">
-        <input type="number" id="withdraw-amount-input" placeholder="Amount (e.g. 1000)" style="width: 100%; padding: 0.75rem; border-radius: 0.5rem; border: 1px solid var(--border); background: rgba(0,0,0,0.5); color: white; margin-bottom: 0.5rem;">
-      </div>
-      <div id="withdraw-notify" class="status hidden"></div>
-      <button id="btn-web-withdraw" class="btn btn-primary w-full justify-center" disabled>Prepare Withdrawal</button>
-    </div>
 
   </div>
 
@@ -231,6 +234,7 @@ def get_dashboard_html():
     const urlParams = new URLSearchParams(window.location.search);
     const TOKEN = urlParams.get('token') || "{{TOKEN}}";
     let CLAIM_ID = urlParams.get('claim_id') || "{{CLAIM_ID}}";
+    let PENDING_IDS = {{PENDING_IDS}};
     const NETWORK = "{{NETWORK}}";
     const WC_PROJECT_ID = "{{WC_PROJECT_ID}}";
     const APP_VERSION = "{{APP_VERSION}}";
@@ -251,31 +255,68 @@ def get_dashboard_html():
             const res = await axios.get(`${API_BASE}/api/balance?token=${TOKEN}&claim_id=${CLAIM_ID}`);
             if (res.data.success) {
                 currentBalance = res.data.balance;
-                const el = document.getElementById('internal-balance-val');
-                if (el) el.innerText = currentBalance;
+                const balanceEl = document.getElementById('internal-balance-val');
+                if (balanceEl) balanceEl.innerText = currentBalance;
                 
-                // Clear "Syncing..." status if not already set by window.onload
                 const statusEl = document.getElementById('link-status-text');
                 if (statusEl && (statusEl.innerText === "Syncing..." || statusEl.innerText.includes("Connected"))) {
                     statusEl.innerText = "Connected ✅";
                     statusEl.className = "text-success";
                 }
                 
-                console.log("Balance data:", res.data);
-                
-                // Auto-detect pending withdrawal if we're not already viewing one
-                if (res.data.pending_withdrawal) {
-                    CLAIM_ID = res.data.pending_withdrawal.id;
-                    const claimCard = document.getElementById('claim-card');
-                    if (claimCard) {
-                        claimCard.classList.remove('hidden');
-                        notify('claim-notify', `Auto-detected pending withdrawal: ${res.data.pending_withdrawal.amount} SHx`);
-                    }
+                if (res.data.pending_withdrawals && res.data.pending_withdrawals.length > 0) {
+                    PENDING_IDS = res.data.pending_withdrawals.map(w => w.id);
+                    renderWithdrawals(res.data.pending_withdrawals);
+                } else {
+                    document.getElementById('withdrawal-list').innerHTML = '<div class="text-center py-4 text-muted">No pending withdrawal tickets found.</div>';
                 }
             }
         } catch (e) {
-            console.error("Failed to fetch balance:", e);
+            console.error("Failed to fetch data:", e);
         }
+    };
+
+    const renderWithdrawals = (withdrawals) => {
+        const listEl = document.getElementById('withdrawal-list');
+        const claimCard = document.getElementById('claim-card');
+        if (!listEl || !claimCard) return;
+
+        claimCard.classList.remove('hidden');
+        
+        if (!withdrawals || withdrawals.length === 0) {
+            listEl.innerHTML = '<div class="text-center py-4 text-muted">No pending tickets.</div>';
+            return;
+        }
+
+        let html = '';
+        withdrawals.forEach(w => {
+            const date = new Date(w.created_at * 1000).toLocaleDateString();
+            html += `
+            <div class="bg-dark-overlay mb-2 p-3 rounded-lg border border-opacity-10 flex justify-between items-center" style="display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                <p class="text-bold text-accent">${w.amount} SHx</p>
+                <p class="text-xs text-muted">Ticket: ...${w.id.slice(-6)} • ${date}</p>
+              </div>
+              <button onclick="selectTicket('${w.id}', '${w.amount}')" class="btn btn-primary text-xs px-4 py-2">Select to Claim</button>
+            </div>`;
+        });
+        listEl.innerHTML = html;
+    };
+
+    const selectTicket = (id, amount) => {
+        CLAIM_ID = id;
+        document.getElementById('withdrawal-list').classList.add('hidden');
+        document.getElementById('active-claim-view').classList.remove('hidden');
+        document.getElementById('active-ticket-id').innerText = `...${id.slice(-8)}`;
+        document.getElementById('active-ticket-amount').innerText = amount;
+        notify('claim-notify', "Ticket selected. Ready to claim on-chain.");
+    };
+
+    const showList = () => {
+        document.getElementById('withdrawal-list').classList.remove('hidden');
+        document.getElementById('active-claim-view').classList.add('hidden');
+        document.getElementById('claim-notify').classList.add('hidden');
+        fetchBalance();
     };
 
     const resetSession = () => {
@@ -602,10 +643,9 @@ def get_dashboard_html():
             document.getElementById('btn-claim-action').classList.add('hidden');
             document.getElementById('btn-claim-cancel').classList.add('hidden');
             
-            // Re-show withdraw card after successful claim with 10s delay as requested
+            // After 10s, refresh and show the list again
             setTimeout(() => {
-                document.getElementById('claim-card').classList.add('hidden');
-                document.getElementById('withdraw-card').classList.remove('hidden');
+                showList();
                 fetchBalance();
             }, 10000);
         } catch (e) {
@@ -626,8 +666,8 @@ def get_dashboard_html():
                 document.getElementById('btn-claim-action').classList.add('hidden');
                 document.getElementById('btn-claim-cancel').classList.add('hidden');
                 
-                // Refresh balance after refund
-                setTimeout(fetchBalance, 1000);
+                // Refresh list after refund
+                setTimeout(showList, 1500);
             }
         } catch (e) {
             const msg = e.response?.data?.detail || e.message || String(e);
@@ -635,39 +675,10 @@ def get_dashboard_html():
         }
     }
 
-    async function handleWebWithdraw() {
-        if (!userAddress) return;
-        const amountEl = document.getElementById('withdraw-amount-input');
-        const amount = amountEl.value;
-        if (!amount || amount <= 0) {
-            notify('withdraw-notify', "Please enter a valid amount.", true);
-            return;
-        }
-
-        try {
-            document.getElementById('btn-web-withdraw').disabled = true;
-            notify('withdraw-notify', "Initializing withdrawal. Please wait...");
-            
-            const res = await axios.post(`${API_BASE}/api/web-withdraw`, { token: TOKEN, amount: amount });
-            if (!res.data.success) throw new Error("Failed to initialize withdrawal");
-            
-            CLAIM_ID = res.data.id;
-            
-            document.getElementById('withdraw-card').classList.add('hidden');
-            document.getElementById('claim-card').classList.remove('hidden');
-            
-            notify('claim-notify', "Withdrawal ticket ready. Awaiting your wallet signature to claim...");
-            handleClaim();
-        } catch (e) {
-            document.getElementById('btn-web-withdraw').disabled = false;
-            const msg = e.response?.data?.detail || e.message || String(e);
-            notify('withdraw-notify', msg, true); 
-        }
-    }
 
     window.onload = () => {
         initKit();
-        fetchBalance(); // Always fetch latest balance
+        fetchBalance(); 
 
         const existing = "{{EXISTING_KEY_VAL}}";
         if (existing && existing.length > 10 && existing !== "{{EXISTING_KEY_VAL}}") {
@@ -676,18 +687,14 @@ def get_dashboard_html():
         }
 
         if (CLAIM_ID && CLAIM_ID.length > 5 && CLAIM_ID !== "{{CLAIM_ID}}") {
-            document.getElementById('claim-card').classList.remove('hidden');
-        } else if (existing && existing.length > 10 && existing !== "{{EXISTING_KEY_VAL}}") {
-            // Unhide withdraw card only if no pending claim
-            document.getElementById('withdraw-card').classList.remove('hidden');
+            // If we came from a direct link, show the ticket directly
+            selectTicket(CLAIM_ID, "{{CLAIM_AMOUNT}}");
         }
     };
     
     document.getElementById('btn-link').onclick = handleLink;
     document.getElementById('btn-claim-action').onclick = handleClaim;
     document.getElementById('btn-claim-cancel').onclick = handleCancel;
-    const webWithdrawBtn = document.getElementById('btn-web-withdraw');
-    if (webWithdrawBtn) webWithdrawBtn.onclick = handleWebWithdraw;
     
     document.getElementById('btn-unlink').onclick = async () => {
         if (!confirm("Unlink wallet?")) return;

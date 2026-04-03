@@ -130,10 +130,12 @@ async def register_page(token: str = "", claim_id: str = ""):
         discord_id = await db.validate_link_token(token)
     
     is_auto_detected = "false"
-    if discord_id and not claim_id:
-        pending = await db.get_latest_pending_withdrawal(discord_id)
-        if pending:
-            claim_id = pending["id"]
+    pending_ids = []
+    if discord_id:
+        pending = await db.get_pending_withdrawals(discord_id, limit=5)
+        pending_ids = [w["id"] for w in pending]
+        if pending_ids and not claim_id:
+            claim_id = pending_ids[0]
             is_auto_detected = "true"
 
     claim_amount_str = "0.00"
@@ -178,6 +180,9 @@ async def register_page(token: str = "", claim_id: str = ""):
     # WalletConnect Project ID injection
     wc_project_id = os.getenv("WC_PROJECT_ID", "1da02e75fe8efd7560248dc15804b13c")
     html = html.replace("{{WC_PROJECT_ID}}", wc_project_id.strip())
+    
+    import json
+    html = html.replace("{{PENDING_IDS}}", json.dumps(pending_ids))
     
     # Cache busting version using current timestamp
     dynamic_version = str(int(time.time()))
@@ -326,23 +331,44 @@ async def api_get_balance(token: str = "", claim_id: str = ""):
         
     balance = await db.get_internal_balance(discord_id)
     
-    # Auto-detect latest pending withdrawal for this user
-    pending = await db.get_latest_pending_withdrawal(discord_id)
-    pending_info = None
-    if pending:
-        pending_info = {
-            "id": pending["id"],
-            "amount": f"{pending['amount']:,g}"
-        }
+    # Fetch all pending withdrawals (up to 5)
+    pending = await db.get_pending_withdrawals(discord_id, limit=5)
+    pending_list = [
+        {
+            "id": w["id"],
+            "amount": f"{w['amount']:,g}",
+            "created_at": w["created_at"]
+        } for w in pending
+    ]
         
     return {
         "success": True, 
         "balance": f"{balance:,.2f}",
-        "pending_withdrawal": pending_info
+        "pending_withdrawals": pending_list
     }
 
 
 # ── API: Withdrawals ─────────────────────────────────────────────────────────
+
+@app.get("/api/withdrawals")
+async def api_get_withdrawals(token: str = ""):
+    """Fetch all pending withdrawals for a user."""
+    discord_id = await db.validate_link_token(token)
+    if not discord_id:
+        raise HTTPException(400, "Invalid session.")
+        
+    pending = await db.get_pending_withdrawals(discord_id, limit=5)
+    return {
+        "success": True, 
+        "withdrawals": [
+            {
+                "id": w["id"],
+                "amount": f"{w['amount']:,g}",
+                "stellar_address": w["stellar_address"],
+                "created_at": w["created_at"]
+            } for w in pending
+        ]
+    }
 
 @app.get("/api/withdrawal/{withdrawal_id}")
 async def api_get_withdrawal(withdrawal_id: str):
@@ -408,112 +434,6 @@ async def api_complete_withdrawal(withdrawal_id: str, request: Request):
     await db.complete_withdrawal(withdrawal_id, tx_hash)
     logger.info(f"WITHDRAWAL COMPLETE | ID: {withdrawal_id} | Hash: {tx_hash}")
     return {"success": True}
-
-@app.post("/api/withdrawal/{withdrawal_id}/cancel")
-async def api_cancel_withdrawal(withdrawal_id: str, request: Request):
-    """Cancel a pending withdrawal and refund the user."""
-    try:
-        body = await request.json()
-    except Exception:
-        raise HTTPException(400, "Invalid JSON body.")
-
-    token = body.get("token", "").strip()
-    # Note: We allow cancellation if they have a valid token OR if they originated from the bot's claim link.
-    # To be secure, we validate the token if provided.
-    
-    discord_id = None
-    if token:
-        discord_id = await db.validate_link_token(token)
-    
-    # Check the withdrawal record
-    withdrawal = await db.get_withdrawal(withdrawal_id)
-    if not withdrawal:
-        raise HTTPException(404, "Withdrawal not found.")
-        
-    # If a token was provided, ensure it matches the withdrawal owner
-    if discord_id and withdrawal["discord_id"] != discord_id:
-        raise HTTPException(403, "You do not have permission to cancel this withdrawal.")
-
-    # Perform cancellation
-    success = await db.cancel_withdrawal(withdrawal_id)
-    if not success:
-        return JSONResponse({
-            "success": False, 
-            "message": "Cancellation failed. Withdrawal may be finished or not found."
-        }, status_code=400)
-
-    logger.info(f"WITHDRAWAL CANCELLED | ID: {withdrawal_id} | User: {withdrawal['discord_id']}")
-    return {"success": True, "message": "Withdrawal cancelled. SHx refunded to Discord."}
-
-
-class WebWithdrawRequest(BaseModel):
-    token: str
-    amount: str
-
-@app.post("/api/web-withdraw")
-async def api_web_withdraw(req: WebWithdrawRequest):
-    """
-    Direct web-based withdrawal. Validates token, internal balance, and HOUSE ACCOUNT allowance.
-    Returns the generated withdrawal ID, nonce, signature, and amount.
-    """
-    token = req.token.strip()
-    discord_id = await db.validate_link_token(token)
-    if not discord_id:
-        raise HTTPException(400, "Invalid or expired session. Please re-link via Discord.")
-
-    destination = await db.get_user_stellar_key(discord_id)
-    if not destination:
-        raise HTTPException(400, "No linked stellar wallet found.")
-
-    try:
-        amount_f = float(req.amount)
-        if amount_f <= 0:
-            raise ValueError()
-    except ValueError:
-        raise HTTPException(400, "Invalid withdrawal amount.")
-
-    current_bal = await db.get_internal_balance(discord_id)
-    if amount_f > current_bal:
-        raise HTTPException(400, f"Insufficient internal balance. You have {current_bal:,.2f} SHx.")
-
-    # Check House Account Liquidity
-    house_bal = await stellar.get_shx_balance(stellar.HOUSE_ACCOUNT_PUBLIC)
-    if house_bal < amount_f:
-        logger.error(f"HOUSE ACCOUNT LIQUIDITY LOW. Need {amount_f}, have {house_bal}")
-        raise HTTPException(400, "The bot's House Account does not have enough on-chain liquidity. Please notify an admin.")
-
-    # Check House Account Allowance (Auto-Approve if needed)
-    allowance = await stellar.check_shx_allowance(stellar.HOUSE_ACCOUNT_PUBLIC, stellar.SOROBAN_CONTRACT_ID)
-    if allowance < amount_f:
-        logger.warning(f"HOUSE ACCOUNT ALLOWANCE LOW ({allowance}). Auto-approving...")
-        approve_res = await stellar.approve_shx(stellar.HOUSE_ACCOUNT_SECRET, stellar.SOROBAN_CONTRACT_ID, 1000000.0)
-        if approve_res and approve_res.get("success"):
-            logger.info("Auto-approve successful.")
-        else:
-            logger.error(f"AUTO-APPROVE FAILED | {approve_res.get('error') if approve_res else 'Unknown'}")
-            raise HTTPException(400, "The bot's House Account has technical permission issues (low allowance). Please notify an admin.")
-
-    withdrawal_id = secrets.token_hex(16)
-    nonce = int(time.time() * 1000)
-
-    try:
-        signature = stellar.sign_withdrawal(destination, amount_f, nonce)
-    except Exception as e:
-        logger.error(f"Failed to sign withdrawal for {discord_id}: {e}")
-        raise HTTPException(500, "System error generating withdrawal ticket.")
-
-    # Atomic Balance Deduction
-    await db.add_deposit(discord_id, f"WD_PENDING_{withdrawal_id}", -amount_f)
-    await db.create_withdrawal(withdrawal_id, discord_id, destination, amount_f, nonce, signature)
-
-    return {
-        "success": True,
-        "id": withdrawal_id,
-        "amount": amount_f,
-        "nonce": nonce,
-        "signature": signature,
-        "destination": destination
-    }
 
 # ── Health Check ──────────────────────────────────────────────────────────────
 
