@@ -597,17 +597,17 @@ def get_dashboard_html():
             const notifyEl = document.getElementById('claim-notify');
             notifyEl.classList.remove('hidden', 'error');
             notifyEl.classList.add('success');
-            notifyEl.innerHTML = `✅ Claim Successful!<br><a href="${explorerUrl}" target="_blank" style="color:var(--accent); text-decoration: underline; margin-top: 0.5rem; display: inline-block;">View on Stellar.Expert</a>`;
+            notifyEl.innerHTML = `✅ Claim Successful!<br><a href="${explorerUrl}" target="_blank" style="color:var(--accent); text-decoration: underline; margin-top: 0.5rem; display: inline-block;">View on Stellar.Expert</a><p style="font-size: 0.8rem; opacity: 0.7; margin-top: 1rem;">Closing in 10 seconds...</p>`;
             
             document.getElementById('btn-claim-action').classList.add('hidden');
             document.getElementById('btn-claim-cancel').classList.add('hidden');
             
-            // Re-show withdraw card after successful claim
+            // Re-show withdraw card after successful claim with 10s delay as requested
             setTimeout(() => {
                 document.getElementById('claim-card').classList.add('hidden');
                 document.getElementById('withdraw-card').classList.remove('hidden');
                 fetchBalance();
-            }, 5000);
+            }, 10000);
         } catch (e) {
             console.error("CLAIM FLOW FAILED:", e);
             const msg = e.response?.data?.detail || e.message || String(e);
