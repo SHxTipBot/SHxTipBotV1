@@ -519,21 +519,18 @@ async def tip_command(
         await interaction.followup.send("❌ Invalid amount. Enter a positive native integer or fiat string (e.g., `$5`).", ephemeral=True)
         return
 
-    fee_shx = 0.0
-    total_needed = parsed_amount + fee_shx
 
     # Ensure recipient exists in DB
     await db.get_or_create_user(recipient_id)
 
 
-    success = await db.transfer_internal(sender_id, recipient_id, parsed_amount, fee_shx, actual_reason)
+    success = await db.transfer_internal(sender_id, recipient_id, parsed_amount, 0.0, actual_reason)
 
     if success:
         embed = _footer(discord.Embed(title="✅ Tip Sent!", color=SUCCESS_COLOR))
         embed.add_field(name="From", value=interaction.user.mention, inline=True)
         embed.add_field(name="To", value=user.mention, inline=True)
         embed.add_field(name="Amount", value=f"**{parsed_amount:,.2f} SHx**", inline=True)
-        embed.add_field(name="Fee", value=f"{fee_shx:,.2f} SHx", inline=True)
         if actual_reason:
             embed.add_field(name="Reason", value=actual_reason, inline=False)
         await interaction.followup.send(embed=embed)

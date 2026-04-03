@@ -30,9 +30,10 @@ The SHx Tip Bot utilizes a **Hybrid Custodial Model** to maximize speed and elim
                       └──────────────┘
 ```
 
-1.  **Instant Tipping**: Users tip each other (`/tip`) instantly within Discord. The bot manages these totals in a localized **Postgres** database. No Stellar network fees apply for internal tips.
-2.  **On-Chain Deposits**: Users can fund their Discord wallet by sending SHx to the **House Account** with their unique Memo ID. The bot's background stream detects these and credits their balance.
-3.  **Non-Custodial Withdrawals**: Users withdraw their funds via `/withdraw`. The bot issues a cryptographically signed **"Claim Ticket"**. The user signs a transaction with their own wallet (Lobstr, Freighter, etc.) on the **Web Dashboard** to claim the funds from the Smart Contract.
+1.  **Instant Tipping**: Users tip each other (`/tip`) instantly. The bot moves SHx in a localized **Postgres (Neon)** ledger. **Internal community tipping is 100% free with zero gas fees.**
+2.  **On-Chain Deposits**: Users deposit SHx to the **House Account** with a unique Memo ID. The bot automatically detects these deposits and credits the user's internal balance.
+3.  **Non-Custodial Withdrawals**: When a user wants their funds on-chain, they use `/withdraw`. The bot signs a **"Claim Ticket"**. The user then visits the **Web Dashboard** and executes a `claim_withdrawal` function.
+    *   **User Pays Gas**: The user pays the small XLM network fee directly to the Stellar network during the claim process. This ensures the bot remains free and sustainable to operate at scale.
 
 ---
 

@@ -32,9 +32,7 @@ SHX_SAC_CONTRACT_ID = os.getenv("SHX_SAC_CONTRACT_ID", "").strip()
 SOROBAN_CONTRACT_ID = os.getenv("SOROBAN_CONTRACT_ID", "").strip()
 HOUSE_ACCOUNT_SECRET = os.getenv("HOUSE_ACCOUNT_SECRET", "").strip()
 HOUSE_ACCOUNT_PUBLIC = os.getenv("HOUSE_ACCOUNT_PUBLIC", "").strip()
-ESTIMATED_XLM_FEE = float(os.getenv("ESTIMATED_XLM_FEE", "0.05"))
-GAS_BUFFER_PERCENT = 15  # safety margin on gas estimate
-FALLBACK_GAS_SHX = float(os.getenv("FALLBACK_GAS_SHX", "0.5"))  # fallback if DEX price unavailable
+HOUSE_ACCOUNT_PUBLIC = os.getenv("HOUSE_ACCOUNT_PUBLIC", "").strip()
 
 NETWORK_PASSPHRASE = (
     Network.TESTNET_NETWORK_PASSPHRASE
