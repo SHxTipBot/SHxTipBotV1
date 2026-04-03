@@ -193,7 +193,12 @@ def get_dashboard_html():
       <p id="reset-session-link" class="mb-4 text-xs text-accent" style="cursor:pointer; text-decoration: underline;" onclick="resetSession()">Trouble connecting? Reset Session</p>
       <div id="link-notify" class="status hidden"></div>
       <button id="btn-link" class="btn btn-primary w-full justify-center" disabled>Verify & Link Wallet</button>
-      <p id="btn-unlink" class="text-error mt-4 text-center text-sm hidden">Unlink Wallet</p>
+      
+      <!-- Unlink Action (Visible only when linked) -->
+      <div id="unlink-container" class="mt-4 text-center hidden">
+          <p class="text-xs text-muted mb-2">Connected: <span id="connected-key-label" class="text-accent"></span></p>
+          <button id="btn-unlink-action" class="btn btn-secondary w-full justify-center">Unlink Current Wallet</button>
+      </div>
       
       <!-- Trustline Warning -->
       <div id="trustline-warning" class="status error hidden text-sm mt-4">
@@ -380,9 +385,16 @@ def get_dashboard_html():
         document.getElementById('btn-link').disabled = false;
         const claimBtn = document.getElementById('btn-claim-action');
         if (claimBtn) claimBtn.disabled = false;
-        const withdrawBtn = document.getElementById('btn-web-withdraw');
-        if (withdrawBtn) withdrawBtn.disabled = false;
         setStatus("Connected ✅");
+        
+        // Show unlink container if we have an internal link too
+        const existing = "{{EXISTING_KEY_VAL}}";
+        if (existing && existing.length > 10) {
+            document.getElementById('unlink-container')?.classList.remove('hidden');
+            const label = document.getElementById('connected-key-label');
+            if (label) label.innerText = `${existing.substring(0,8)}...${existing.substring(existing.length-8)}`;
+            document.getElementById('btn-link').innerText = "Switch / Re-link Wallet";
+        }
       } else {
         if (badge) {
             badge.innerText = "Wallet: Not Connected";
@@ -477,7 +489,7 @@ def get_dashboard_html():
             if (res.data.success) {
                 notify('link-notify', "✅ Wallet linked successfully!");
                 setStatus("Linked ✅");
-                document.getElementById('btn-unlink').classList.remove('hidden');
+                document.getElementById('unlink-container').classList.remove('hidden');
                 document.getElementById('discord-balance-card').classList.remove('hidden');
                 
                 // Show/hide trustline warning
@@ -695,7 +707,9 @@ def get_dashboard_html():
         const existing = "{{EXISTING_KEY_VAL}}";
         if (existing && existing.length > 10 && existing !== "{{EXISTING_KEY_VAL}}") {
             setStatus("Linked ✅");
-            document.getElementById('btn-unlink').classList.remove('hidden');
+            document.getElementById('unlink-container')?.classList.remove('hidden');
+            document.getElementById('connected-key-label').innerText = `${existing.substring(0,8)}...${existing.substring(existing.length-8)}`;
+            document.getElementById('btn-link').innerText = "Switch / Re-link Wallet";
         }
 
         if (CLAIM_ID && CLAIM_ID.length > 5 && CLAIM_ID !== "{{CLAIM_ID}}") {
@@ -708,11 +722,19 @@ def get_dashboard_html():
     document.getElementById('btn-claim-action').onclick = handleClaim;
     document.getElementById('btn-claim-cancel').onclick = handleCancel;
     
-    document.getElementById('btn-unlink').onclick = async () => {
-        if (!confirm("Unlink wallet?")) return;
-        await axios.post(`${API_BASE}/api/unlink`, { token: TOKEN });
-        location.reload();
+    const unlinkHandler = async () => {
+        if (!confirm("Are you sure you want to unlink your wallet? This will remove the connection between your Discord and this Stellar address.")) return;
+        try {
+            await axios.post(`${API_BASE}/api/unlink`, { token: TOKEN });
+            location.reload();
+        } catch (e) {
+            alert("Failed to unlink: " + (e.response?.data?.detail || e.message));
+        }
     };
+    
+    if (document.getElementById('btn-unlink-action')) {
+        document.getElementById('btn-unlink-action').onclick = unlinkHandler;
+    }
   </script>
 </body>
 </html>'''
