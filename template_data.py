@@ -427,8 +427,9 @@ def get_dashboard_html():
 
     async function initKit() {
         if (kitInitialized) return;
-        kitInitialized = true;
-        console.log("Initializing Stellar Kit...");
+        try {
+            kitInitialized = true;
+            console.log("Initializing Stellar Kit...");
             ({ StellarWalletsKit, KitEventType, SwkAppDarkTheme, defaultModules, WalletConnectModule } = window.StellarKit);
             const modules = defaultModules();
             
