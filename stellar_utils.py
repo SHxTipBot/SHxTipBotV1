@@ -117,7 +117,7 @@ async def get_shx_balance(public_key: str) -> float | None:
                 ):
                     return float(bal["balance"])
             # Account exists but has no SHx trustline
-            return 0.0
+            return None
     except Exception as e:
         logger.error(f"Error fetching balance for {public_key[:8]}...: {e}")
         return None
@@ -190,6 +190,10 @@ async def approve_shx(secret: str, amount: float = 1_000_000):
         public_key = keypair.public_key
         horizon_server = Server(HORIZON_URL)
         soroban_server = SorobanServer(SOROBAN_RPC_URL)
+        
+        # FIX: Load account and calculate stroops
+        account = horizon_server.load_account(public_key)
+        stroops = _to_stroops(amount)
         
         builder = TransactionBuilder(
             source_account=account,

@@ -140,12 +140,37 @@ def get_dashboard_html():
     .bg-success { background: var(--success) !important; }
     .bg-dark-overlay { background: rgba(0,0,0,0.3); padding: 1rem; border-radius: 0.75rem; border: 1px solid var(--border); }
     .break-word { overflow-wrap: break-word; display: block; }
+    .user-subtitle { font-size: 0.85rem; color: var(--muted); margin-top: 0.25rem; }
+    .status-badge-inline { display: inline-flex; align-items: center; gap: 0.5rem; font-weight: 600; }
 
     .status {
       padding: 1rem; border-radius: 0.75rem; margin-bottom: 1.5rem; font-size: 0.95rem; font-weight: 500;
     }
     .status.success { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }
     .status.error { background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 1rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      transition: all 0.3s ease;
+    }
+    .badge-error {
+      background: rgba(239, 68, 68, 0.1);
+      color: #ef4444;
+      border: 1px solid rgba(239, 68, 68, 0.2);
+    }
+    .badge-success {
+      background: rgba(16, 185, 129, 0.1);
+      color: #10b981;
+      border: 1px solid rgba(16, 185, 129, 0.2);
+    }
 
     .hidden { display: none !important; }
 
@@ -165,16 +190,13 @@ def get_dashboard_html():
       </div>
       <div>
         <div id="swk-button-wrapper"></div>
-        <div id="wallet-display" class="hidden text-right">
-          <code id="address-short" class="text-accent text-bold">G...</code>
-        </div>
       </div>
     </nav>
 
     <div class="hero">
       <h1>Community Portal <span class="text-xs" style="vertical-align: middle; opacity: 0.5;">v1.6</span></h1>
       <p>Securely link your Discord and manage claims.</p>
-      <div id="connection-status-badge" class="mt-4 text-xs p-1 px-3 rounded-full bg-error text-white inline-block font-bold" style="border: 1px solid white;">Wallet: Not Connected (Refresh if you see this)</div>
+      <div id="connection-status-badge" class="mt-4 badge badge-error">Wallet: Not Connected</div>
     </div>
 
     <!-- Link Card -->
@@ -182,7 +204,10 @@ def get_dashboard_html():
       <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
         <div>
           <h2>Discord Status</h2>
-          <p id="link-status-text" class="text-muted">Syncing...</p>
+          <div id="link-status-container">
+            <span id="link-status-text" class="text-success text-bold">Linked ✅</span>
+            <p class="user-subtitle">{{DISCORD_USER}}</p>
+          </div>
         </div>
         <div id="discord-balance-card" class="text-right">
           <p class="text-xs text-muted">Discord Wallet</p>
@@ -196,7 +221,6 @@ def get_dashboard_html():
       
       <!-- Unlink Action (Visible only when linked) -->
       <div id="unlink-container" class="mt-4 text-center hidden">
-          <p class="text-xs text-muted mb-2">Connected: <span id="connected-key-label" class="text-accent"></span></p>
           <button id="btn-unlink-action" class="btn btn-secondary w-full justify-center">Unlink Current Wallet</button>
       </div>
       
@@ -245,14 +269,23 @@ def get_dashboard_html():
     const APP_VERSION = "{{APP_VERSION}}";
     const NETWORK_PASSPHRASE = (NETWORK === 'mainnet' || NETWORK === 'public') ? 'Public Global Stellar Network ; September 2015' : 'Test SDF Network ; September 2015';
     
+    const DISCORD_USER = "{{DISCORD_USER}}";
+    
     // Initial balance from template injection
     let currentBalance = "{{INTERNAL_BALANCE}}";
 
     const setStatus = (msg, isError = false) => {
         const el = document.getElementById('link-status-text');
         if (!el) return;
-        el.innerText = (isError ? "❌ " : "") + msg;
-        el.className = isError ? "text-error" : "text-muted";
+        
+        // If it's a success message, we might want to split or style it
+        if (msg === "Connected ✅" || msg === "Linked ✅") {
+            el.innerText = msg;
+            el.className = "text-success text-bold";
+        } else {
+            el.innerText = (isError ? "❌ " : "") + msg;
+            el.className = isError ? "text-error" : "text-muted";
+        }
     };
 
     const fetchBalance = async () => {
@@ -264,9 +297,8 @@ def get_dashboard_html():
                 if (balanceEl) balanceEl.innerText = currentBalance;
                 
                 const statusEl = document.getElementById('link-status-text');
-                if (statusEl && (statusEl.innerText === "Syncing..." || statusEl.innerText.includes("Connected"))) {
-                    statusEl.innerText = "Connected ✅";
-                    statusEl.className = "text-success";
+                if (statusEl && (statusEl.innerText === "Syncing..." || statusEl.innerText.includes("Connected") || statusEl.innerText.includes("Linked"))) {
+                    setStatus("Connected ✅");
                 }
                 
                 if (res.data.pending_withdrawals && res.data.pending_withdrawals.length > 0) {
@@ -376,12 +408,10 @@ def get_dashboard_html():
       const badge = document.getElementById('connection-status-badge');
       if (address) {
         if (badge) {
-            badge.innerText = `Wallet Connected: ${address.slice(0,6)}...${address.slice(-4)}`;
-            badge.classList.remove('bg-error');
-            badge.classList.add('bg-success');
+            badge.innerHTML = `<span style="width: 8px; height: 8px; background: #10b981; border-radius: 50%; display: inline-block; margin-right: 4px;"></span> Wallet Connected: ${address.slice(0,6)}...${address.slice(-4)}`;
+            badge.classList.remove('badge-error');
+            badge.classList.add('badge-success');
         }
-        document.getElementById('wallet-display').classList.remove('hidden');
-        document.getElementById('address-short').innerText = `${address.substring(0,5)}...${address.substring(51)}`;
         setStatus("Connected ✅");
         
         // Update labels for linking/switching
@@ -398,18 +428,14 @@ def get_dashboard_html():
         const existing = "{{EXISTING_KEY_VAL}}";
         if (existing && existing.length > 10) {
             document.getElementById('unlink-container')?.classList.remove('hidden');
-            const label = document.getElementById('connected-key-label');
-            if (label) label.innerText = `${existing.substring(0,8)}...${existing.substring(existing.length-8)}`;
             if (linkBtn) linkBtn.innerText = "Switch / Change Linked Wallet";
         }
       } else {
         if (badge) {
             badge.innerText = "Wallet: Not Connected";
-            badge.classList.add('bg-error');
-            badge.classList.remove('bg-success');
+            badge.classList.add('badge-error');
+            badge.classList.remove('badge-success');
         }
-        document.getElementById('wallet-display').classList.add('hidden');
-        document.getElementById('address-short').innerText = 'G...';
         document.getElementById('btn-link').disabled = true;
         const claimBtn = document.getElementById('btn-claim-action');
         if (claimBtn) claimBtn.disabled = true;
@@ -482,7 +508,11 @@ def get_dashboard_html():
             console.log("Stellar Kit Started.");
         } catch (err) {
             console.error("SWK INIT FAILED:", err);
-            setStatus("Connection Error: " + (err.message || "Kit not found"), true);
+            if (err.message?.includes('User rejected') || err.message?.includes('Request rejected')) {
+                setStatus("Connection Cancelled");
+            } else {
+                setStatus("Connection Error: " + (err.message || "Kit not found"), true);
+            }
         }
     };
 
@@ -549,7 +579,11 @@ def get_dashboard_html():
             }
         } catch (e) {
             const msg = e.response?.data?.detail || e.message || String(e);
-            notify('link-notify', msg, true); 
+            if (msg.includes('User rejected') || msg.includes('Request rejected')) {
+                notify('link-notify', "Linking cancelled in wallet.", true);
+            } else {
+                notify('link-notify', msg, true); 
+            }
         }
     }
 
@@ -707,13 +741,17 @@ def get_dashboard_html():
         } catch (e) {
             console.error("CLAIM FLOW FAILED:", e);
             const msg = e.response?.data?.detail || e.message || String(e);
-            notify('claim-notify', msg, true); 
+            if (msg.includes('User rejected') || msg.includes('Request rejected')) {
+                notify('claim-notify', "Claim rejected by user.", true);
+            } else {
+                notify('claim-notify', msg, true); 
+            }
         }
     }
 
 
     async function handleCancel(id) {
-        if (id) CLAIM_ID = id;
+        if (id && typeof id === 'string') CLAIM_ID = id;
         if (!confirm("Are you sure you want to cancel this withdrawal and refund the SHx to your Discord balance?")) return;
         try {
             notify('claim-notify', "Cancelling withdrawal...");
@@ -746,8 +784,6 @@ def get_dashboard_html():
         if (existing && existing.startsWith("G") && existing.length === 56) {
             setStatus("Linked ✅");
             document.getElementById('unlink-container')?.classList.remove('hidden');
-            const label = document.getElementById('connected-key-label');
-            if (label) label.innerText = `${existing.substring(0,8)}...${existing.substring(existing.length-8)}`;
             document.getElementById('btn-link').innerText = "Switch / Change Linked Wallet";
         }
 

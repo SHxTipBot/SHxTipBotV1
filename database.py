@@ -84,6 +84,7 @@ async def init_db():
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 discord_id TEXT PRIMARY KEY,
+                username TEXT,
                 stellar_public_key TEXT,
                 internal_balance REAL DEFAULT 0.0,
                 memo_id BIGINT,
@@ -169,6 +170,7 @@ async def init_db():
         "ALTER TABLE internal_tips ALTER COLUMN tx_hash DROP NOT NULL",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS internal_balance REAL DEFAULT 0.0",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS memo_id BIGINT",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS username TEXT",
         "ALTER TABLE airdrops ADD COLUMN IF NOT EXISTS expires_at DOUBLE PRECISION"
     ]
     
@@ -215,8 +217,6 @@ async def validate_link_token(token: str) -> Optional[str]:
     )
     if not row:
         return None
-    if row["used"] == 1:
-        return None
     if row["expires_at"] <= now:
         return None
     return row["discord_id"]
@@ -226,8 +226,8 @@ async def mark_token_used(token: str):
     pool = await get_pool()
     await pool.execute("UPDATE link_tokens SET used = 1 WHERE token = $1", token)
 
-async def get_or_create_user(discord_id: str) -> Dict[str, Any]:
-    """Get a user or create them (assigning a memo_id)."""
+async def get_or_create_user(discord_id: str, username: Optional[str] = None) -> Dict[str, Any]:
+    """Get a user or create them (assigning a memo_id). Updates username if provided."""
     pool = await get_pool()
     memo_id = int(discord_id)
     
@@ -235,26 +235,31 @@ async def get_or_create_user(discord_id: str) -> Dict[str, Any]:
         row = await conn.fetchrow("SELECT * FROM users WHERE discord_id = $1", discord_id)
         if not row:
             await conn.execute(
-                "INSERT INTO users (discord_id, memo_id, internal_balance) VALUES ($1, $2, 0.0)",
-                discord_id, memo_id
+                "INSERT INTO users (discord_id, username, memo_id, internal_balance) VALUES ($1, $2, $3, 0.0)",
+                discord_id, username, memo_id
             )
             row = await conn.fetchrow("SELECT * FROM users WHERE discord_id = $1", discord_id)
+        elif username:
+            await conn.execute("UPDATE users SET username = $1 WHERE discord_id = $2", username, discord_id)
+            row = dict(row)
+            row["username"] = username
         return dict(row)
 
-async def link_user(discord_id: str, stellar_public_key: str, is_approved: bool = False):
-    """Link a Discord user to a Stellar public key (upserts)."""
+async def link_user(discord_id: str, stellar_public_key: str, is_approved: bool = False, username: Optional[str] = None):
+    """Link a Discord user to a Stellar public key (upserts). Updates username if provided."""
     now = time.time()
     pool = await get_pool()
     await pool.execute(
-        """INSERT INTO users (discord_id, stellar_public_key, is_approved, linked_at, updated_at, memo_id)
-            VALUES ($1, $2, $3, $4, $5, $6)
+        """INSERT INTO users (discord_id, stellar_public_key, is_approved, linked_at, updated_at, memo_id, username)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             ON CONFLICT(discord_id) DO UPDATE SET
                 stellar_public_key = EXCLUDED.stellar_public_key,
                 is_approved = EXCLUDED.is_approved,
-                updated_at = EXCLUDED.updated_at""",
-        discord_id, stellar_public_key, is_approved, now, now, int(discord_id)
+                updated_at = EXCLUDED.updated_at,
+                username = COALESCE(EXCLUDED.username, users.username)""",
+        discord_id, stellar_public_key, is_approved, now, now, int(discord_id), username
     )
-    logger.info(f"Linked Discord user {discord_id} to Stellar key {stellar_public_key[:8]}...")
+    logger.info(f"Linked Discord user {username or discord_id} to Stellar key {stellar_public_key[:8]}...")
 
 async def unlink_user(discord_id: str):
     """Unlink a Stellar public key from a Discord user."""

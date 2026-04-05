@@ -154,6 +154,7 @@ async def register_page(token: str = "", claim_id: str = ""):
 
     user_data = await db.get_or_create_user(discord_id)
     memo_id = user_data["memo_id"]
+    discord_user = user_data.get("username") or "Unknown User"
     internal_balance = await db.get_internal_balance(discord_id)
     existing_key = await db.get_user_stellar_key(discord_id)
 
@@ -162,6 +163,7 @@ async def register_page(token: str = "", claim_id: str = ""):
 
     # Inject runtime values into the page
     html = html.replace("{{TOKEN}}", token.strip())
+    html = html.replace("{{DISCORD_USER}}", discord_user.strip())
     html = html.replace("{{CLAIM_ID}}", claim_id.strip())
     html = html.replace("{{CLAIM_AMOUNT}}", claim_amount_str)
     html = html.replace("{{NETWORK}}", stellar.STELLAR_NETWORK.strip())

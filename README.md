@@ -30,16 +30,17 @@ The SHx Tip Bot utilizes a **Hybrid Custodial Model** to maximize speed and elim
                       └──────────────┘
 ```
 
-1.  **Instant Tipping**: Users tip each other (`/tip`) instantly. The bot moves SHx in a localized **Postgres (Neon)** ledger. **Internal community tipping is 100% free with zero gas fees.**
-2.  **On-Chain Deposits**: Users deposit SHx to the **House Account** with a unique Memo ID. The bot automatically detects these deposits and credits the user's internal balance.
-3.  **Non-Custodial Withdrawals**: When a user wants their funds on-chain, they use `/withdraw`. The bot signs a **"Claim Ticket"**. The user then visits the **Web Dashboard** and executes a `claim_withdrawal` function.
-    *   **User Pays Gas**: The user pays the small XLM network fee directly to the Stellar network during the claim process. This ensures the bot remains free and sustainable to operate at scale.
+1. **Instant Tipping**: Users tip each other (`/tip`) instantly. The bot moves SHx in a localized **Postgres (Neon)** ledger. **Internal community tipping is 100% free with zero gas fees.**
+2. **On-Chain Deposits**: Users deposit SHx to the **House Account** with a unique Memo ID. The bot automatically detects these deposits and credits the user's internal balance.
+3. **Non-Custodial Withdrawals**: When a user wants their funds on-chain, they use `/withdraw`. The bot signs a **"Claim Ticket"**. The user then visits the **Web Dashboard** and executes a `claim_withdrawal` function.
+   * **User Pays Gas**: The user pays the small XLM network fee directly to the Stellar network during the claim process. This ensures the bot remains free and sustainable to operate at scale.
 
 ---
 
 ## 📟 Comprehensive Command Reference
 
 ### 👤 Standard User Commands
+
 | Command | Parameters | Description |
 | :--- | :--- | :--- |
 | `/link` | *None* | Start the wallet verification process to enable withdrawals. |
@@ -49,15 +50,17 @@ The SHx Tip Bot utilizes a **Hybrid Custodial Model** to maximize speed and elim
 | `/withdraw` | `amount`, `[destination]` | Prepare an on-chain withdrawal. Amount can be a number, `$USD`, or `all`. |
 
 ### 👥 Group & Role Tipping (Tipper Level)
+
 | Command | Parameters | Description |
 | :--- | :--- | :--- |
 | `/tip-role` | `@role`, `amount` | **Split** a total amount equally among all members of a role. |
 | `/tip-role-each` | `@role`, `amount` | Send a fixed amount to **every** member of a specific role. |
 | `/tip-multiple` | `targets`, `amount` | Mention multiple users/roles to **split** an amount among them. |
-| `/tip-multiple-each`| `targets`, `amount` | Send different amounts to different users in a single command. |
+| `/tip-multiple-each` | `targets`, `amount` | Send different amounts to different users in a single command. |
 | `/airdrop` | `amount`, `duration` | Create an interactable claim button for a community pool. |
 
 ### 🛡️ Administrative Commands
+
 | Command | Parameters | Description |
 | :--- | :--- | :--- |
 | `/create-role` | `name`, `color` | Create a new Discord role with a specific HEX color. |
@@ -69,16 +72,17 @@ The SHx Tip Bot utilizes a **Hybrid Custodial Model** to maximize speed and elim
 
 ## 🌟 Key Features
 
-*   **Nuclear Reliability Core**: Single orchestrator (`run_all.py`) for managing Bot and Web services.
-*   **Stellar SDK 13.x Protocol**: Robust ID extraction and 512-bit ED25519 alignment (scval tagging) to ensure 100% on-chain success rates.
-*   **Automated Payouts**: The Smart Contract (`soroban_tipping_contract`) handles the multi-hop authorization of SHx from the House Account to the user.
-*   **Universal Wallet Support**: Integrated **Stellar Wallets Kit (SWK)** with **WalletConnect v2** support.
+* **Nuclear Reliability Core**: Single orchestrator (`run_all.py`) for managing Bot and Web services.
+* **Stellar SDK 13.x Protocol**: Robust ID extraction and 512-bit ED25519 alignment (scval tagging) to ensure 100% on-chain success rates.
+* **Automated Payouts**: The Smart Contract (`soroban_tipping_contract`) handles the multi-hop authorization of SHx from the House Account to the user.
+* **Universal Wallet Support**: Integrated **Stellar Wallets Kit (SWK)** with **WalletConnect v2** support.
 
 ---
 
 ## 🛠️ Quick Start
 
 ### 1. Installation
+
 ```bash
 git clone https://github.com/SHxTipBot/SHxTipBotV1.git
 cd SHxTipBotV1
@@ -88,7 +92,9 @@ pip install -r requirements.txt
 ```
 
 ### 2. Automated Deployment
+
 Use the included automation suite to prepare the network:
+
 ```bash
 # 1. Fresh Contract Deploy & Init
 python deploy_and_init.py
@@ -98,6 +104,7 @@ python setup_allowance.py
 ```
 
 ### 3. Launch
+
 ```bash
 python run_all.py
 ```
@@ -107,18 +114,21 @@ python run_all.py
 ## 🚀 Mainnet Readiness
 
 When moving to Mainnet:
-1.  Set `STELLAR_NETWORK=public` in `.env`.
-2.  Use the official SHx Issuer: `GDSTRSHXHGJ7ZIVRBXEYE5Q74XUVCUSEKEBR7UCHEUUEK72N7I7KJ6JH`.
-3.  Deploy the contract to Mainnet using `deploy_and_init.py`.
+
+1. **Set `STELLAR_NETWORK=public` in `.env`.**
+2. **Use the official SHx Issuer: `GDSTRSHXHGJ7ZIVRBXEYE5Q74XUVCUSEKEBR7UCHEUUEK72N7I7KJ6JH`.**
+3. **Deploy the contract to Mainnet using `deploy_and_init.py`.**
 
 ---
 
 ## 🔒 Security
-*   **Non-Custodial Payouts**: The bot never handles user private keys.
-*   **Signature Enforcement**: All claims require a one-time signature from the House Account.
-*   **Nonce Protection**: Prevents double-claiming of the same withdrawal ticket.
+
+* **Non-Custodial Payouts**: The bot never handles user private keys.
+* **Signature Enforcement**: All claims require a one-time signature from the House Account.
+* **Nonce Protection**: Prevents double-claiming of the same withdrawal ticket.
 
 ---
 
 ## 📄 License
+
 MIT. Created for the Stronghold Community.

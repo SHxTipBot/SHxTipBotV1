@@ -303,6 +303,8 @@ async def link_command(interaction: Interaction):
             "Re-linking will update your verified withdrawal address."
         )
 
+    # Sync username on link request to ensure dashboard shows it
+    await db.get_or_create_user(discord_id, username=interaction.user.display_name)
     token = await db.create_link_token(discord_id)
     link_url = f"{WEB_BASE_URL}/register?token={token}"
 
@@ -328,7 +330,7 @@ async def balance_command(interaction: Interaction):
     discord_id = str(interaction.user.id)
 
     try:
-        await db.get_or_create_user(discord_id)
+        await db.get_or_create_user(discord_id, username=interaction.user.display_name)
         balance = await db.get_internal_balance(discord_id)
 
         embed = _footer(discord.Embed(title="💰 Your SHx Tip Balance", color=EMBED_COLOR))
@@ -454,6 +456,7 @@ async def withdraw_command(interaction: Interaction, amount: str, destination: s
         return
 
     # 4. Atomic Balance Deduction
+    await db.get_or_create_user(discord_id, username=interaction.user.display_name)
     await db.add_deposit(discord_id, f"WD_PENDING_{withdrawal_id}", -amount_f)
     await db.create_withdrawal(withdrawal_id, discord_id, destination, amount_f, nonce, signature)
 
@@ -520,8 +523,10 @@ async def tip_command(
         return
 
 
-    # Ensure recipient exists in DB
-    await db.get_or_create_user(recipient_id)
+    # Ensure recipient exists in DB (cannot get display_name easily for mention unless in cache, but we try)
+    await db.get_or_create_user(recipient_id, username=user.display_name)
+    # Also sync sender username
+    await db.get_or_create_user(sender_id, username=interaction.user.display_name)
 
 
     success = await db.transfer_internal(sender_id, recipient_id, parsed_amount, 0.0, actual_reason)
@@ -587,9 +592,11 @@ async def tip_multiple_command(interaction: Interaction, targets: str, amount: s
         return
 
     success_count = 0
+    # Sync sender username
+    await db.get_or_create_user(sender_id, username=interaction.user.display_name)
     for member in members:
         recipient_id = str(member.id)
-        await db.get_or_create_user(recipient_id)
+        await db.get_or_create_user(recipient_id, username=member.display_name)
         success = await db.transfer_internal(sender_id, recipient_id, amount_per_member, 0.0, reason or "Multi-tip split")
         if success:
             success_count += 1
