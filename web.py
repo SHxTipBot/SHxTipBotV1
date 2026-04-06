@@ -99,9 +99,9 @@ async def root():
                 </style>
             </head>
             <body>
-                <h1>SHx Tip Bot Dashboard</h1>
-                <p>To link your wallet or claim rewards, please use the commands in Discord.</p>
-                <a href="https://discord.com" target="_blank">Open Discord</a>
+                <h1>SHx Profile Portfolio — v1.6</h1>
+                <p>Diagnostic Build: Success. Please use Discord to access your dashboard.</p>
+                <a href="https://discord.com" target="_blank">Open Discord Community</a>
             </body>
         </html>
     """)
