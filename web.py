@@ -174,6 +174,7 @@ async def register_page(token: str = "", claim_id: str = ""):
     # Inject runtime values into the page
     html = html.replace("{{TOKEN}}", token.strip())
     html = html.replace("{{DISCORD_USER}}", discord_user.strip())
+    html = html.replace("{{USER_INITIAL}}", (discord_user[0] if discord_user else "U").upper())
     html = html.replace("{{CLAIM_ID}}", claim_id.strip())
     html = html.replace("{{CLAIM_AMOUNT}}", claim_amount_str)
     html = html.replace("{{NETWORK}}", stellar.STELLAR_NETWORK.strip())

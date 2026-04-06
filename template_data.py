@@ -149,39 +149,45 @@ def get_dashboard_html():
     .status.success { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }
     .status.error { background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
     
-    /* Sleeker Asset Bar Layout */
-    .asset-bar { 
-      display: flex; gap: 1rem; margin-top: 1rem; padding: 0.75rem; 
-      background: rgba(59, 130, 246, 0.05); border-radius: 1rem; border: 1px solid var(--border);
+    /* Unified Profile & Stats */
+    .profile-section { 
+      display: flex; justify-content: space-between; align-items: flex-end;
+      padding-bottom: 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2rem;
     }
-    .asset-item { flex: 1; border-right: 1px solid var(--border); }
-    .asset-item:last-child { border-right: none; }
-    .asset-label { font-size: 0.7rem; color: var(--text-muted); margin-bottom: 0.2rem; display: flex; align-items: center; gap: 0.3rem; }
-    .asset-value { font-size: 1.1rem; font-weight: 700; }
+    .profile-info { display: flex; align-items: center; gap: 1rem; }
+    .profile-avatar { width: 56px; height: 56px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), #2563eb); display: flex; align-items: center; justify-content: center; font-family: 'Outfit'; font-weight: 700; font-size: 1.5rem; border: 2px solid var(--border); }
     
+    .stats-row { display: flex; align-items: center; gap: 2.5rem; }
+    .stat-item { position: relative; }
+    .stat-label { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.4rem; display: flex; align-items: center; gap: 0.4rem; }
+    .stat-value { font-family: 'Outfit'; font-size: 1.5rem; font-weight: 700; color: #fff; }
+    .stat-value.accent { color: var(--accent); }
+    
+    .stat-divider { width: 1px; height: 32px; background: var(--border); }
+    
+    /* Elegant Info/Tooltip */
     .info-trigger {
-      width: 14px; height: 14px; border-radius: 50%; background: var(--border);
+      width: 14px; height: 14px; border-radius: 50%; background: rgba(255,255,255,0.1);
       display: inline-flex; align-items: center; justify-content: center;
-      font-size: 10px; color: var(--text-muted); cursor: help; border: 1px solid var(--border-hover);
-      flex-shrink: 0;
+      font-size: 9px; color: var(--text-muted); cursor: help; border: 1px solid var(--border);
     }
-    .info-trigger:hover { background: var(--accent); color: white; }
+    .info-trigger:hover { background: var(--accent); color: white; border-color: var(--accent); }
 
     .tooltip {
-      position: absolute; bottom: calc(100% + 12px); left: 0;
-      width: 300px; background: #111827; color: #fff; padding: 1.25rem; border-radius: 1rem;
-      font-size: 0.85rem; line-height: 1.5; border: 1px solid var(--accent);
-      box-shadow: 0 15px 40px rgba(0,0,0,0.8); opacity: 0; pointer-events: none; transition: all 0.2s ease;
+      position: absolute; bottom: calc(100% + 15px); left: 50%; transform: translateX(-50%) translateY(10px);
+      width: 320px; background: #0f172a; color: #fff; padding: 1.5rem; border-radius: 1.25rem;
+      font-size: 0.85rem; line-height: 1.6; border: 1px solid var(--accent);
+      box-shadow: 0 20px 50px rgba(0,0,0,0.9); opacity: 0; pointer-events: none; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       z-index: 1000; font-weight: 400; text-align: left;
     }
-    .tooltip b { color: var(--accent); }
-    .tooltip ol { margin-top: 0.5rem; padding-left: 1.2rem; }
-    .tooltip li { margin-bottom: 0.4rem; list-style-type: decimal; }
+    .tooltip b { color: var(--accent); font-weight: 600; }
+    .tooltip ol { margin-top: 0.75rem; padding-left: 1.2rem; }
+    .tooltip li { margin-bottom: 0.6rem; }
     .tooltip::after {
-      content: ""; position: absolute; top: 100%; left: 20px;
+      content: ""; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
       border-width: 8px; border-style: solid; border-color: var(--accent) transparent transparent transparent;
     }
-    .info-trigger:hover + .tooltip, .tooltip:hover { opacity: 1; pointer-events: auto; transform: translateY(-5px); }
+    .info-trigger:hover + .tooltip, .tooltip:hover { opacity: 1; pointer-events: auto; transform: translateX(-50%) translateY(0); }
     
     .guide-box {
       margin-top: 1.5rem; padding: 1.25rem; border-radius: 1rem;
@@ -233,49 +239,45 @@ def get_dashboard_html():
       </div>
     </nav>
 
-    <div class="hero">
-      <h1>Community Portal <span class="text-xs" style="vertical-align: middle; opacity: 0.5;">v1.6</span></h1>
-      <p>Securely link your Discord and manage claims.</p>
-      <div id="connection-status-badge" class="mt-4 badge badge-error">Wallet: Not Connected</div>
-    </div>
-
-    <!-- Link Card -->
     <div class="card">
-      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
-        <div>
-          <h2>Discord Status</h2>
-          <div id="link-status-container">
-            <span id="link-status-text" class="text-success text-bold">Linked ✅</span>
-            <p class="user-subtitle">{{DISCORD_USER}}</p>
+      <!-- Unified Portfolio Section -->
+      <div class="profile-section">
+        <div class="profile-info">
+          <div class="profile-avatar">{{USER_INITIAL}}</div>
+          <div>
+            <h2 style="font-size: 1.25rem;">{{DISCORD_USER}}</h2>
+            <div id="link-status-badge" class="badge badge-success text-xs mt-1">Status: Linked ✅</div>
           </div>
         </div>
-      <!-- Sleek Asset Bar -->
-      <div class="asset-bar mb-6">
-        <!-- Discord Asset -->
-        <div class="asset-item">
-          <div class="asset-label">
-            Discord Wallet 
-            <div class="info-trigger">?</div>
-            <div class="tooltip">
-              <b>How to Deposit</b>
-              <p class="text-xs text-muted mb-2">Move SHx from your wallet to Discord for tipping:</p>
-              <ol>
-                <li>Type <b>/deposit</b> in Discord to get the address.</li>
-                <li>Send SHx with Memo ID: <b>{{MEMO}}</b></li>
-                <li>Internal tipping is instant and gas-free.</li>
-              </ol>
+        
+        <div class="stats-row">
+          <!-- Discord Stat -->
+          <div class="stat-item">
+            <div class="stat-label">
+              Discord Balance
+              <div class="info-trigger">?</div>
+              <div class="tooltip">
+                <b>Internal Tipping Account</b>
+                <p class="text-xs text-muted mb-2">Move SHx from your wallet here for instant, gas-free tipping:</p>
+                <ol>
+                  <li>Type <b>/deposit</b> in Discord to get the address.</li>
+                  <li>Send SHx with Memo ID: <b>{{MEMO}}</b></li>
+                </ol>
+              </div>
+            </div>
+            <div class="stat-value accent">
+              <span id="internal-balance-val">{{INTERNAL_BALANCE}}</span> <span class="text-xs">SHx</span>
             </div>
           </div>
-          <div class="asset-value text-accent">
-            <span id="internal-balance-val">{{INTERNAL_BALANCE}}</span> <span class="text-xs">SHx</span>
-          </div>
-        </div>
-
-        <!-- On-Chain Asset -->
-        <div class="asset-item">
-          <div class="asset-label">Stellar Wallet</div>
-          <div class="asset-value" style="color: #fff;">
-            <span id="external-balance-val">0.00</span> <span class="text-xs">SHx</span>
+          
+          <div class="stat-divider"></div>
+          
+          <!-- Stellar Stat -->
+          <div class="stat-item">
+            <div class="stat-label">Wallet Balance</div>
+            <div class="stat-value">
+              <span id="external-balance-val">0.00</span> <span class="text-xs">SHx</span>
+            </div>
           </div>
         </div>
       </div>
@@ -503,17 +505,16 @@ def get_dashboard_html():
       console.log("updateUI called with address:", address);
       userAddress = address;
 
-      const badge = document.getElementById('connection-status-badge');
+      const badge = document.getElementById('link-status-badge');
       if (address) {
         if (badge) {
-            badge.innerHTML = `<span style="width: 8px; height: 8px; background: #10b981; border-radius: 50%; display: inline-block; margin-right: 4px;"></span> Wallet Connected: ${address.slice(0,6)}...${address.slice(-4)}`;
+            badge.innerHTML = `<span style="width: 8px; height: 8px; background: #10b981; border-radius: 50%; display: inline-block; margin-right: 4px;"></span> Connected: ${address.slice(0,6)}...${address.slice(-4)}`;
             badge.classList.remove('badge-error');
             badge.classList.add('badge-success');
         }
-        setStatus("Connected ✅");
+        setStatus("Ready ✅");
         fetchStellarBalance(address);
         
-        // Update labels for linking/switching
         const linkBtn = document.getElementById('btn-link');
         if (linkBtn) {
             linkBtn.disabled = false;
@@ -523,7 +524,6 @@ def get_dashboard_html():
         const claimBtn = document.getElementById('btn-claim-action');
         if (claimBtn) claimBtn.disabled = false;
         
-        // Show unlink container ONLY if the user is already linked in our database
         const existing = "{{EXISTING_KEY_VAL}}";
         if (existing && existing.length > 10) {
             document.getElementById('unlink-container')?.classList.remove('hidden');
@@ -531,15 +531,13 @@ def get_dashboard_html():
         }
       } else {
         if (badge) {
-            badge.innerText = "Wallet: Not Connected";
+            badge.innerText = "Status: Wallet Disconnected";
             badge.classList.add('badge-error');
             badge.classList.remove('badge-success');
         }
         document.getElementById('btn-link').disabled = true;
         const claimBtn = document.getElementById('btn-claim-action');
         if (claimBtn) claimBtn.disabled = true;
-        const withdrawBtn = document.getElementById('btn-web-withdraw');
-        if (withdrawBtn) withdrawBtn.disabled = true;
       }
     };
 
