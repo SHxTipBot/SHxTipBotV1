@@ -239,6 +239,12 @@ def get_dashboard_html():
       </div>
     </nav>
 
+    <div class="hero">
+      <h1>Community Portal <span class="text-xs" style="vertical-align: middle; opacity: 0.5;">v1.6</span></h1>
+      <p>Securely link your Discord and manage claims.</p>
+      <div id="connection-status-badge" class="mt-4 badge badge-error">Wallet: Not Connected</div>
+    </div>
+
     <div class="card">
       <!-- Unified Portfolio Section -->
       <div class="profile-section">
@@ -505,13 +511,21 @@ def get_dashboard_html():
       console.log("updateUI called with address:", address);
       userAddress = address;
 
-      const badge = document.getElementById('link-status-badge');
+      const heroBadge = document.getElementById('connection-status-badge');
+      const profileBadge = document.getElementById('link-status-badge');
+      
       if (address) {
-        if (badge) {
-            badge.innerHTML = `<span style="width: 8px; height: 8px; background: #10b981; border-radius: 50%; display: inline-block; margin-right: 4px;"></span> Connected: ${address.slice(0,6)}...${address.slice(-4)}`;
-            badge.classList.remove('badge-error');
-            badge.classList.add('badge-success');
+        const addrText = `<span style="width: 8px; height: 8px; background: #10b981; border-radius: 50%; display: inline-block; margin-right: 4px;"></span> Connected: ${address.slice(0,6)}...${address.slice(-4)}`;
+        
+        if (heroBadge) {
+            heroBadge.innerHTML = addrText;
+            heroBadge.classList.replace('badge-error', 'badge-success');
         }
+        if (profileBadge) {
+            profileBadge.innerHTML = addrText;
+            profileBadge.classList.replace('badge-error', 'badge-success');
+        }
+
         setStatus("Ready ✅");
         fetchStellarBalance(address);
         
@@ -530,10 +544,13 @@ def get_dashboard_html():
             if (linkBtn) linkBtn.innerText = "Switch / Change Linked Wallet";
         }
       } else {
-        if (badge) {
-            badge.innerText = "Status: Wallet Disconnected";
-            badge.classList.add('badge-error');
-            badge.classList.remove('badge-success');
+        if (heroBadge) {
+            heroBadge.innerText = "Wallet: Not Connected";
+            heroBadge.classList.replace('badge-success', 'badge-error');
+        }
+        if (profileBadge) {
+            profileBadge.innerText = "Status: Wallet Disconnected";
+            profileBadge.classList.replace('badge-success', 'badge-error');
         }
         document.getElementById('btn-link').disabled = true;
         const claimBtn = document.getElementById('btn-claim-action');
