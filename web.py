@@ -198,7 +198,7 @@ async def register_page(token: str = "", claim_id: str = ""):
     html = html.replace("{{IS_AUTO_DETECTED}}", is_auto_detected)
     
     # WalletConnect Project ID injection
-    wc_project_id = os.getenv("WC_PROJECT_ID", "1da02e75fe8efd7560248dc15804b13c")
+    wc_project_id = os.getenv("WC_PROJECT_ID", "7989fb9bc986eb22a986775148cb47ae")
     html = html.replace("{{WC_PROJECT_ID}}", wc_project_id.strip())
     
     import json
