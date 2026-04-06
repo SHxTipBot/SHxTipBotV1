@@ -168,7 +168,12 @@ async def register_page(token: str = "", claim_id: str = ""):
     internal_balance = await db.get_internal_balance(discord_id)
     existing_key = await db.get_user_stellar_key(discord_id)
 
-    # Fetch fresh HTML on every request to bypass Vercel warm-start caching
+    # Force reload of template_data to bypass Vercel serverless caching
+    import importlib
+    import template_data
+    importlib.reload(template_data)
+    from template_data import get_dashboard_html
+    
     html = get_dashboard_html()
 
     # Inject runtime values into the page
