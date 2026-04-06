@@ -267,7 +267,7 @@ def get_dashboard_html():
     const NETWORK = "{{NETWORK}}";
     const WC_PROJECT_ID = "{{WC_PROJECT_ID}}";
     const APP_VERSION = "{{APP_VERSION}}";
-    const NETWORK_PASSPHRASE = (NETWORK === 'mainnet' || NETWORK === 'public') ? 'Public Global Stellar Network ; September 2015' : 'Test SDF Network ; September 2015';
+    const NETWORK_PASSPHRASE = (NETWORK.toLowerCase().trim().includes('mainnet') || NETWORK.toLowerCase().trim().includes('public')) ? 'Public Global Stellar Network ; September 2015' : 'Test SDF Network ; September 2015';
     
     const DISCORD_USER = "{{DISCORD_USER}}";
     
@@ -477,7 +477,7 @@ def get_dashboard_html():
             StellarWalletsKit.init({
                 theme: SwkAppDarkTheme,
                 modules: modules,
-                network: (NETWORK === 'mainnet' || NETWORK === 'public') ? 'public' : 'testnet'
+                network: (NETWORK.toLowerCase().trim().includes('mainnet') || NETWORK.toLowerCase().trim().includes('public')) ? 'public' : 'testnet'
             });
 
             // Create the built-in wallet connect button
