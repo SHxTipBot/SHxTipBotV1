@@ -106,6 +106,16 @@ async def root():
         </html>
     """)
 
+@app.get("/api/debug")
+async def debug_info():
+    return {
+        "STELLAR_NETWORK": stellar.STELLAR_NETWORK,
+        "NETWORK_PASSPHRASE": stellar.NETWORK_PASSPHRASE,
+        "SHX_ISSUER": stellar.SHX_ISSUER,
+        "SOROBAN_CONTRACT_ID": stellar.SOROBAN_CONTRACT_ID,
+        "ENVIRONMENT": os.getenv("VERCEL", "local")
+    }
+
 @app.get("/api/health")
 @app.get("/health")
 async def health_check():
