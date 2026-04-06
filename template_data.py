@@ -222,6 +222,24 @@ def get_dashboard_html():
 
     #swk-button-wrapper {
       display: inline-block;
+      min-width: 160px;
+      text-align: right;
+    }
+    
+    /* Ensure the Stellar Wallets Kit button is styled correctly in the nav */
+    #swk-button-wrapper button {
+      background: var(--accent) !important;
+      border-radius: 0.75rem !important;
+      padding: 0.6rem 1.2rem !important;
+      font-weight: 600 !important;
+      font-size: 0.85rem !important;
+      border: none !important;
+      color: white !important;
+      transition: all 0.2s ease !important;
+    }
+    #swk-button-wrapper button:hover {
+      background: #2563eb !important;
+      transform: translateY(-1px);
     }
   </style>
 </head>
@@ -671,23 +689,18 @@ def get_dashboard_html():
             if (res.data.success) {
                 notify('link-notify', "✅ Wallet linked successfully!");
                 setStatus("Linked ✅");
-                document.getElementById('unlink-container').classList.remove('hidden');
-                document.getElementById('discord-balance-card').classList.remove('hidden');
+                document.getElementById('unlink-container')?.classList.remove('hidden');
                 
                 // Show/hide trustline warning
                 const trustWarning = document.getElementById('trustline-warning');
                 if (res.data.has_shx_trustline) {
-                    trustWarning.classList.add('hidden');
+                    trustWarning?.classList.add('hidden');
                 } else {
-                    trustWarning.classList.remove('hidden');
+                    trustWarning?.classList.remove('hidden');
                 }
 
-                // Show withdraw card immediately after link if no pending claim
-                const withdrawCard = document.getElementById('withdraw-card');
-                const claimCard = document.getElementById('claim-card');
-                if (withdrawCard && (!claimCard || claimCard.classList.contains('hidden'))) {
-                    withdrawCard.classList.remove('hidden');
-                }
+                // Show withdraw card immediately after link
+                document.getElementById('withdraw-card')?.classList.remove('hidden');
                 
                 fetchBalance(); // Refresh balance after link
             }
