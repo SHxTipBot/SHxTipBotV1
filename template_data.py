@@ -148,6 +148,41 @@ def get_dashboard_html():
     }
     .status.success { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }
     .status.error { background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
+    
+    /* Dual Wallet & Tooltip Styles */
+    .balance-grid { display: flex; gap: 1rem; margin-top: 0.5rem; }
+    .balance-box { 
+      flex: 1; background: rgba(59, 130, 246, 0.05); border: 1px solid var(--border); 
+      border-radius: 1rem; padding: 1rem; position: relative;
+    }
+    .balance-label { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.4rem; }
+    .balance-value { font-size: 1.25rem; font-weight: 700; color: var(--accent); }
+    
+    .info-trigger {
+      width: 16px; height: 16px; border-radius: 50%; background: var(--border);
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 11px; color: var(--text-muted); cursor: help; border: 1px solid var(--border-hover);
+    }
+    .info-trigger:hover { background: var(--accent); color: white; }
+
+    .tooltip {
+      position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%);
+      width: 260px; background: #1f2937; color: #fff; padding: 0.75rem; border-radius: 0.75rem;
+      font-size: 0.8rem; line-height: 1.4; border: 1px solid var(--border-hover);
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5); opacity: 0; pointer-events: none; transition: opacity 0.2s ease;
+      z-index: 100; font-weight: 400; text-align: left;
+    }
+    .tooltip::after {
+      content: ""; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+      border-width: 6px; border-style: solid; border-color: #1f2937 transparent transparent transparent;
+    }
+    .info-trigger:hover + .tooltip, .tooltip:hover { opacity: 1; pointer-events: auto; }
+    
+    .guide-box {
+      margin-top: 1.5rem; padding: 1.25rem; border-radius: 1rem;
+      background: rgba(59, 130, 246, 0.03); border: 1px dashed var(--border);
+    }
+    .guide-box h4 { font-family: 'Outfit'; font-size: 0.95rem; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem; }
 
     .badge {
       display: inline-flex;
@@ -209,10 +244,44 @@ def get_dashboard_html():
             <p class="user-subtitle">{{DISCORD_USER}}</p>
           </div>
         </div>
-        <div id="discord-balance-card" class="text-right">
-          <p class="text-xs text-muted">Discord Wallet</p>
-          <p class="text-xl text-bold text-accent"><span id="internal-balance-val">{{INTERNAL_BALANCE}}</span> <span class="text-xs">SHx</span></p>
+      <!-- Dual Wallet Balances -->
+      <div id="balance-section" class="mb-6">
+        <div class="balance-grid">
+          <!-- Discord Wallet (Internal) -->
+          <div class="balance-box">
+            <div class="balance-label">
+              <span>Discord Wallet</span>
+              <div class="info-trigger">i</div>
+              <div class="tooltip">This is your internal tipping balance. Funds here can be used instantly for tips and airdrops in the Discord server without gas fees.</div>
+            </div>
+            <div class="balance-value text-accent">
+              <span id="internal-balance-val">{{INTERNAL_BALANCE}}</span> <span class="text-xs">SHx</span>
+            </div>
+          </div>
+          
+          <!-- Stellar Wallet (On-Chain) -->
+          <div class="balance-box">
+            <div class="balance-label">
+              <span>Stellar Wallet</span>
+              <div class="info-trigger">i</div>
+              <div class="tooltip">This is the balance currently held in your linked on-chain wallet (xBull, Freighter, etc.).</div>
+            </div>
+            <div class="balance-value" style="color: #fff;">
+              <span id="external-balance-val">0.00</span> <span class="text-xs">SHx</span>
+            </div>
+          </div>
         </div>
+      </div>
+
+      <!-- Deposit Guide (Contextual Help) -->
+      <div class="guide-box mb-6">
+        <h4><span class="info-trigger">?</span> How to Deposit</h4>
+        <p class="text-sm text-muted">To move SHx from your <b>Stellar Wallet</b> into the <b>Discord Wallet</b> for tipping:</p>
+        <ol class="text-xs text-muted mt-2" style="margin-left: 1.5rem;">
+          <li>Go to Discord and type <b>/deposit</b> to see the bot's address.</li>
+          <li>Send SHx to that address from your wallet.</li>
+          <li><b>Crucial:</b> You MUST include your unique Memo ID: <b class="text-accent">{{MEMO}}</b></li>
+        </ol>
       </div>
       
       <p id="reset-session-link" class="mb-4 text-xs text-accent" style="cursor:pointer; text-decoration: underline;" onclick="resetSession()">Trouble connecting? Reset Session</p>
@@ -268,12 +337,39 @@ def get_dashboard_html():
     const WC_PROJECT_ID = "{{WC_PROJECT_ID}}";
     const APP_VERSION = "{{APP_VERSION}}";
     const NETWORK_PASSPHRASE = "{{NETWORK_PASSPHRASE}}";
-    console.log("DASHBOARD | Network:", NETWORK, "| Passphrase:", NETWORK_PASSPHRASE);
+    
+    // Asset Constants
+    const SHX_ASSET_CODE = "{{SHX_ASSET_CODE}}";
+    const SHX_ISSUER = "{{SHX_ISSUER}}";
+
+    console.log("DASHBOARD | Network:", NETWORK);
+    console.log("DASHBOARD | Asset:", SHX_ASSET_CODE, "@", SHX_ISSUER);
     
     const DISCORD_USER = "{{DISCORD_USER}}";
     
     // Initial balance from template injection
     let currentBalance = "{{INTERNAL_BALANCE}}";
+
+    const HORIZON_URL = (NETWORK.toLowerCase().trim().includes('mainnet') || NETWORK.toLowerCase().trim().includes('public')) ? 'https://horizon.stellar.org' : 'https://horizon-testnet.stellar.org';
+    const API_BASE = window.location.origin;
+
+    // ── BALANCE REFRESH ──
+    async function fetchStellarBalance(address) {
+        if (!address) return;
+        try {
+            console.log("Refreshing Stellar Balance for:", address);
+            const server = new window.StellarSdk.Horizon.Server(HORIZON_URL);
+            const acc = await server.loadAccount(address);
+            const shxBal = acc.balances.find(b => b.asset_code === SHX_ASSET_CODE && b.asset_issuer === SHX_ISSUER);
+            const val = shxBal ? parseFloat(shxBal.balance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00";
+            const el = document.getElementById('external-balance-val');
+            if (el) el.innerText = val;
+        } catch (e) {
+            console.warn("Could not fetch Stellar balance:", e);
+            const el = document.getElementById('external-balance-val');
+            if (el) el.innerText = "Check Trustline";
+        }
+    }
 
     const setStatus = (msg, isError = false) => {
         const el = document.getElementById('link-status-text');
@@ -307,6 +403,11 @@ def get_dashboard_html():
                     renderWithdrawals(res.data.pending_withdrawals);
                 } else {
                     document.getElementById('withdrawal-list').innerHTML = '<div class="text-center py-4 text-muted">No pending withdrawal tickets found.</div>';
+                }
+
+                // If wallet already connected, refresh on-chain balance too
+                if (userAddress) {
+                    fetchStellarBalance(userAddress);
                 }
             }
         } catch (e) {
@@ -414,6 +515,7 @@ def get_dashboard_html():
             badge.classList.add('badge-success');
         }
         setStatus("Connected ✅");
+        fetchStellarBalance(address);
         
         // Update labels for linking/switching
         const linkBtn = document.getElementById('btn-link');

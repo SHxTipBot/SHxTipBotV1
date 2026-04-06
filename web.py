@@ -179,6 +179,8 @@ async def register_page(token: str = "", claim_id: str = ""):
     html = html.replace("{{NETWORK}}", stellar.STELLAR_NETWORK.strip())
     html = html.replace("{{NETWORK_PASSPHRASE}}", stellar.NETWORK_PASSPHRASE.strip())
     html = html.replace("{{HOUSE_ACCOUNT}}", stellar.HOUSE_ACCOUNT_PUBLIC.strip())
+    html = html.replace("{{SHX_ASSET_CODE}}", stellar.SHX_ASSET_CODE.strip())
+    html = html.replace("{{SHX_ISSUER}}", stellar.SHX_ISSUER.strip())
     html = html.replace("{{MEMO}}", str(memo_id))
     html = html.replace("{{INTERNAL_BALANCE}}", f"{internal_balance:,.2f}")
     html = html.replace("{{EXISTING_KEY}}", (existing_key or "None").strip())
