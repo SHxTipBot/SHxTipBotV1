@@ -275,7 +275,7 @@ def get_dashboard_html():
       <div id="connection-status-area" class="mt-4">
         <div id="connection-status-badge" class="badge badge-error">Wallet: Not Connected</div>
         <div id="hero-connect-btn-container" class="mt-4">
-           <button id="btn-hero-connect" class="btn btn-hero" onclick="openKitModal()">Connect Wallet to Start</button>
+           <button id="btn-hero-connect" class="btn btn-hero">Connect Wallet</button>
         </div>
       </div>
     </div>
@@ -670,12 +670,18 @@ def get_dashboard_html():
         }
     };
 
-    function openKitModal() {
+    window.openKitModal = () => {
+        console.log("openKitModal called. Kit status:", !!StellarWalletsKit);
         if (!StellarWalletsKit) {
             alert("Wallet connection kit is still loading. Please wait a moment.");
             return;
         }
-        StellarWalletsKit.openModal();
+        try {
+            StellarWalletsKit.openModal();
+        } catch (e) {
+            console.error("Failed to open modal:", e);
+            alert("Error opening wallet modal: " + e.message);
+        }
     }
 
     // ── APP LOGIC ──
@@ -953,6 +959,7 @@ def get_dashboard_html():
     // Initialize kit immediately on script load
     initKit();
     
+    document.getElementById('btn-hero-connect').onclick = window.openKitModal;
     document.getElementById('btn-link').onclick = handleLink;
     document.getElementById('btn-claim-action').onclick = handleClaim;
     document.getElementById('btn-claim-cancel').onclick = handleCancel;
