@@ -23,16 +23,22 @@ logger = logging.getLogger("shx_tip_bot.stellar")
 
 # ── Configuration (loaded from environment) ──────────────────────────────────
 
-STELLAR_NETWORK = os.getenv("STELLAR_NETWORK", "testnet").strip()
-HORIZON_URL = os.getenv("HORIZON_URL", "https://horizon-testnet.stellar.org").strip()
-SOROBAN_RPC_URL = os.getenv("SOROBAN_RPC_URL", "https://soroban-testnet.stellar.org").strip()
-SHX_ASSET_CODE = os.getenv("SHX_ASSET_CODE", "SHX").strip()
-SHX_ISSUER = os.getenv("SHX_ISSUER", "GDSTRSHXHGJ7ZIVRBXEYE5Q74XUVCUSEKEBR7UCHEUUEK72N7I7KJ6JH").strip()
-SHX_SAC_CONTRACT_ID = os.getenv("SHX_SAC_CONTRACT_ID", "").strip()
-SOROBAN_CONTRACT_ID = os.getenv("SOROBAN_CONTRACT_ID", "").strip()
-HOUSE_ACCOUNT_SECRET = os.getenv("HOUSE_ACCOUNT_SECRET", "").strip()
-HOUSE_ACCOUNT_PUBLIC = os.getenv("HOUSE_ACCOUNT_PUBLIC", "").strip()
-HOUSE_ACCOUNT_PUBLIC = os.getenv("HOUSE_ACCOUNT_PUBLIC", "").strip()
+# Helper to strip quotes if present
+def _get_env(key, default=""):
+    val = os.getenv(key, default).strip()
+    if (val.startswith("'") and val.endswith("'")) or (val.startswith('"') and val.endswith('"')):
+        return val[1:-1].strip()
+    return val
+
+STELLAR_NETWORK = _get_env("STELLAR_NETWORK", "testnet").lower()
+HORIZON_URL = _get_env("HORIZON_URL", "https://horizon-testnet.stellar.org")
+SOROBAN_RPC_URL = _get_env("SOROBAN_RPC_URL", "https://soroban-testnet.stellar.org")
+SHX_ASSET_CODE = _get_env("SHX_ASSET_CODE", "SHX")
+SHX_ISSUER = _get_env("SHX_ISSUER", "GDSTRSHXHGJ7ZIVRBXEYE5Q74XUVCUSEKEBR7UCHEUUEK72N7I7KJ6JH")
+SHX_SAC_CONTRACT_ID = _get_env("SHX_SAC_CONTRACT_ID", "")
+SOROBAN_CONTRACT_ID = _get_env("SOROBAN_CONTRACT_ID", "")
+HOUSE_ACCOUNT_SECRET = _get_env("HOUSE_ACCOUNT_SECRET", "")
+HOUSE_ACCOUNT_PUBLIC = _get_env("HOUSE_ACCOUNT_PUBLIC", "")
 
 NETWORK_PASSPHRASE = (
     Network.TESTNET_NETWORK_PASSPHRASE
@@ -422,9 +428,6 @@ async def execute_tip(
             ],
         )
 
-        if memo:
-            builder.add_text_memo(memo[:28])
-
         builder.set_timeout(300)
         tx = builder.build()
 
@@ -733,8 +736,13 @@ async def deploy_contract_wasm(secret: str, wasm_path: str) -> str:
         wasm_content = f.read()
 
     account = horizon_server.load_account(kp.public_key)
-    builder = TransactionBuilder(account, NETWORK_PASSPHRASE).append_upload_contract_wasm_op(wasm_content)
+    builder = TransactionBuilder(
+        source_account=account, 
+        network_passphrase=NETWORK_PASSPHRASE,
+        base_fee=100_000 # Increased for Mainnet
+    ).append_upload_contract_wasm_op(wasm_content)
     
+    builder.set_timeout(300)
     tx = builder.build()
     sim = soroban_server.simulate_transaction(tx)
     if sim.error:
@@ -747,12 +755,18 @@ async def deploy_contract_wasm(secret: str, wasm_path: str) -> str:
     if resp.status == SendTransactionStatus.ERROR:
         raise Exception(f"Install submit error: {resp.error_result_xdr}")
     
-    # Wait for completion
-    for _ in range(30):
-        res = soroban_server.get_transaction(resp.hash)
-        if res.status == GetTransactionStatus.SUCCESS:
-            import hashlib
-            return hashlib.sha256(wasm_content).digest().hex()
+    # Wait for completion (Increased for Mainnet)
+    for _ in range(60):
+        try:
+            res = soroban_server.get_transaction(resp.hash)
+            if res.status == GetTransactionStatus.SUCCESS:
+                import hashlib
+                return hashlib.sha256(wasm_content).digest().hex()
+            if res.status == GetTransactionStatus.FAILED:
+                raise Exception(f"WASM installation failed on-chain: {res.result_xdr}")
+        except Exception as ge:
+            logger.debug(f"Polling get_transaction failed (retrying): {ge}")
+            
         await asyncio.sleep(2)
     
     raise Exception("Install timed out")
@@ -767,12 +781,17 @@ async def deploy_contract_instance(secret: str, wasm_id: str) -> str:
     soroban_server = SorobanServer(SOROBAN_RPC_URL)
     
     account = horizon_server.load_account(kp.public_key)
-    builder = TransactionBuilder(account, NETWORK_PASSPHRASE).append_create_contract_op(
+    builder = TransactionBuilder(
+        source_account=account, 
+        network_passphrase=NETWORK_PASSPHRASE,
+        base_fee=100_000 # Increased for Mainnet
+    ).append_create_contract_op(
         wasm_id=wasm_id,
         address=kp.public_key,
         salt=os.urandom(32)
     )
     
+    builder.set_timeout(300)
     tx = builder.build()
     sim = soroban_server.simulate_transaction(tx)
     if sim.error:
@@ -784,35 +803,37 @@ async def deploy_contract_instance(secret: str, wasm_id: str) -> str:
     if resp.status == SendTransactionStatus.ERROR:
         raise Exception(f"Deploy submit error: {resp.error_result_xdr}")
 
-    # Predict contract ID from simulation result (the Address return value)
-    from stellar_sdk import StrKey
-    res_xdr = sim.results[0].xdr
-    scval_obj = xdr.SCVal.from_xdr(res_xdr)
-    
-    # In stellar-sdk 13.x, xdr.Hash/ContractID must be converted to bytes 
-    # for StrKey encoding. Slicing from raw XDR is the most resilient fallback.
-    try:
-        # Path: scval.address (SCAddress) -> .contract_id (ContractID) -> .contract_id (Hash) -> .hash (bytes)
-        contract_id_bytes = scval_obj.address.contract_id.contract_id.hash
-    except (AttributeError, TypeError):
+    # Wait for completion (Increased for Mainnet)
+    for _ in range(60):
         try:
-             # Fallback 1: Try common byte field names
-             contract_id_bytes = scval_obj.address.contract_id.hash
-        except (AttributeError, TypeError):
-             # Fallback 2: Raw XDR slicing (last 32 bytes of the address SCVal)
-             import base64
-             res_bytes = base64.b64decode(sim.results[0].xdr)
-             contract_id_bytes = res_bytes[-32:]
-    
-    contract_id = StrKey.encode_contract(contract_id_bytes)
-    
-    # Wait for confirmation
-    for _ in range(30):
-        res = soroban_server.get_transaction(resp.hash)
-        if res.status == GetTransactionStatus.SUCCESS:
-            return contract_id
+            res = soroban_server.get_transaction(resp.hash)
+            if res.status == GetTransactionStatus.SUCCESS:
+                # Predict contract ID from simulation result (the Address return value)
+                from stellar_sdk import StrKey
+                res_xdr = sim.results[0].xdr
+                scval_obj = xdr.SCVal.from_xdr(res_xdr)
+                
+                # Slicing from raw XDR is the most resilient fallback.
+                try:
+                    # Path: scval.address (SCAddress) -> .contract_id (ContractID) -> .contract_id (Hash) -> .hash (bytes)
+                    contract_id_bytes = scval_obj.address.contract_id.contract_id.hash
+                except (AttributeError, TypeError):
+                    try:
+                         # Fallback 1: Try common byte field names
+                         contract_id_bytes = scval_obj.address.contract_id.hash
+                    except:
+                         # Final fallback: use the string address from the event or similar if needed.
+                         # For now, just use the hash from the sim if available.
+                         return StrKey.encode_contract(scval_obj.address.contract_id.contract_id.hash)
+                
+                return StrKey.encode_contract(contract_id_bytes)
+            if res.status == GetTransactionStatus.FAILED:
+                raise Exception(f"Contract deployment failed on-chain: {res.result_xdr}")
+        except Exception as ge:
+            logger.debug(f"Polling get_transaction failed (retrying): {ge}")
+            
         await asyncio.sleep(2)
-        
+    
     raise Exception("Deploy timed out")
 
 async def invoke_contract_function(secret: str, contract_id: str, function_name: str, parameters: list) -> dict:

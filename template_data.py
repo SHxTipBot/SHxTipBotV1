@@ -463,7 +463,7 @@ def get_dashboard_html():
                 modules.push(new WalletConnectModule({
                     projectId: WC_PROJECT_ID,
                     projectID: WC_PROJECT_ID, 
-                    network: NETWORK,
+                    network: (NETWORK === 'mainnet' || NETWORK === 'public') ? 'public' : 'testnet',
                     metadata: {
                         name: "SHx Tip Bot",
                         description: "Securely link your Discord account",
@@ -477,7 +477,7 @@ def get_dashboard_html():
             StellarWalletsKit.init({
                 theme: SwkAppDarkTheme,
                 modules: modules,
-                network: NETWORK === 'mainnet' ? 'public' : 'testnet'
+                network: (NETWORK === 'mainnet' || NETWORK === 'public') ? 'public' : 'testnet'
             });
 
             // Create the built-in wallet connect button
