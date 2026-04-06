@@ -149,34 +149,39 @@ def get_dashboard_html():
     .status.success { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }
     .status.error { background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
     
-    /* Dual Wallet & Tooltip Styles */
-    .balance-grid { display: flex; gap: 1rem; margin-top: 0.5rem; }
-    .balance-box { 
-      flex: 1; background: rgba(59, 130, 246, 0.05); border: 1px solid var(--border); 
-      border-radius: 1rem; padding: 1rem; position: relative;
+    /* Sleeker Asset Bar Layout */
+    .asset-bar { 
+      display: flex; gap: 1rem; margin-top: 1rem; padding: 0.75rem; 
+      background: rgba(59, 130, 246, 0.05); border-radius: 1rem; border: 1px solid var(--border);
     }
-    .balance-label { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.4rem; }
-    .balance-value { font-size: 1.25rem; font-weight: 700; color: var(--accent); }
+    .asset-item { flex: 1; border-right: 1px solid var(--border); }
+    .asset-item:last-child { border-right: none; }
+    .asset-label { font-size: 0.7rem; color: var(--text-muted); margin-bottom: 0.2rem; display: flex; align-items: center; gap: 0.3rem; }
+    .asset-value { font-size: 1.1rem; font-weight: 700; }
     
     .info-trigger {
-      width: 16px; height: 16px; border-radius: 50%; background: var(--border);
+      width: 14px; height: 14px; border-radius: 50%; background: var(--border);
       display: inline-flex; align-items: center; justify-content: center;
-      font-size: 11px; color: var(--text-muted); cursor: help; border: 1px solid var(--border-hover);
+      font-size: 10px; color: var(--text-muted); cursor: help; border: 1px solid var(--border-hover);
+      flex-shrink: 0;
     }
     .info-trigger:hover { background: var(--accent); color: white; }
 
     .tooltip {
-      position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%);
-      width: 260px; background: #1f2937; color: #fff; padding: 0.75rem; border-radius: 0.75rem;
-      font-size: 0.8rem; line-height: 1.4; border: 1px solid var(--border-hover);
-      box-shadow: 0 10px 25px rgba(0,0,0,0.5); opacity: 0; pointer-events: none; transition: opacity 0.2s ease;
-      z-index: 100; font-weight: 400; text-align: left;
+      position: absolute; bottom: calc(100% + 12px); left: 0;
+      width: 300px; background: #111827; color: #fff; padding: 1.25rem; border-radius: 1rem;
+      font-size: 0.85rem; line-height: 1.5; border: 1px solid var(--accent);
+      box-shadow: 0 15px 40px rgba(0,0,0,0.8); opacity: 0; pointer-events: none; transition: all 0.2s ease;
+      z-index: 1000; font-weight: 400; text-align: left;
     }
+    .tooltip b { color: var(--accent); }
+    .tooltip ol { margin-top: 0.5rem; padding-left: 1.2rem; }
+    .tooltip li { margin-bottom: 0.4rem; list-style-type: decimal; }
     .tooltip::after {
-      content: ""; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
-      border-width: 6px; border-style: solid; border-color: #1f2937 transparent transparent transparent;
+      content: ""; position: absolute; top: 100%; left: 20px;
+      border-width: 8px; border-style: solid; border-color: var(--accent) transparent transparent transparent;
     }
-    .info-trigger:hover + .tooltip, .tooltip:hover { opacity: 1; pointer-events: auto; }
+    .info-trigger:hover + .tooltip, .tooltip:hover { opacity: 1; pointer-events: auto; transform: translateY(-5px); }
     
     .guide-box {
       margin-top: 1.5rem; padding: 1.25rem; border-radius: 1rem;
@@ -244,44 +249,35 @@ def get_dashboard_html():
             <p class="user-subtitle">{{DISCORD_USER}}</p>
           </div>
         </div>
-      <!-- Dual Wallet Balances -->
-      <div id="balance-section" class="mb-6">
-        <div class="balance-grid">
-          <!-- Discord Wallet (Internal) -->
-          <div class="balance-box">
-            <div class="balance-label">
-              <span>Discord Wallet</span>
-              <div class="info-trigger">i</div>
-              <div class="tooltip">This is your internal tipping balance. Funds here can be used instantly for tips and airdrops in the Discord server without gas fees.</div>
-            </div>
-            <div class="balance-value text-accent">
-              <span id="internal-balance-val">{{INTERNAL_BALANCE}}</span> <span class="text-xs">SHx</span>
+      <!-- Sleek Asset Bar -->
+      <div class="asset-bar mb-6">
+        <!-- Discord Asset -->
+        <div class="asset-item">
+          <div class="asset-label">
+            Discord Wallet 
+            <div class="info-trigger">?</div>
+            <div class="tooltip">
+              <b>How to Deposit</b>
+              <p class="text-xs text-muted mb-2">Move SHx from your wallet to Discord for tipping:</p>
+              <ol>
+                <li>Type <b>/deposit</b> in Discord to get the address.</li>
+                <li>Send SHx with Memo ID: <b>{{MEMO}}</b></li>
+                <li>Internal tipping is instant and gas-free.</li>
+              </ol>
             </div>
           </div>
-          
-          <!-- Stellar Wallet (On-Chain) -->
-          <div class="balance-box">
-            <div class="balance-label">
-              <span>Stellar Wallet</span>
-              <div class="info-trigger">i</div>
-              <div class="tooltip">This is the balance currently held in your linked on-chain wallet (xBull, Freighter, etc.).</div>
-            </div>
-            <div class="balance-value" style="color: #fff;">
-              <span id="external-balance-val">0.00</span> <span class="text-xs">SHx</span>
-            </div>
+          <div class="asset-value text-accent">
+            <span id="internal-balance-val">{{INTERNAL_BALANCE}}</span> <span class="text-xs">SHx</span>
           </div>
         </div>
-      </div>
 
-      <!-- Deposit Guide (Contextual Help) -->
-      <div class="guide-box mb-6">
-        <h4><span class="info-trigger">?</span> How to Deposit</h4>
-        <p class="text-sm text-muted">To move SHx from your <b>Stellar Wallet</b> into the <b>Discord Wallet</b> for tipping:</p>
-        <ol class="text-xs text-muted mt-2" style="margin-left: 1.5rem;">
-          <li>Go to Discord and type <b>/deposit</b> to see the bot's address.</li>
-          <li>Send SHx to that address from your wallet.</li>
-          <li><b>Crucial:</b> You MUST include your unique Memo ID: <b class="text-accent">{{MEMO}}</b></li>
-        </ol>
+        <!-- On-Chain Asset -->
+        <div class="asset-item">
+          <div class="asset-label">Stellar Wallet</div>
+          <div class="asset-value" style="color: #fff;">
+            <span id="external-balance-val">0.00</span> <span class="text-xs">SHx</span>
+          </div>
+        </div>
       </div>
       
       <p id="reset-session-link" class="mb-4 text-xs text-accent" style="cursor:pointer; text-decoration: underline;" onclick="resetSession()">Trouble connecting? Reset Session</p>
