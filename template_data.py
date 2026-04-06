@@ -267,7 +267,8 @@ def get_dashboard_html():
     const NETWORK = "{{NETWORK}}";
     const WC_PROJECT_ID = "{{WC_PROJECT_ID}}";
     const APP_VERSION = "{{APP_VERSION}}";
-    const NETWORK_PASSPHRASE = (NETWORK.toLowerCase().trim().includes('mainnet') || NETWORK.toLowerCase().trim().includes('public')) ? 'Public Global Stellar Network ; September 2015' : 'Test SDF Network ; September 2015';
+    const NETWORK_PASSPHRASE = "{{NETWORK_PASSPHRASE}}";
+    console.log("DASHBOARD | Network:", NETWORK, "| Passphrase:", NETWORK_PASSPHRASE);
     
     const DISCORD_USER = "{{DISCORD_USER}}";
     
