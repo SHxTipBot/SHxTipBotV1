@@ -26,6 +26,21 @@ logger = logging.getLogger("shx_tip_bot.web")
 
 app = FastAPI(title="SHx Tip Bot — Wallet Linking", docs_url=None, redoc_url=None)
 
+# --- Fix for Vercel: Resilient static file mounting ---
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+static_dir = os.path.join(BASE_DIR, "src_public")
+
+# On Vercel, we skip the FastAPI mount entirely because Vercel's edge network
+# serves the /public folder (mapped via vercel.json) automatically.
+if not os.getenv("VERCEL") == "1":
+    if os.path.exists(static_dir):
+        logger.info(f"Mounting static files from: {static_dir}")
+        app.mount("/public", StaticFiles(directory=static_dir), name="public")
+    else:
+        logger.warning(f"Static directory NOT FOUND at {static_dir}. Skipping mount.")
+else:
+    logger.info("Vercel context detected: Skipping internal mount (delegating to Edge).")
+
 # ── Security Middleware ──────────────────────────────────────────────────────
 
 app.add_middleware(
@@ -179,7 +194,10 @@ async def register_page(token: str = "", claim_id: str = ""):
     
     # WalletConnect Project ID injection
     wc_project_id = os.getenv("WC_PROJECT_ID", "7989fb9bc986eb22a986775148cb47ae")
+    html = html.replace("{{HORIZON_URL}}", stellar.HORIZON_URL.strip())
+    html = html.replace("{{SOROBAN_URL}}", stellar.SOROBAN_RPC_URL.strip())
     html = html.replace("{{WC_PROJECT_ID}}", wc_project_id.strip())
+    html = html.replace("{{SHX_ISSUER}}", stellar.SHX_ISSUER.strip())
     
     import json
     html = html.replace("{{PENDING_IDS}}", json.dumps(pending_ids))

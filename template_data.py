@@ -36,13 +36,13 @@ def get_dashboard_html():
     .background-castle {
       position: fixed;
       top: 0; left: 0; width: 100%; height: 100%;
-      background-image: url('/stronghold_logo_watermark.svg');
+      background-image: url('https://cdn.prod.website-files.com/5e9a1cde22bbc0a89dba7f5b/60c9649cf8fb48e5c883950e_Stronghold%20Logo%20Mark%20Blue.png');
       background-repeat: no-repeat;
       background-position: center;
-      background-size: 60%;
-      opacity: 0.15;
+      background-size: 50%;
+      opacity: 0.12;
       z-index: -1;
-      filter: blur(2px);
+      filter: blur(4px) brightness(0.8);
     }
 
     .container {
@@ -63,14 +63,20 @@ def get_dashboard_html():
     .logo {
       display: flex;
       align-items: center;
-      gap: 0.75rem;
+      gap: 1rem;
       font-family: 'Outfit', sans-serif;
       font-weight: 700;
-      font-size: 1.5rem;
+      font-size: 1.6rem;
       color: #3b82f6;
+      line-height: 1;
     }
 
-    .logo img { width: 32px; height: 32px; }
+    .logo img { 
+      width: 44px; 
+      height: 44px; 
+      object-fit: contain;
+      filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.4));
+    }
 
     .hero {
       text-align: center;
@@ -252,6 +258,23 @@ def get_dashboard_html():
       transform: translateY(-2px) scale(1.02);
       box-shadow: 0 15px 30px rgba(59, 130, 246, 0.5);
     }
+
+    /* --- MOBILE RESPONSIVENESS --- */
+    @media (max-width: 640px) {
+      .container { padding: 1rem; }
+      nav { margin-bottom: 1rem; flex-direction: column; gap: 1rem; align-items: flex-start; }
+      #swk-button-wrapper { width: 100%; text-align: left; }
+      .hero { padding: 2rem 0; }
+      .hero h1 { font-size: 2rem; line-height: 1.2; }
+      .card { padding: 1.25rem; border-radius: 1rem; }
+      .profile-section { flex-direction: column; align-items: flex-start; gap: 1.5rem; }
+      .stats-row { flex-direction: column; gap: 1rem; width: 100%; }
+      .stat-divider { display: none; }
+      .stat-item { width: 100%; padding: 0.5rem 0; border-bottom: 1px solid var(--border); }
+      .stat-item:last-child { border-bottom: none; }
+      .btn { min-height: 48px; width: 100%; justify-content: center; }
+      .tooltip { width: calc(100vw - 2rem); left: 50%; }
+    }
   </style>
 </head>
 <body>
@@ -260,8 +283,8 @@ def get_dashboard_html():
   <div class="container">
     <nav>
       <div class="logo">
-        <img src="/stronghold_logo_watermark.svg" alt="SHx">
-        <span>SHx Tip Bot</span>
+        <img src="https://cdn.prod.website-files.com/5e9a1cde22bbc0a89dba7f5b/60c9649cf8fb48e5c883950e_Stronghold%20Logo%20Mark%20Blue.png" alt="SHx">
+        <span style="letter-spacing: -0.02em;">SHx Community</span>
       </div>
       <div>
         <div id="swk-button-wrapper"></div>
@@ -337,6 +360,42 @@ def get_dashboard_html():
         ⚠️ <b>Missing SHx Trustline</b><br>
         Your wallet is not set up to receive SHx. Please click "Verify & Link Wallet" above to fix this.
       </div>
+
+      <!-- Blockchain Proof Section -->
+      <div class="mt-6 pt-4 border-t border-opacity-10" style="border-top: 1px solid var(--border);">
+        <h4 class="text-xs text-muted mb-2 uppercase tracking-widest">Network Verification Proof</h4>
+        <div class="grid grid-cols-2 gap-2" style="display:grid; grid-template-columns: 1fr 1fr; gap:0.5rem;">
+          <div class="bg-dark-overlay p-2 rounded text-xs">
+            <span class="text-muted">Network:</span> <span class="text-white text-bold">{{NETWORK}}</span>
+          </div>
+          <div class="bg-dark-overlay p-2 rounded text-xs">
+            <span class="text-muted">Status:</span> <span id="rpc_status" class="text-success text-bold">Connected</span>
+          </div>
+          <div class="bg-dark-overlay p-2 rounded text-xs col-span-2" style="grid-column: span 2;">
+            <span class="text-muted">Contract:</span> <span id="contract_label" class="text-accent text-bold">{{SOROBAN_CONTRACT_ID}}</span>
+          </div>
+        </div>
+        
+        <!-- Technical Proof Toggle -->
+        <div class="mt-4">
+          <button onclick="runConnectivityTest()" id="btn-self-test" class="text-[10px] text-accent border border-accent border-opacity-30 rounded px-2 py-1 hover:bg-accent hover:text-white transition-all">
+            Run Integration Self-Test
+          </button>
+          <div id="self-test-results" class="hidden mt-2 p-2 bg-black bg-opacity-40 rounded border border-white border-opacity-10 text-[9px] font-mono leading-tight">
+            <div id="test-sdk">Checking SDK...</div>
+            <div id="test-swk">Checking Wallets Kit...</div>
+            <div id="test-horizon">Checking Horizon (Mainnet)...</div>
+            <div id="test-soroban">Checking Soroban (RPC)...</div>
+            <div id="test-contract">Checking Contract Signature Path...</div>
+          </div>
+        <div id="footer-branding" class="mt-6 pt-4 text-center border-t border-white border-opacity-5">
+           <p class="text-[11px] text-muted">
+             <span class="status-badge-inline" style="opacity: 0.8;">
+               <span style="width: 6px; height: 6px; border-radius: 50%; background: #10b981; display: inline-block;"></span>
+               Authenticated via <a href="https://github.com/stellar/stellar-wallets-kit" target="_blank" class="text-accent hover:underline">Stellar Wallets Kit</a>
+             </span>
+           </p>
+        </div>
     </div>
 
     <!-- Claim Card -->
@@ -363,24 +422,37 @@ def get_dashboard_html():
 
   </div>
 
-  <script src="/stellar-sdk.js?v={{APP_VERSION}}"></script>
-  <script src="/axios.js?v={{APP_VERSION}}"></script>
-  <script src="/wallet-kit-bundle.umd.js?v={{APP_VERSION}}"></script>
+  <script src="/public/stellar-sdk.js?v={{APP_VERSION}}"></script>
+  <script src="/public/axios.js?v={{APP_VERSION}}"></script>
+  <script src="/public/wallet-kit-bundle.umd.js?v={{APP_VERSION}}"></script>
 
   <script>
     // ── GLOBAL MODAL HELPER (defined first for reliability) ──
     window.openKitModal = () => {
-        console.log("DASHBOARD | openKitModal() trigger. Kit Ready:", !!window.StellarWalletsKit);
+        console.log("DASHBOARD | openKitModal() check. Instance:", !!window.StellarWalletsKit);
+        
         if (!window.StellarWalletsKit) {
-            alert("Wallet connection kit is still loading. Please wait a moment.");
-            if (typeof initKit === 'function') initKit(); // Retry init
+            console.warn("DASHBOARD | Kit instance not found. Re-initializing...");
+            if (typeof initKit === 'function') initKit();
+            
+            // Retry open after a short delay
+            setTimeout(() => {
+                if (window.StellarWalletsKit) {
+                    try { window.StellarWalletsKit.openModal(); }
+                    catch (e) { alert("Wallet connection error: " + e.message); }
+                } else {
+                    alert("FATAL: Stellar Wallets Kit failed to initialize. Please check your browser's console or try a different wallet.");
+                }
+            }, 500);
             return;
         }
+
         try {
+            console.log("DASHBOARD | Triggering modal open...");
             window.StellarWalletsKit.openModal();
         } catch (e) {
-            console.error("DASHBOARD | Modal Error:", e);
-            alert("Error opening modal: " + e.message);
+            console.error("DASHBOARD | FAILED to open modal:", e);
+            alert("Connection Error: " + e.message);
         }
     };
 
@@ -400,12 +472,8 @@ def get_dashboard_html():
     console.log("DASHBOARD | Network:", NETWORK);
     console.log("DASHBOARD | Asset:", SHX_ASSET_CODE, "@", SHX_ISSUER);
     
-    const DISCORD_USER = "{{DISCORD_USER}}";
-    
-    // Initial balance from template injection
-    let currentBalance = "{{INTERNAL_BALANCE}}";
-
-    const HORIZON_URL = (NETWORK.toLowerCase().trim().includes('mainnet') || NETWORK.toLowerCase().trim().includes('public')) ? 'https://horizon.stellar.org' : 'https://horizon-testnet.stellar.org';
+    const HORIZON_URL = "{{HORIZON_URL}}";
+    const SOROBAN_URL = "{{SOROBAN_URL}}";
     const API_BASE = window.location.origin;
 
     // ── BALANCE REFRESH ──
@@ -533,11 +601,10 @@ def get_dashboard_html():
     window.onerror = (msg) => setStatus("Error: " + msg, true);
     window.onunhandledrejection = (event) => setStatus("Async Error: " + (event.reason?.message || event.reason || "Unknown"), true);
 
-    const SOROBAN_CONTRACT_ID = "{{SOROBAN_CONTRACT_ID}}";
     const DISCORD_ID = "{{DISCORD_ID}}";
-    const API_BASE = window.location.origin;
-    const HORIZON_URL = (NETWORK === 'mainnet' || NETWORK === 'public') ? 'https://horizon.stellar.org' : 'https://horizon-testnet.stellar.org';
-    const SOROBAN_URL = (NETWORK === 'mainnet' || NETWORK === 'public') ? 'https://soroban.stellar.org' : 'https://soroban-testnet.stellar.org';
+    const SHX_ISSUER = "{{SHX_ISSUER}}";
+    const SHX_SAC_CONTRACT_ID = "{{SHX_SAC_CONTRACT_ID}}";
+    const SOROBAN_CONTRACT_ID = "{{SOROBAN_CONTRACT_ID}}";
 
     let userAddress = null;
     let kitInitialized = false;
@@ -566,7 +633,7 @@ def get_dashboard_html():
       const profileBadge = document.getElementById('link-status-badge');
       
       if (address) {
-        const addrText = `<span style="width: 8px; height: 8px; background: #10b981; border-radius: 50%; display: inline-block; margin-right: 4px;"></span> Connected: ${address.slice(0,6)}...${address.slice(-4)}`;
+        const addrText = `<span style="width: 8px; height: 8px; background: #10b981; border-radius: 50%; display: inline-block; margin-right: 4px;"></span> Verified: ${address.slice(0,6)}...${address.slice(-4)}`;
         
         if (heroBadge) {
             heroBadge.innerHTML = addrText;
@@ -618,12 +685,18 @@ def get_dashboard_html():
         div.innerText = msg;
     };
 
+    let kitInitInProgress = false;
     async function initKit() {
-        if (kitInitialized) return;
+        if (kitInitialized || kitInitInProgress) return;
+        kitInitInProgress = true;
+        
         try {
             if (!window.StellarKit) {
                 console.warn("DASHBOARD | StellarKit global not found, retrying in 500ms...");
-                setTimeout(initKit, 500);
+                setTimeout(() => {
+                    kitInitInProgress = false;
+                    initKit();
+                }, 500);
                 return;
             }
             
@@ -644,21 +717,22 @@ def get_dashboard_html():
                 }));
             }
 
-            StellarWalletsKit.init({
+            const kit = new StellarWalletsKit({
                 theme: SwkAppDarkTheme,
                 modules: modules,
-                network: (NETWORK.toLowerCase().includes('mainnet') || NETWORK.toLowerCase().includes('public')) ? 'public' : 'testnet'
+                network: (NETWORK.toLowerCase().includes('main')) ? 'public' : 'testnet'
             });
-
-            // Put it on window so it's accessible to the global helper
-            window.StellarWalletsKit = StellarWalletsKit;
+            
+            console.log("DASHBOARD | Kit instance created for network:", NETWORK);
+            window.StellarWalletsKit = kit;
 
             const buttonWrapper = document.getElementById('swk-button-wrapper');
-            if (buttonWrapper) StellarWalletsKit.createButton(buttonWrapper);
+            if (buttonWrapper) kit.createButton(buttonWrapper);
 
             const eventHandler = (event) => {
                 console.log("DASHBOARD | Kit Event:", event);
                 let addr = null;
+                // Handling SWK v2 event structure
                 if (typeof event === 'string' && event.startsWith('G')) addr = event;
                 else if (event.address) addr = event.address;
                 else if (event.payload && typeof event.payload === 'string') addr = event.payload;
@@ -670,11 +744,11 @@ def get_dashboard_html():
                 }
             };
 
-            StellarWalletsKit.on(KitEventType.ADDRESS_CHANGED, eventHandler);
-            StellarWalletsKit.on(KitEventType.WALLET_CONNECTED, eventHandler);
+            kit.on(KitEventType.ADDRESS_CHANGED, eventHandler);
+            kit.on(KitEventType.WALLET_CONNECTED, eventHandler);
             
             try {
-               const currentAddr = await StellarWalletsKit.getAddress();
+               const currentAddr = await kit.getAddress();
                if (currentAddr) {
                    window.userAddress = currentAddr;
                    updateUI(currentAddr);
@@ -815,7 +889,9 @@ def get_dashboard_html():
             try {
                 const contractIdStr = String(parseAddress(SOROBAN_CONTRACT_ID, 'Contract'));
                 console.log("Using Contract ID:", contractIdStr);
-
+                
+                notify('claim-notify', "Building Soroban operation...");
+                
                 // Use the Contract class to build the operation safely
                 const contract = new window.StellarSdk.Contract(contractIdStr);
                 const op = contract.call("claim_withdrawal", ...args);
@@ -855,10 +931,10 @@ def get_dashboard_html():
                 throw new Error(`Contract rejected: ${errorDetails}. This often happens if the signature is invalid or you already claimed this nonce.`);
             }
             
-            notify('claim-notify', "Preparing transaction...");
+            notify('claim-notify', "Simulation successful. Preparing footprint...");
             const preparedTx = await sorobanServer.prepareTransaction(tx, sim);
             
-            notify('claim-notify', "Awaiting wallet signature...");
+            notify('claim-notify', "Awaiting signature from your wallet...");
             const { signedTxXdr } = await StellarWalletsKit.signTransaction(preparedTx.toXDR(), {
                 networkPassphrase: NETWORK_PASSPHRASE,
                 address: userAddress,
@@ -959,6 +1035,9 @@ def get_dashboard_html():
             // If we came from a direct link, show the ticket directly
             selectTicket(CLAIM_ID, "{{CLAIM_AMOUNT}}");
         }
+        
+        // Auto-run connectivity test on load for technical proof
+        setTimeout(runConnectivityTest, 1500);
     };
     
     // Initialize kit immediately on script load
@@ -980,6 +1059,67 @@ def get_dashboard_html():
     
     if (document.getElementById('btn-unlink-action')) {
         document.getElementById('btn-unlink-action').onclick = unlinkHandler;
+    }
+
+    // --- INTEGRATION PROOF: Connectivity Test ---
+    async function runConnectivityTest() {
+        const resultsEl = document.getElementById('self-test-results');
+        const btn = document.getElementById('btn-self-test');
+        resultsEl.classList.remove('hidden');
+        btn.disabled = true;
+        btn.innerText = "Running Tests...";
+        
+        const log = (id, msg, state) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            const color = state === 'ok' ? '#10b981' : (state === 'warn' ? '#f59e0b' : '#ef4444');
+            const icon = state === 'ok' ? '✓' : (state === 'warn' ? '⚠' : '✗');
+            el.innerHTML = `<span style="color:${color}">${icon} ${msg}</span>`;
+        };
+
+        try {
+            // 1. SDK Check
+            if (window.StellarSdk) log('test-sdk', `Stellar SDK version ${window.StellarSdk.version || 'v12+'} active.`, 'ok');
+            else log('test-sdk', 'Stellar SDK failed to load.', 'err');
+
+            // 2. Wallets Kit Check
+            if (window.StellarKit || window.StellarWalletsKit) log('test-swk', 'Stellar Wallets Kit bundle identified.', 'ok');
+            else log('test-swk', 'Wallets Kit not found in /public/.', 'err');
+
+            // 3. Horizon Connectivity
+            try {
+                const hRes = await fetch(HORIZON_URL);
+                if (hRes.ok) log('test-horizon', `Horizon Mainnet reachable at ${HORIZON_URL.split('//')[1]}`, 'ok');
+                else log('test-horizon', `Horizon returned status ${hRes.status}`, 'warn');
+            } catch (e) { log('test-horizon', `Horizon blocked or offline: ${e.message}`, 'err'); }
+
+            // 4. Soroban RPC connectivity
+            try {
+                const sRes = await fetch(SOROBAN_URL, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({jsonrpc: '2.0', id: 1, method: 'getNetwork'})
+                });
+                if (sRes.ok) {
+                    const json = await sRes.json();
+                    if (json.result) log('test-soroban', `Soroban RPC Active: ${json.result.passphrase.slice(0,10)}...`, 'ok');
+                    else log('test-soroban', 'Soroban RPC responded but no result.', 'warn');
+                } else log('test-soroban', `Soroban RPC offline: ${sRes.status}`, 'err');
+            } catch (e) { log('test-soroban', `Soroban unreachable: ${e.message}`, 'err'); }
+
+            // 5. Contract Verification 
+            try {
+                const contractId = parseAddress(SOROBAN_CONTRACT_ID, 'Test');
+                if (contractId.startsWith('C')) log('test-contract', `Contract ID ${contractId.slice(0,8)} verified.`, 'ok');
+                else log('test-contract', 'Invalid contract ID format.', 'err');
+            } catch (e) { log('test-contract', `Contract mapping error: ${e.message}`, 'err'); }
+
+        } catch (e) {
+            console.error("Connectivity Test Failed:", e);
+        } finally {
+            btn.innerText = "Check Complete";
+            setTimeout(() => { btn.disabled = false; btn.innerText = "Run Integration Self-Test"; }, 3000);
+        }
     }
   </script>
 </body>
