@@ -422,8 +422,9 @@ def get_dashboard_html():
 
   </div>
 
-  <script src="/public/stellar-sdk.js?v={{APP_VERSION}}"></script>
-  <script src="/public/axios.js?v={{APP_VERSION}}"></script>
+  <!-- Core SDKs with local + CDN fallback for 100% uptime -->
+  <script src="/public/stellar-sdk.js?v={{APP_VERSION}}" onerror="this.onerror=null; this.src='https://cdnjs.cloudflare.com/ajax/libs/stellar-sdk/12.1.0/stellar-sdk.min.js'"></script>
+  <script src="/public/axios.js?v={{APP_VERSION}}" onerror="this.onerror=null; this.src='https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js'"></script>
   <script src="/public/wallet-kit-bundle.umd.js?v={{APP_VERSION}}"></script>
 
   <script>
