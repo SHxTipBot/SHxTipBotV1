@@ -84,27 +84,8 @@ async def shutdown():
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    if STARTUP_ERROR:
-        return HTMLResponse(content=f"<h1>STARTUP FAILED!</h1><pre>{STARTUP_ERROR}</pre>", status_code=500)
-    return HTMLResponse(content="""
-        <html>
-            <head>
-                <title>SHx Tip Bot</title>
-                <style>
-                    body{background:#0a0a0b;color:#fff;font-family:sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;} 
-                    h1{color:#fff;margin-bottom:10px;}
-                    p{color:#888;margin-bottom:20px;}
-                    a{color:#00e5ff;text-decoration:none;border:1px solid #00e5ff;padding:10px 20px;border-radius:5px;transition:0.2s;} 
-                    a:hover{background:rgba(0,229,255,0.1);}
-                </style>
-            </head>
-            <body>
-                <h1>SHx Profile Portfolio — v1.6</h1>
-                <p>Diagnostic Build: Success. Please use Discord to access your dashboard.</p>
-                <a href="https://discord.com" target="_blank">Open Discord Community</a>
-            </body>
-        </html>
-    """)
+    """Serve the modern dashboard as the landing page."""
+    return await register_page(token="", claim_id="")
 
 @app.get("/api/debug")
 async def debug_info():
@@ -130,8 +111,7 @@ async def register_page(token: str = "", claim_id: str = ""):
     if STARTUP_ERROR:
         return HTMLResponse(content=f"<h1>STARTUP FAILED!</h1><pre>{STARTUP_ERROR}</pre>", status_code=500)
     
-    if not token and not claim_id:
-         return HTMLResponse(content="<h1>Missing session identifier.</h1>", status_code=400)
+    # Allow empty token/claim_id to show the base dashboard for wallet connection
 
     discord_id = None
     if token == "test":
@@ -156,17 +136,17 @@ async def register_page(token: str = "", claim_id: str = ""):
                 discord_id = claim_data["discord_id"]
             claim_amount_str = f"{claim_data['amount']:,.2f}"
 
-    if not discord_id:
-        return HTMLResponse(
-            "<h1>Invalid or expired session.</h1><p>Please use /link or /withdraw in Discord.</p>",
-            status_code=400,
-        )
-
-    user_data = await db.get_or_create_user(discord_id)
-    memo_id = user_data["memo_id"]
-    discord_user = user_data.get("username") or "Unknown User"
-    internal_balance = await db.get_internal_balance(discord_id)
-    existing_key = await db.get_user_stellar_key(discord_id)
+    discord_user = "Community Guest"
+    internal_balance = 0.0
+    memo_id = 0
+    existing_key = None
+    
+    if discord_id:
+        user_data = await db.get_or_create_user(discord_id)
+        discord_user = user_data.get("username") or f"User {discord_id}"
+        internal_balance = await db.get_internal_balance(discord_id)
+        existing_key = await db.get_user_stellar_key(discord_id)
+        memo_id = user_data.get("memo_id", 0)
 
     # Force reload of template_data to bypass Vercel serverless caching
     import importlib
