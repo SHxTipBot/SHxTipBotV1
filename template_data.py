@@ -272,12 +272,12 @@ def get_dashboard_html():
       <h1>Community Portal <span class="text-xs" style="vertical-align: middle; opacity: 0.5;">v1.8</span></h1>
       <p>Securely link your Discord and manage claims.</p>
       
-      <div id="connection-status-area" class="mt-4">
-        <div id="connection-status-badge" class="badge badge-error">Wallet: Not Connected</div>
-        <div id="hero-connect-btn-container" class="mt-4">
-           <button id="btn-hero-connect" class="btn btn-hero">Connect Wallet</button>
+        <div id="connection-status-area" class="mt-4">
+          <div id="connection-status-badge" class="badge badge-error">Wallet: Not Connected</div>
+          <div id="hero-connect-btn-container" class="mt-4">
+             <button id="btn-hero-connect" class="btn btn-hero" onclick="window.openKitModal()">Connect Wallet</button>
+          </div>
         </div>
-      </div>
     </div>
 
     <div class="card">
@@ -368,6 +368,22 @@ def get_dashboard_html():
   <script src="/wallet-kit-bundle.umd.js?v={{APP_VERSION}}"></script>
 
   <script>
+    // ── GLOBAL MODAL HELPER (defined first for reliability) ──
+    window.openKitModal = () => {
+        console.log("DASHBOARD | openKitModal() trigger. Kit Ready:", !!window.StellarWalletsKit);
+        if (!window.StellarWalletsKit) {
+            alert("Wallet connection kit is still loading. Please wait a moment.");
+            if (typeof initKit === 'function') initKit(); // Retry init
+            return;
+        }
+        try {
+            window.StellarWalletsKit.openModal();
+        } catch (e) {
+            console.error("DASHBOARD | Modal Error:", e);
+            alert("Error opening modal: " + e.message);
+        }
+    };
+
     const urlParams = new URLSearchParams(window.location.search);
     const TOKEN = urlParams.get('token') || "{{TOKEN}}";
     let CLAIM_ID = urlParams.get('claim_id') || "{{CLAIM_ID}}";
@@ -606,83 +622,72 @@ def get_dashboard_html():
         if (kitInitialized) return;
         try {
             if (!window.StellarKit) {
-                console.warn("StellarKit global not found yet, retrying...");
+                console.warn("DASHBOARD | StellarKit global not found, retrying in 500ms...");
                 setTimeout(initKit, 500);
                 return;
             }
             
-            ({ StellarWalletsKit, KitEventType, SwkAppDarkTheme, defaultModules, WalletConnectModule } = window.StellarKit);
+            const { StellarWalletsKit, KitEventType, SwkAppDarkTheme, defaultModules, WalletConnectModule } = window.StellarKit;
             const modules = defaultModules();
             
             if (WalletConnectModule && WC_PROJECT_ID && !WC_PROJECT_ID.includes('{{')) {
-                console.log("Adding WalletConnect Module with ID:", WC_PROJECT_ID.slice(0,8) + "...");
                 modules.push(new WalletConnectModule({
                     projectId: WC_PROJECT_ID,
                     projectID: WC_PROJECT_ID, 
-                    network: (NETWORK.toLowerCase().trim().includes('mainnet') || NETWORK.toLowerCase().trim().includes('public')) ? 'public' : 'testnet',
+                    network: (NETWORK.toLowerCase().includes('mainnet') || NETWORK.toLowerCase().includes('public')) ? 'public' : 'testnet',
                     metadata: {
                         name: "SHx Tip Bot",
-                        description: "Securely link your Discord account",
+                        description: "Community Portal",
                         url: window.location.origin,
                         icons: ["https://shxtipbotv1.vercel.app/stronghold_logo_watermark.svg"]
                     }
                 }));
             }
 
-            // Initialize SWK using the static init method
             StellarWalletsKit.init({
                 theme: SwkAppDarkTheme,
                 modules: modules,
-                network: (NETWORK.toLowerCase().trim().includes('mainnet') || NETWORK.toLowerCase().trim().includes('public')) ? 'public' : 'testnet'
+                network: (NETWORK.toLowerCase().includes('mainnet') || NETWORK.toLowerCase().includes('public')) ? 'public' : 'testnet'
             });
 
-            // Create the built-in wallet connect button
+            // Put it on window so it's accessible to the global helper
+            window.StellarWalletsKit = StellarWalletsKit;
+
             const buttonWrapper = document.getElementById('swk-button-wrapper');
             if (buttonWrapper) StellarWalletsKit.createButton(buttonWrapper);
 
-            // Listen for events
             const eventHandler = (event) => {
-                console.log("Stellar Kit Event:", event);
+                console.log("DASHBOARD | Kit Event:", event);
                 let addr = null;
-                // handle various event formats
                 if (typeof event === 'string' && event.startsWith('G')) addr = event;
                 else if (event.address) addr = event.address;
                 else if (event.payload && typeof event.payload === 'string') addr = event.payload;
                 else if (event.payload && event.payload.address) addr = event.payload.address;
                 
-                if (addr) updateUI(addr);
+                if (addr) {
+                    window.userAddress = addr;
+                    updateUI(addr);
+                }
             };
 
             StellarWalletsKit.on(KitEventType.ADDRESS_CHANGED, eventHandler);
             StellarWalletsKit.on(KitEventType.WALLET_CONNECTED, eventHandler);
             
-            // Initial poll for address if already connected
             try {
                const currentAddr = await StellarWalletsKit.getAddress();
-               if (currentAddr) updateUI(currentAddr);
+               if (currentAddr) {
+                   window.userAddress = currentAddr;
+                   updateUI(currentAddr);
+               }
             } catch(e) {}
             
             kitInitialized = true;
-            console.log("Stellar Kit Started Successfully.");
+            console.log("DASHBOARD | Kit Ready.");
         } catch (err) {
-            console.error("SWK INIT FAILED:", err);
-            setStatus("Connection Kit Error", true);
+            console.error("DASHBOARD | SWK INIT FAILED:", err);
+            setStatus("Connection Error", true);
         }
     };
-
-    window.openKitModal = () => {
-        console.log("openKitModal called. Kit status:", !!StellarWalletsKit);
-        if (!StellarWalletsKit) {
-            alert("Wallet connection kit is still loading. Please wait a moment.");
-            return;
-        }
-        try {
-            StellarWalletsKit.openModal();
-        } catch (e) {
-            console.error("Failed to open modal:", e);
-            alert("Error opening wallet modal: " + e.message);
-        }
-    }
 
     // ── APP LOGIC ──
     async function handleLink() {
@@ -959,7 +964,6 @@ def get_dashboard_html():
     // Initialize kit immediately on script load
     initKit();
     
-    document.getElementById('btn-hero-connect').onclick = window.openKitModal;
     document.getElementById('btn-link').onclick = handleLink;
     document.getElementById('btn-claim-action').onclick = handleClaim;
     document.getElementById('btn-claim-cancel').onclick = handleCancel;
