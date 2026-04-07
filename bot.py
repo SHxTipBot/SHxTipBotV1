@@ -100,7 +100,16 @@ class AirdropView(discord.ui.View):
 
 
 async def parse_amount(input_str: str) -> float | None:
-    """Parse a string to an SHx float. Handles raw SHx or fiat ($ USD)."""
+    """Parse a string to an SHx float. Handles raw SHx or fiat ($ USD). Returns None on failure."""
+    result = await parse_amount_full(input_str)
+    return result["shx"] if result else None
+
+async def parse_amount_full(input_str: str) -> dict | None:
+    """
+    Parse an amount string and return full conversion details.
+    Returns dict: {shx: float, was_usd: bool, usd_input: float|None, rate: float|None}
+    Returns None on failure.
+    """
     input_str = str(input_str).strip().lower()
     is_usd = input_str.startswith('$') or input_str.endswith('usd')
     clean_str = input_str.replace('$', '').replace('usd', '').replace(',', '').strip()
@@ -110,8 +119,9 @@ async def parse_amount(input_str: str) -> float | None:
         if is_usd:
             usd_price = await stellar.get_shx_usd_price()
             if not usd_price or usd_price <= 0: return None
-            return val / usd_price
-        return val
+            shx_amount = round(val / usd_price, 7)
+            return {"shx": shx_amount, "was_usd": True, "usd_input": val, "rate": usd_price}
+        return {"shx": val, "was_usd": False, "usd_input": None, "rate": None}
     except ValueError:
         return None
 
@@ -335,9 +345,16 @@ async def balance_command(interaction: Interaction):
 
         embed = _footer(discord.Embed(title="💰 Your SHx Tip Balance", color=EMBED_COLOR))
         embed.add_field(name="Available Balance", value=f"**{balance:,.2f} SHx**", inline=False)
+        
+        # Show USD equivalent
+        usd_price = await stellar.get_shx_usd_price()
+        if usd_price and usd_price > 0:
+            usd_equiv = balance * usd_price
+            embed.add_field(name="USD Value", value=f"~**${usd_equiv:,.2f}** (@ ${usd_price:.6f}/SHx)", inline=False)
+        
         embed.add_field(
             name="Tip others",
-            value="Use `/tip @user amount` to send SHx to other members instantly.",
+            value="Use `/tip @user amount` to send SHx. You can also use `$5` to tip in USD!",
             inline=False,
         )
         await interaction.followup.send(embed=embed, ephemeral=True)
@@ -490,10 +507,10 @@ async def withdraw_destination_autocomplete(interaction: Interaction, current: s
 
 # ── /tip ──────────────────────────────────────────────────────────────────────
 
-@bot.tree.command(name="tip", description="Tip another user with SHx")
+@bot.tree.command(name="tip", description="Tip another user with SHx (supports $ amounts, e.g. $5)")
 @app_commands.describe(
     user="The user to tip",
-    amount="Amount of SHx or USD (e.g. 100 or $5)",
+    amount="Amount in SHx or USD (e.g. 100, $5, 2.50usd)",
     reason="Optional reason for the tip",
 )
 async def tip_command(
@@ -517,10 +534,11 @@ async def tip_command(
         await interaction.followup.send("❌ Cannot tip yourself.", ephemeral=True)
         return
         
-    parsed_amount = await parse_amount(amount)
-    if parsed_amount is None:
-        await interaction.followup.send("❌ Invalid amount. Enter a positive native integer or fiat string (e.g., `$5`).", ephemeral=True)
+    result = await parse_amount_full(amount)
+    if result is None:
+        await interaction.followup.send("❌ Invalid amount. Use a number like `100` for SHx or `$5` for USD equivalent.", ephemeral=True)
         return
+    parsed_amount = result["shx"]
 
 
     # Ensure recipient exists in DB (cannot get display_name easily for mention unless in cache, but we try)
@@ -532,18 +550,23 @@ async def tip_command(
     success = await db.transfer_internal(sender_id, recipient_id, parsed_amount, 0.0, actual_reason)
 
     if success:
-        embed = _footer(discord.Embed(title="✅ Tip Sent!", color=SUCCESS_COLOR))
+        embed = _footer(discord.Embed(title="\u2705 Tip Sent!", color=SUCCESS_COLOR))
         embed.add_field(name="From", value=interaction.user.mention, inline=True)
         embed.add_field(name="To", value=user.mention, inline=True)
-        embed.add_field(name="Amount", value=f"**{parsed_amount:,.2f} SHx**", inline=True)
+        # Show conversion details if USD was used
+        if result["was_usd"]:
+            embed.add_field(name="Amount", value=f"**${result['usd_input']:.2f}** = **{parsed_amount:,.2f} SHx**", inline=True)
+            embed.add_field(name="Rate", value=f"1 SHx = ${result['rate']:.6f}", inline=True)
+        else:
+            embed.add_field(name="Amount", value=f"**{parsed_amount:,.2f} SHx**", inline=True)
         if actual_reason:
             embed.add_field(name="Reason", value=actual_reason, inline=False)
         await interaction.followup.send(embed=embed)
-        logger.info(f"INTERNAL TIP OK | {sender_id}→{recipient_id} | {parsed_amount} SHx")
+        logger.info(f"INTERNAL TIP OK | {sender_id}\u2192{recipient_id} | {parsed_amount} SHx")
     else:
         # PRIVACY FIX: Explicitly scrub balances from the rejection log so nothing is shown in chat!
         await interaction.followup.send(
-            f"❌ Transaction failed due to insufficient funds.\n"
+            f"\u274c Transaction failed due to insufficient funds.\n"
             f"Please type `/balance` to privately check your available SHx.",
             ephemeral=True
         )
@@ -551,10 +574,10 @@ async def tip_command(
 
 # ── /tip-multiple ─────────────────────────────────────────────────────────────
 
-@bot.tree.command(name="tip-multiple", description="Split a total SHx amount among multiple mentioned users or roles")
+@bot.tree.command(name="tip-multiple", description="Split a total amount among multiple users/roles (supports $)")
 @app_commands.describe(
     targets="Mention users and/or roles (e.g. @user1 @role1)",
-    amount="Total SHx to split equally among all members (e.g. 100 or $5)",
+    amount="Total SHx or USD to split equally (e.g. 100 or $5)",
     reason="Optional reason"
 )
 async def tip_multiple_command(interaction: Interaction, targets: str, amount: str, reason: Optional[str] = None):
@@ -571,10 +594,11 @@ async def tip_multiple_command(interaction: Interaction, targets: str, amount: s
         await interaction.followup.send("❌ Only users with an assigned role can use `/tip-multiple`.", ephemeral=True)
         return
 
-    parsed_amount = await parse_amount(amount)
-    if parsed_amount is None:
-        await interaction.followup.send("❌ Invalid amount. Enter numbers or a fiat string (e.g. `$5`).", ephemeral=True)
+    result = await parse_amount_full(amount)
+    if result is None:
+        await interaction.followup.send("❌ Invalid amount. Use `100` for SHx or `$5` for USD equivalent.", ephemeral=True)
         return
+    parsed_amount = result["shx"]
 
     members = await get_unique_users_from_string(interaction.guild, targets, exclude_id=sender_id)
     if not members:
@@ -601,8 +625,12 @@ async def tip_multiple_command(interaction: Interaction, targets: str, amount: s
         if success:
             success_count += 1
             
-    embed = _footer(discord.Embed(title="👥 Multi-Tip Split Complete!", color=SUCCESS_COLOR))
-    embed.add_field(name="Total Split", value=f"**{parsed_amount:,.2f} SHx**", inline=True)
+    embed = _footer(discord.Embed(title="\U0001f465 Multi-Tip Split Complete!", color=SUCCESS_COLOR))
+    if result["was_usd"]:
+        embed.add_field(name="Total Split", value=f"**${result['usd_input']:.2f}** = **{parsed_amount:,.2f} SHx**", inline=True)
+        embed.add_field(name="Rate", value=f"1 SHx = ${result['rate']:.6f}", inline=True)
+    else:
+        embed.add_field(name="Total Split", value=f"**{parsed_amount:,.2f} SHx**", inline=True)
     embed.add_field(name="Recipients", value=f"**{len(members)}**", inline=True)
     embed.add_field(name="Amount Each", value=f"**{amount_per_member:,.4f} SHx**", inline=True)
     if reason:
@@ -767,8 +795,8 @@ async def get_role_members(interaction: Interaction, role: discord.Role, sender_
 
 # ── /tip-role ─────────────────────────────────────────────────────────────────
 
-@bot.tree.command(name="tip-role", description="Divide a total SHx amount equally among all members of a role")
-@app_commands.describe(role="The role to tip", amount="Total SHx to split equally (e.g. 100 or $5)")
+@bot.tree.command(name="tip-role", description="Divide a total amount equally among all members of a role (supports $)")
+@app_commands.describe(role="The role to tip", amount="Total SHx or USD to split equally (e.g. 100 or $5)")
 async def tip_role_command(interaction: Interaction, role: discord.Role, amount: str):
     logger.info(f"COMMAND | /tip-role | User: {interaction.user} Role: {role.name} Total: {amount}")
     await interaction.response.defer()
@@ -782,10 +810,11 @@ async def tip_role_command(interaction: Interaction, role: discord.Role, amount:
         await interaction.followup.send("❌ Only users with an assigned role can use this command.", ephemeral=True)
         return
 
-    parsed_amount = await parse_amount(amount)
-    if parsed_amount is None or parsed_amount <= 0:
-        await interaction.followup.send("❌ Invalid amount. Enter numbers or a fiat string (e.g. `$5`).", ephemeral=True)
+    result = await parse_amount_full(amount)
+    if result is None or result["shx"] <= 0:
+        await interaction.followup.send("❌ Invalid amount. Use `100` for SHx or `$5` for USD equivalent.", ephemeral=True)
         return
+    parsed_amount = result["shx"]
 
     valid_members = await get_role_members(interaction, role, sender_id)
     if not valid_members:
@@ -809,20 +838,23 @@ async def tip_role_command(interaction: Interaction, role: discord.Role, amount:
         if await db.transfer_internal(sender_id, recipient_id, amount_per_member, 0.0, f"Role Split: {role.name}"):
             success_count += 1
             
-    embed = _footer(discord.Embed(title="🎭 Role Split Tip Complete!", color=SUCCESS_COLOR))
+    embed = _footer(discord.Embed(title="\U0001f3ad Role Split Tip Complete!", color=SUCCESS_COLOR))
     embed.add_field(name="Role Tipped", value=role.mention, inline=False)
-    embed.add_field(name="Total Distributed", value=f"**{parsed_amount:,.2f} SHx**", inline=True)
+    if result["was_usd"]:
+        embed.add_field(name="Total Distributed", value=f"**${result['usd_input']:.2f}** = **{parsed_amount:,.2f} SHx**", inline=True)
+    else:
+        embed.add_field(name="Total Distributed", value=f"**{parsed_amount:,.2f} SHx**", inline=True)
     embed.add_field(name="Amount Each", value=f"**{amount_per_member:,.4f} SHx**", inline=True)
     embed.add_field(name="Members Tipped", value=f"**{success_count}**", inline=True)
     
     await interaction.followup.send(embed=embed)
-    logger.info(f"ROLE SPLIT OK | {sender_id}→{role.name} | {amount_per_member} SHx x {success_count}")
+    logger.info(f"ROLE SPLIT OK | {sender_id}\u2192{role.name} | {amount_per_member} SHx x {success_count}")
 
 
 # ── /tip-role-each ────────────────────────────────────────────────────────────
 
-@bot.tree.command(name="tip-role-each", description="Send a specific SHx amount to every member of a role")
-@app_commands.describe(role="The role to tip", amount="Amount to send to EACH member (e.g. 10 or $1)")
+@bot.tree.command(name="tip-role-each", description="Send a specific amount to every member of a role (supports $)")
+@app_commands.describe(role="The role to tip", amount="Amount per member in SHx or USD (e.g. 10 or $1)")
 async def tip_role_each_command(interaction: Interaction, role: discord.Role, amount: str):
     logger.info(f"COMMAND | /tip-role-each | User: {interaction.user} Role: {role.name} Each: {amount}")
     await interaction.response.defer()
@@ -836,10 +868,11 @@ async def tip_role_each_command(interaction: Interaction, role: discord.Role, am
         await interaction.followup.send("❌ Only users with an assigned role can use this command.", ephemeral=True)
         return
 
-    parsed_single_amount = await parse_amount(amount)
-    if parsed_single_amount is None or parsed_single_amount <= 0:
-        await interaction.followup.send("❌ Invalid amount. Enter numbers or a fiat string (e.g. `$1`).", ephemeral=True)
+    result = await parse_amount_full(amount)
+    if result is None or result["shx"] <= 0:
+        await interaction.followup.send("❌ Invalid amount. Use `10` for SHx or `$1` for USD equivalent.", ephemeral=True)
         return
+    parsed_single_amount = result["shx"]
 
     valid_members = await get_role_members(interaction, role, sender_id)
     num_members = len(valid_members)
@@ -860,14 +893,65 @@ async def tip_role_each_command(interaction: Interaction, role: discord.Role, am
         if await db.transfer_internal(sender_id, recipient_id, parsed_single_amount, 0.0, f"Role Each: {role.name}"):
             success_count += 1
             
-    embed = _footer(discord.Embed(title="🎭 Role Tipping Each Complete!", color=SUCCESS_COLOR))
+    embed = _footer(discord.Embed(title="\U0001f3ad Role Tipping Each Complete!", color=SUCCESS_COLOR))
     embed.add_field(name="Role Tipped", value=role.mention, inline=False)
-    embed.add_field(name="Amount Per Member", value=f"**{parsed_single_amount:,.2f} SHx**", inline=True)
+    if result["was_usd"]:
+        embed.add_field(name="Amount Per Member", value=f"**${result['usd_input']:.2f}** = **{parsed_single_amount:,.2f} SHx**", inline=True)
+    else:
+        embed.add_field(name="Amount Per Member", value=f"**{parsed_single_amount:,.2f} SHx**", inline=True)
     embed.add_field(name="Members Tipped", value=f"**{success_count}**", inline=True)
     embed.add_field(name="Total Spent", value=f"**{(parsed_single_amount * success_count):,.2f} SHx**", inline=False)
     
     await interaction.followup.send(embed=embed)
-    logger.info(f"ROLE EACH OK | {sender_id}→{role.name} | {parsed_single_amount} SHx x {success_count}")
+    logger.info(f"ROLE EACH OK | {sender_id}\u2192{role.name} | {parsed_single_amount} SHx x {success_count}")
+
+# ── /price ────────────────────────────────────────────────────────────────────
+
+@bot.tree.command(name="price", description="Check the current SHx price and convert amounts")
+@app_commands.describe(amount="Optional: Amount to convert (e.g. $10, 500shx)")
+async def price_command(interaction: Interaction, amount: str = None):
+    logger.info(f"COMMAND | /price | User: {interaction.user} | Amount: {amount}")
+    await interaction.response.defer(ephemeral=True)
+    
+    usd_price = await stellar.get_shx_usd_price()
+    xlm_price = await stellar.get_shx_xlm_price()
+    
+    if not usd_price or usd_price <= 0:
+        await interaction.followup.send("\u274c Could not fetch SHx price. Oracle unavailable.", ephemeral=True)
+        return
+    
+    embed = _footer(discord.Embed(title="\U0001f4b9 SHx Price", color=EMBED_COLOR))
+    embed.add_field(name="USD Price", value=f"**1 SHx = ${usd_price:.6f}**", inline=True)
+    if xlm_price and xlm_price > 0:
+        embed.add_field(name="XLM Price", value=f"**1 SHx = {xlm_price:.7f} XLM**", inline=True)
+    
+    # Quick reference conversions
+    ref_lines = []
+    for usd_val in [1, 5, 10, 25, 50, 100]:
+        shx_equiv = round(usd_val / usd_price, 2)
+        ref_lines.append(f"${usd_val} = **{shx_equiv:,.2f} SHx**")
+    embed.add_field(name="Quick Reference", value="\n".join(ref_lines), inline=False)
+    
+    # Optional conversion
+    if amount:
+        result = await parse_amount_full(amount)
+        if result:
+            if result["was_usd"]:
+                embed.add_field(
+                    name="\U0001f504 Your Conversion", 
+                    value=f"**${result['usd_input']:.2f}** = **{result['shx']:,.2f} SHx**", 
+                    inline=False
+                )
+            else:
+                usd_equiv = result["shx"] * usd_price
+                embed.add_field(
+                    name="\U0001f504 Your Conversion", 
+                    value=f"**{result['shx']:,.2f} SHx** = **${usd_equiv:.2f} USD**", 
+                    inline=False
+                )
+    
+    embed.set_footer(text="SHx Tip Bot \u2022 Prices via CoinGecko / Stellar DEX")
+    await interaction.followup.send(embed=embed, ephemeral=True)
 
 # ── /airdrop ──────────────────────────────────────────────────────────────────
 

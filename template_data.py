@@ -422,60 +422,59 @@ def get_dashboard_html():
 
   </div>
 
-  <!-- Core SDKs with local + CDN fallback for 100% uptime -->
-  <script src="/public/stellar-sdk.js?v={{APP_VERSION}}" onerror="this.onerror=null; this.src='https://cdnjs.cloudflare.com/ajax/libs/stellar-sdk/12.1.0/stellar-sdk.min.js'"></script>
-  <script src="/public/axios.js?v={{APP_VERSION}}" onerror="this.onerror=null; this.src='https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js'"></script>
-  <script src="/public/wallet-kit-bundle.umd.js?v={{APP_VERSION}}"></script>
+  <!-- Stellar SDK + Axios from CDN, SWK UMD from local bundle -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/stellar-sdk/12.3.0/stellar-sdk.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+  <script src="/wallet-kit-bundle.umd.js"></script>
 
   <script>
-    // ── GLOBAL MODAL HELPER (defined first for reliability) ──
-    window.openKitModal = () => {
-        console.log("DASHBOARD | openKitModal() check. Instance:", !!window.StellarWalletsKit);
-        
-        if (!window.StellarWalletsKit) {
-            console.warn("DASHBOARD | Kit instance not found. Re-initializing...");
-            if (typeof initKit === 'function') initKit();
-            
-            // Retry open after a short delay
-            setTimeout(() => {
-                if (window.StellarWalletsKit) {
-                    try { window.StellarWalletsKit.openModal(); }
-                    catch (e) { alert("Wallet connection error: " + e.message); }
-                } else {
-                    alert("FATAL: Stellar Wallets Kit failed to initialize. Please check your browser's console or try a different wallet.");
-                }
-            }, 500);
-            return;
-        }
+    // ══════════════════════════════════════════════════════════════
+    // SHx Community Portal — SWK v2 Static API Integration
+    // Uses: StellarKit.StellarWalletsKit.init() / .authModal() / etc.
+    // ══════════════════════════════════════════════════════════════
 
+    // ── GLOBAL MODAL HELPER ──
+    window.openKitModal = async () => {
+        console.log("DASHBOARD | openKitModal() called. Kit ready:", kitInitialized);
+        if (!kitInitialized) {
+            console.warn("DASHBOARD | Kit not initialized yet. Attempting init...");
+            if (typeof initKit === 'function') await initKit();
+        }
         try {
-            console.log("DASHBOARD | Triggering modal open...");
-            window.StellarWalletsKit.openModal();
+            console.log("DASHBOARD | Opening auth modal...");
+            const { address } = await window.StellarKit.StellarWalletsKit.authModal();
+            console.log("DASHBOARD | Auth modal returned address:", address);
+            if (address) {
+                userAddress = address;
+                window.userAddress = address;
+                updateUI(address);
+            }
         } catch (e) {
-            console.error("DASHBOARD | FAILED to open modal:", e);
-            alert("Connection Error: " + e.message);
+            if (e && e.code === -1 && e.message && e.message.includes('closed')) {
+                console.log("DASHBOARD | User closed the modal.");
+            } else {
+                console.error("DASHBOARD | authModal error:", e);
+                alert("Wallet connection error: " + (e.message || e));
+            }
         }
     };
 
+    // ── INJECTED CONSTANTS (de-duplicated) ──
     const urlParams = new URLSearchParams(window.location.search);
     const TOKEN = urlParams.get('token') || "{{TOKEN}}";
     let CLAIM_ID = urlParams.get('claim_id') || "{{CLAIM_ID}}";
     let PENDING_IDS = {{PENDING_IDS}};
     const NETWORK = "{{NETWORK}}";
+    const NETWORK_PASSPHRASE = "{{NETWORK_PASSPHRASE}}";
     const WC_PROJECT_ID = "{{WC_PROJECT_ID}}";
     const APP_VERSION = "{{APP_VERSION}}";
-    const NETWORK_PASSPHRASE = "{{NETWORK_PASSPHRASE}}";
-    
-    // Asset Constants
     const SHX_ASSET_CODE = "{{SHX_ASSET_CODE}}";
-    const SHX_ISSUER = "{{SHX_ISSUER}}";
-
-    console.log("DASHBOARD | Network:", NETWORK);
-    console.log("DASHBOARD | Asset:", SHX_ASSET_CODE, "@", SHX_ISSUER);
-    
+    const SHX_ISSUER_VAL = "{{SHX_ISSUER}}";
     const HORIZON_URL = "{{HORIZON_URL}}";
     const SOROBAN_URL = "{{SOROBAN_URL}}";
     const API_BASE = window.location.origin;
+
+    console.log("DASHBOARD | Network:", NETWORK, "| Asset:", SHX_ASSET_CODE, "@", SHX_ISSUER_VAL);
 
     // ── BALANCE REFRESH ──
     async function fetchStellarBalance(address) {
@@ -484,7 +483,7 @@ def get_dashboard_html():
             console.log("Refreshing Stellar Balance for:", address);
             const server = new window.StellarSdk.Horizon.Server(HORIZON_URL);
             const acc = await server.loadAccount(address);
-            const shxBal = acc.balances.find(b => b.asset_code === SHX_ASSET_CODE && b.asset_issuer === SHX_ISSUER);
+            const shxBal = acc.balances.find(b => b.asset_code === SHX_ASSET_CODE && b.asset_issuer === SHX_ISSUER_VAL);
             const val = shxBal ? parseFloat(shxBal.balance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00";
             const el = document.getElementById('external-balance-val');
             if (el) el.innerText = val;
@@ -603,13 +602,11 @@ def get_dashboard_html():
     window.onunhandledrejection = (event) => setStatus("Async Error: " + (event.reason?.message || event.reason || "Unknown"), true);
 
     const DISCORD_ID = "{{DISCORD_ID}}";
-    const SHX_ISSUER = "{{SHX_ISSUER}}";
     const SHX_SAC_CONTRACT_ID = "{{SHX_SAC_CONTRACT_ID}}";
     const SOROBAN_CONTRACT_ID = "{{SOROBAN_CONTRACT_ID}}";
 
     let userAddress = null;
     let kitInitialized = false;
-    let StellarWalletsKit, KitEventType, SwkAppDarkTheme, defaultModules, WalletConnectModule;
 
     /**
      * Defensive helper to prevent 'Unsupported address type: undefined' errors.
@@ -692,8 +689,8 @@ def get_dashboard_html():
         kitInitInProgress = true;
         
         try {
-            if (!window.StellarKit) {
-                console.warn("DASHBOARD | StellarKit global not found, retrying in 500ms...");
+            if (!window.StellarKit || !window.StellarKit.StellarWalletsKit) {
+                console.warn("DASHBOARD | StellarKit global not found. Retrying in 500ms...");
                 setTimeout(() => {
                     kitInitInProgress = false;
                     initKit();
@@ -702,64 +699,83 @@ def get_dashboard_html():
             }
             
             const { StellarWalletsKit, KitEventType, SwkAppDarkTheme, defaultModules, WalletConnectModule } = window.StellarKit;
-            const modules = defaultModules();
             
+            // Build module list
+            const modules = [...defaultModules()];
+            
+            // Add WalletConnect if project ID is available
             if (WalletConnectModule && WC_PROJECT_ID && !WC_PROJECT_ID.includes('{{')) {
-                modules.push(new WalletConnectModule({
-                    projectId: WC_PROJECT_ID,
-                    projectID: WC_PROJECT_ID, 
-                    network: (NETWORK.toLowerCase().includes('mainnet') || NETWORK.toLowerCase().includes('public')) ? 'public' : 'testnet',
-                    metadata: {
-                        name: "SHx Tip Bot",
-                        description: "Community Portal",
-                        url: window.location.origin,
-                        icons: ["https://shxtipbotv1.vercel.app/stronghold_logo_watermark.svg"]
-                    }
-                }));
+                try {
+                    modules.push(new WalletConnectModule({
+                        projectId: WC_PROJECT_ID,
+                        metadata: {
+                            name: "SHx Tip Bot",
+                            description: "SHx Community Portal",
+                            url: window.location.origin,
+                            icons: ["https://shxtipbotv1.vercel.app/stronghold_logo_watermark.svg"]
+                        }
+                    }));
+                    console.log("DASHBOARD | WalletConnect module added.");
+                } catch (wcErr) {
+                    console.warn("DASHBOARD | WalletConnect module failed to load (non-fatal):", wcErr);
+                }
             }
 
-            const kit = new StellarWalletsKit({
+            // ── SWK v2: Static init ──
+            StellarWalletsKit.init({
                 theme: SwkAppDarkTheme,
                 modules: modules,
-                network: (NETWORK.toLowerCase().includes('main')) ? 'public' : 'testnet'
+                network: NETWORK_PASSPHRASE
             });
             
-            console.log("DASHBOARD | Kit instance created for network:", NETWORK);
-            window.StellarWalletsKit = kit;
+            console.log("DASHBOARD | SWK v2 initialized for network:", NETWORK);
 
+            // ── Create the built-in connect button ──
             const buttonWrapper = document.getElementById('swk-button-wrapper');
-            if (buttonWrapper) kit.createButton(buttonWrapper);
+            if (buttonWrapper) {
+                StellarWalletsKit.createButton(buttonWrapper);
+                console.log("DASHBOARD | SWK button created.");
+            }
 
-            const eventHandler = (event) => {
-                console.log("DASHBOARD | Kit Event:", event);
-                let addr = null;
-                // Handling SWK v2 event structure
-                if (typeof event === 'string' && event.startsWith('G')) addr = event;
-                else if (event.address) addr = event.address;
-                else if (event.payload && typeof event.payload === 'string') addr = event.payload;
-                else if (event.payload && event.payload.address) addr = event.payload.address;
-                
+            // ── Listen to STATE_UPDATED events ──
+            StellarWalletsKit.on(KitEventType.STATE_UPDATED, (event) => {
+                console.log("DASHBOARD | STATE_UPDATED:", event);
+                const addr = event && event.payload ? event.payload.address : null;
                 if (addr) {
+                    userAddress = addr;
                     window.userAddress = addr;
                     updateUI(addr);
                 }
-            };
+            });
 
-            kit.on(KitEventType.ADDRESS_CHANGED, eventHandler);
-            kit.on(KitEventType.WALLET_CONNECTED, eventHandler);
+            // ── Listen to DISCONNECT events ──
+            StellarWalletsKit.on(KitEventType.DISCONNECT, () => {
+                console.log("DASHBOARD | DISCONNECT event.");
+                userAddress = null;
+                window.userAddress = null;
+                updateUI(null);
+            });
             
+            // ── Try to restore previously connected wallet ──
             try {
-               const currentAddr = await kit.getAddress();
+               const { address: currentAddr } = await StellarWalletsKit.getAddress();
                if (currentAddr) {
+                   userAddress = currentAddr;
                    window.userAddress = currentAddr;
                    updateUI(currentAddr);
+                   console.log("DASHBOARD | Restored address:", currentAddr);
                }
-            } catch(e) {}
+            } catch(e) {
+                // No wallet previously connected — this is normal
+                console.log("DASHBOARD | No previously connected wallet.");
+            }
             
             kitInitialized = true;
-            console.log("DASHBOARD | Kit Ready.");
+            kitInitInProgress = false;
+            console.log("DASHBOARD | Kit Ready ✓");
         } catch (err) {
             console.error("DASHBOARD | SWK INIT FAILED:", err);
+            kitInitInProgress = false;
             setStatus("Connection Error", true);
         }
     };
@@ -768,12 +784,12 @@ def get_dashboard_html():
     async function handleLink() {
         console.log("handleLink() triggered. Current userAddress:", userAddress);
         
-        // Fallback: try to pull address directly from kit if global is missing
-        if (!userAddress && StellarWalletsKit) {
+        // Fallback: try to pull address from kit if global is missing
+        if (!userAddress && window.StellarKit && window.StellarKit.StellarWalletsKit) {
             try {
-                // Some versions allow direct query or have a public state
-                userAddress = StellarWalletsKit.address || StellarWalletsKit.publicKey || userAddress;
-                console.log("Attempted sync from kit properties:", userAddress);
+                const { address } = await window.StellarKit.StellarWalletsKit.getAddress();
+                if (address) userAddress = address;
+                console.log("Synced address from kit:", userAddress);
             } catch (e) {
                 console.warn("Could not sync state from kit:", e);
             }
@@ -793,7 +809,7 @@ def get_dashboard_html():
                 .setTimeout(300).build();
 
             notify('link-notify', "Awaiting wallet signature...");
-            const { signedTxXdr } = await StellarWalletsKit.signTransaction(tx.toXDR(), {
+            const { signedTxXdr } = await window.StellarKit.StellarWalletsKit.signTransaction(tx.toXDR(), {
                 networkPassphrase: NETWORK_PASSPHRASE,
                 address: userAddress,
             });
@@ -936,7 +952,7 @@ def get_dashboard_html():
             const preparedTx = await sorobanServer.prepareTransaction(tx, sim);
             
             notify('claim-notify', "Awaiting signature from your wallet...");
-            const { signedTxXdr } = await StellarWalletsKit.signTransaction(preparedTx.toXDR(), {
+            const { signedTxXdr } = await window.StellarKit.StellarWalletsKit.signTransaction(preparedTx.toXDR(), {
                 networkPassphrase: NETWORK_PASSPHRASE,
                 address: userAddress,
             });
@@ -1084,8 +1100,9 @@ def get_dashboard_html():
             else log('test-sdk', 'Stellar SDK failed to load.', 'err');
 
             // 2. Wallets Kit Check
-            if (window.StellarKit || window.StellarWalletsKit) log('test-swk', 'Stellar Wallets Kit bundle identified.', 'ok');
-            else log('test-swk', 'Wallets Kit not found in /public/.', 'err');
+            if (window.StellarKit && window.StellarKit.StellarWalletsKit) log('test-swk', 'Stellar Wallets Kit v2 (static API) active.', 'ok');
+            else if (window.StellarKit) log('test-swk', 'StellarKit loaded but StellarWalletsKit missing.', 'warn');
+            else log('test-swk', 'Wallets Kit not found. Check /public/ bundle.', 'err');
 
             // 3. Horizon Connectivity
             try {
