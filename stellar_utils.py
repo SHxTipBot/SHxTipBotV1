@@ -894,12 +894,12 @@ def sign_withdrawal(user_address: str, amount_shx: float, nonce: int) -> str:
     amount_stroops = _to_stroops(amount_shx)
     
     # 1. Build the components matching the Soroban contract's ToXdr behavior
-    # In Soroban: val.to_xdr(&env) on Address, i128, u64 produces the underlying XDR
-    # type (ScAddress, Int128Parts, Uint64), NOT an ScVal wrapper object!
-    contract_addr_xdr = scval.to_address(SOROBAN_CONTRACT_ID).address.to_xdr_bytes()
-    user_addr_xdr = scval.to_address(user_address).address.to_xdr_bytes()
-    amount_xdr = scval.to_int128(amount_stroops).i128.to_xdr_bytes()
-    nonce_xdr = scval.to_uint64(nonce).u64.to_xdr_bytes()
+    # In Soroban: val.to_xdr(&env) produces the FULL ScVal XDR representation,
+    # which includes the 4-byte type discriminant tag. Verified via live simulation.
+    contract_addr_xdr = scval.to_address(SOROBAN_CONTRACT_ID).to_xdr_bytes()
+    user_addr_xdr = scval.to_address(user_address).to_xdr_bytes()
+    amount_xdr = scval.to_int128(amount_stroops).to_xdr_bytes()
+    nonce_xdr = scval.to_uint64(nonce).to_xdr_bytes()
     
     data = contract_addr_xdr + user_addr_xdr + amount_xdr + nonce_xdr
     
