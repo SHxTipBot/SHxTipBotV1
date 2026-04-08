@@ -879,35 +879,44 @@ async def invoke_contract_function(secret: str, contract_id: str, function_name:
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-def sign_withdrawal(user_address: str, amount_shx: float, nonce: int) -> str:
+def build_withdrawal_payload(contract_id: str, user_address: str, amount_stroops: int, nonce: int) -> bytes:
     """
-    Generate an Ed25519 signature for a withdrawal claim.
-    Matches Soroban contract: [ContractAddress, User, Amount, Nonce]
-    
-    The contract appends the XDR of each element individually to a Bytes object.
-    In Soroban:
-    - Address.to_xdr(&env) produces an ScAddress (discriminant 0 for account, 1 for contract)
-    - i128.to_xdr(&env) produces the 16 bytes representing the Int128Parts
-    - u64.to_xdr(&env) produces the 8 bytes of the Uint64
+    Construct the raw bytes payload for the withdrawal signature.
+    Matches the Soroban contract's message reconstruction exactly.
     """
-    kp = Keypair.from_secret(HOUSE_ACCOUNT_SECRET)
-    amount_stroops = _to_stroops(amount_shx)
-    
     # 1. Build the components matching the Soroban contract's ToXdr behavior
     # In Soroban: val.to_xdr(&env) produces the FULL ScVal XDR representation,
     # which includes the 4-byte type discriminant tag. Verified via live simulation.
-    contract_addr_xdr = scval.to_address(SOROBAN_CONTRACT_ID).to_xdr_bytes()
+    contract_addr_xdr = scval.to_address(contract_id).to_xdr_bytes()
     user_addr_xdr = scval.to_address(user_address).to_xdr_bytes()
     amount_xdr = scval.to_int128(amount_stroops).to_xdr_bytes()
     nonce_xdr = scval.to_uint64(nonce).to_xdr_bytes()
     
-    data = contract_addr_xdr + user_addr_xdr + amount_xdr + nonce_xdr
+    payload = contract_addr_xdr + user_addr_xdr + amount_xdr + nonce_xdr
+    return payload
+
+def sign_withdrawal(user_address: str, amount_shx: float, nonce: int) -> str:
+    """
+    Generate an Ed25519 signature for a withdrawal claim.
+    Matches Soroban contract: [ContractAddress, User, Amount, Nonce]
+    """
+    kp = Keypair.from_secret(HOUSE_ACCOUNT_SECRET)
+    amount_stroops = _to_stroops(amount_shx)
     
-    logger.debug(f"WITHDRAW SIGN | User: {user_address[:8]}... | Amt: {amount_stroops} | Nonce: {nonce}")
-    logger.debug(f"WITHDRAW SIGN | Payload (hex): {data.hex()}")
+    payload = build_withdrawal_payload(SOROBAN_CONTRACT_ID, user_address, amount_stroops, nonce)
     
-    signature_bytes = kp.sign(data)
-    return base64.b64encode(signature_bytes).decode('utf-8')
+    import hashlib
+    payload_hash = hashlib.sha256(payload).hexdigest()
+    
+    logger.info(f"SIGN WITHDRAWAL | User: {user_address[:8]}... | Amt: {amount_stroops} | Nonce: {nonce}")
+    logger.info(f"SIGN WITHDRAWAL | Payload Hash: {payload_hash}")
+    logger.info(f"SIGN WITHDRAWAL | Payload Hex:  {payload.hex()}")
+    
+    signature_bytes = kp.sign(payload)
+    sig_b64 = base64.b64encode(signature_bytes).decode('utf-8')
+    
+    logger.info(f"SIGN WITHDRAWAL | Signature:    {sig_b64[:16]}...")
+    return sig_b64
 
 
 def get_house_pubkey_hex() -> str:

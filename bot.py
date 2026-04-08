@@ -477,6 +477,8 @@ async def withdraw_command(interaction: Interaction, amount: str, destination: s
     await db.add_deposit(discord_id, f"WD_PENDING_{withdrawal_id}", -amount_f)
     await db.create_withdrawal(withdrawal_id, discord_id, destination, amount_f, nonce, signature)
 
+    logger.info(f"WITHDRAWAL TICKET | User: {interaction.user.id} | Amt: {amount_f} | Nonce: {nonce} | ID: {withdrawal_id}")
+
     # 5. Build and Send Response
     token = await db.create_link_token(discord_id)
     claim_url = f"{WEB_BASE_URL}/register?claim_id={withdrawal_id}&token={token}"
