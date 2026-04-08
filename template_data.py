@@ -408,7 +408,7 @@ def get_dashboard_html():
   </div>
 
   <!-- Stellar SDK + Axios from CDN, SWK UMD from local bundle -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/stellar-sdk/12.3.0/stellar-sdk.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/stellar-sdk/13.3.0/stellar-sdk.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
   <script src="/wallet-kit-bundle.umd.js"></script>
 

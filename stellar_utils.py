@@ -184,7 +184,7 @@ async def _invoke_sac_read_only(contract_id: str, function_name: str, parameters
 
 async def get_dummy_account():
     """Returns a dummy Account object for simulation purposes."""
-    return Server(HORIZON_URL).load_account("GAHO2LQHLZHYRRUE4CNT7QHWFDXJWK322XPUWO6RSFGB3FMI4H67OH5J") # House account is fine
+    return Server(HORIZON_URL).load_account(HOUSE_ACCOUNT_PUBLIC) # House account is fine
 
 async def approve_shx(secret: str, amount: float = 1_000_000):
     """
@@ -213,7 +213,7 @@ async def approve_shx(secret: str, amount: float = 1_000_000):
                 to_sc_address(public_key),
                 to_sc_address(SOROBAN_CONTRACT_ID),
                 scval.to_int128(stroops),
-                scval.to_uint32(3_000_000), # expiration
+                scval.to_uint32(horizon_server.root().call()["core_latest_ledger"] + 1_000_000), # expiration based on current ledger
             ],
         )
         builder.set_timeout(300)
@@ -634,7 +634,8 @@ async def build_approve_tx_xdr(
         logger.info(f"Adding SHX trustline for {user_public_key[:8]}... (will be included in approve tx)")
 
     allowance_stroops = _to_stroops(allowance_amount)
-    expiration_ledger = 3_000_000
+    current_ledger = horizon_server.root().call()["core_latest_ledger"]
+    expiration_ledger = current_ledger + 1_000_000
 
     builder = TransactionBuilder(
         source_account=user_account,
