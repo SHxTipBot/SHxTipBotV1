@@ -792,10 +792,16 @@ def get_dashboard_html():
                 .setTimeout(300).build();
 
             notify('link-notify', "Awaiting wallet signature...");
-            const { signedTxXdr } = await window.StellarKit.StellarWalletsKit.signTransaction(tx.toXDR(), {
+            console.log("Linking TX XDR:", tx.toXDR());
+            console.log("Requesting signature from address:", userAddress);
+            
+            const result = await window.StellarKit.StellarWalletsKit.signTransaction(tx.toXDR(), {
                 networkPassphrase: NETWORK_PASSPHRASE,
                 address: userAddress,
             });
+            
+            const signedTxXdr = result.signedTxXdr;
+            console.log("Received signed TX XDR:", signedTxXdr);
 
             notify('link-notify', "Verifying on server...");
             const res = await axios.post(`${API_BASE}/api/link`, {
@@ -935,10 +941,26 @@ def get_dashboard_html():
             const preparedTx = await sorobanServer.prepareTransaction(tx, sim);
             
             notify('claim-notify', "Awaiting signature from your wallet...");
-            const { signedTxXdr } = await window.StellarKit.StellarWalletsKit.signTransaction(preparedTx.toXDR(), {
-                networkPassphrase: NETWORK_PASSPHRASE,
-                address: userAddress,
-            });
+            const preparedXdr = preparedTx.toXDR();
+            console.log("Prepared Soroban TX XDR:", preparedXdr);
+            console.log("Signing claim with address:", userAddress);
+
+            let signResult;
+            try {
+                signResult = await window.StellarKit.StellarWalletsKit.signTransaction(preparedXdr, {
+                    networkPassphrase: NETWORK_PASSPHRASE,
+                    address: userAddress,
+                });
+            } catch (signErr) {
+                console.error("SIGNING FAILED:", signErr);
+                if (signErr.message?.includes("xBull")) {
+                    throw new Error("xBull signing failed. Please ensure your xBull wallet is unlocked and the correct account is selected.");
+                }
+                throw signErr;
+            }
+            
+            const { signedTxXdr } = signResult;
+            console.log("Successfully received signed Soroban TX.");
 
             notify('claim-notify', "Submitting to network...");
             const resp = await sorobanServer.sendTransaction(window.StellarSdk.TransactionBuilder.fromXDR(signedTxXdr, NETWORK_PASSPHRASE));

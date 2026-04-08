@@ -175,7 +175,7 @@ async def parse_multiple_each_input(guild: discord.Guild, input_str: str, exclud
     """Parse a string like '@user1 10, @user2 $5' into (Member, SHx_amount) pairs."""
     import re
     # Pattern: <@!?ID> followed by an optional $ and numbers/commas/decimals/usd
-    pattern = r'(<@!?\d+>)\s*[:=]?\s*([\$]?[\d,]+(?:\.\d+)?(?:usd)?)'
+    pattern = r'(<@!?\d+>)\s*[:=]?\s*([\$]?(?:[\d,]*\.)?[\d,]+(?:usd)?)'
     matches = re.findall(pattern, input_str, re.IGNORECASE)
     
     results = []
