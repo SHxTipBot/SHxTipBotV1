@@ -336,12 +336,12 @@ The "Master Wallet" is the Stellar account that holds the SHx and XLM for the co
 
 ## How Tipping Works (Custodial Architecture)
 
-Unlike most bots that require on-chain transactions for every micro-tip, this bot uses a **1:1 Custodial Internal Balance** system. This makes tipping instant and free for your community.
+Unlike most bots that require on-chain transactions for every micro-tip, this bot uses a **Hybrid Custodial Internal Balance** system. This makes tipping instant and free for your community.
 
-1. **Deposits**: Users deposit SHx to the Bot's House Account with a unique **memo ID**.
-2. **Internal Ledger**: The bot detects the deposit and credits the user's **Internal Balance** in the database.
-3. **Tipping**: When a user types `/tip @recipient 10`, the bot instantly moves 10 SHx from the sender's balance to the recipient's balance in the database. There are **no on-chain gas fees** for internal tips.
-4. **Withdrawals**: When a user wants their SHx on-chain, they use the `/withdraw` command. The bot deducts their internal balance and provides a **"Claim Ticket"** (link to dashboard). The user then visits the dashboard and signs a transaction with their own wallet (Freighter/Lobstr). **The user pays the Stellar network fee (XLM)** for this transaction.
+1. **The Central Vault**: Stronghold provides a specific Stellar wallet (the **House Account**) which custodies the entire circulating SHx supply for Discord tipping.
+2. **Deposits**: Users deposit SHx to the Bot's House Account with a unique **memo ID**. The bot detects this physical transfer and credits the user's **Internal Balance** in the database. The House Account safely holds the physical SHx.
+3. **Tipping**: When a user types `/tip @recipient 10`, the bot instantly moves 10 SHx from the sender's balance to the recipient's balance in the database. *The physical SHx in the House Account never moves, so there are no on-chain gas fees.*
+4. **Withdrawals**: When a user wants their SHx on-chain, they use the `/withdraw` command. The bot deducts their internal balance and provides a **"Claim Ticket"** (link to dashboard). The user then visits the dashboard and clicks "Claim". A Soroban Smart Contract validates the signature and physically pulls the SHx directly from the House Account into the user's connected wallet. **The user pays the Stellar network fee (XLM)** for this transaction.
 
 ### Why this is better
 

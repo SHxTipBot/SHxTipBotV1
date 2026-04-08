@@ -28,10 +28,13 @@ While `tip.cc` is a popular general-purpose bot, it often fails or becomes expen
 
 ## 🛠️ How it Works (The Flow)
 
-1. **Deposit**: A user sends SHx to the central "House Account" with their unique **Memo ID**. The bot detects this and credits their balance.
-2. **Tip**: A user types `/tip @user 100`. The bot instantly moves 100 SHx from the sender to the recipient in the database.
-3. **Withdraw**: A user types `/withdraw 50`. The bot creates a cryptographically signed ticket.
-4. **Claim**: The user visits the Web Dashboard, connects **Freighter/Lobstr**, and signs the claim. The SHx is moved from the House Account directly to their wallet.
+The system uses a **Hybrid Custodial Model**. The "House Account" acts as the central decentralized vault.
+
+1. **The Central Vault**: Stronghold provides a specific Stellar wallet (the **House Account**) which custodies the entire circulating SHx supply for Discord tipping.
+2. **Deposit**: A user sends SHx to the House Account with their unique **Memo ID**. The bot detects this physical transfer and credits their **off-chain internal balance** in the database. The House Account safely holds the physical SHx.
+3. **Tip**: A user types `/tip @user 100`. The bot instantly moves 100 SHx from the sender to the recipient in the database. *The physical SHx in the House Account never moves, so there are no gas fees.*
+4. **Withdraw**: A user types `/withdraw 50`. The bot deducts their internal balance and generates a cryptographically signed "Claim Ticket".
+5. **Claim**: The user visits the Web Dashboard, connects their personal Stellar wallet, and clicks "Claim". A Soroban Smart Contract validates the signature and physically pulls the SHx directly from the House Account into the user's connected wallet.
 
 ---
 

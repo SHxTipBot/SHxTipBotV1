@@ -39,10 +39,10 @@ def get_dashboard_html():
       background-image: url('https://cdn.prod.website-files.com/5e9a1cde22bbc0a89dba7f5b/60c9649cf8fb48e5c883950e_Stronghold%20Logo%20Mark%20Blue.png');
       background-repeat: no-repeat;
       background-position: center;
-      background-size: 50%;
-      opacity: 0.12;
+      background-size: 70%;
+      opacity: 0.32;
       z-index: -1;
-      filter: blur(4px) brightness(0.8);
+      filter: blur(1px) brightness(1.1);
     }
 
     .container {
@@ -297,9 +297,6 @@ def get_dashboard_html():
       
         <div id="connection-status-area" class="mt-4">
           <div id="connection-status-badge" class="badge badge-error">Wallet: Not Connected</div>
-          <div id="hero-connect-btn-container" class="mt-4">
-             <button id="btn-hero-connect" class="btn btn-hero" onclick="window.openKitModal()">Connect Wallet</button>
-          </div>
         </div>
     </div>
 
@@ -376,30 +373,18 @@ def get_dashboard_html():
           </div>
         </div>
         
-        <!-- Technical Proof Toggle -->
-        <div class="mt-4">
-          <button onclick="runConnectivityTest()" id="btn-self-test" class="text-[10px] text-accent border border-accent border-opacity-30 rounded px-2 py-1 hover:bg-accent hover:text-white transition-all">
-            Run Integration Self-Test
-          </button>
-          <div id="self-test-results" class="hidden mt-2 p-2 bg-black bg-opacity-40 rounded border border-white border-opacity-10 text-[9px] font-mono leading-tight">
-            <div id="test-sdk">Checking SDK...</div>
-            <div id="test-swk">Checking Wallets Kit...</div>
-            <div id="test-horizon">Checking Horizon (Mainnet)...</div>
-            <div id="test-soroban">Checking Soroban (RPC)...</div>
-            <div id="test-contract">Checking Contract Signature Path...</div>
-          </div>
         <div id="footer-branding" class="mt-6 pt-4 text-center border-t border-white border-opacity-5">
            <p class="text-[11px] text-muted">
              <span class="status-badge-inline" style="opacity: 0.8;">
                <span style="width: 6px; height: 6px; border-radius: 50%; background: #10b981; display: inline-block;"></span>
-               Authenticated via <a href="https://github.com/stellar/stellar-wallets-kit" target="_blank" class="text-accent hover:underline">Stellar Wallets Kit</a>
+               Authenticated via <a href="https://stellarwallets.dev" target="_blank" class="text-accent hover:underline">Stellar Wallets Kit</a>
              </span>
            </p>
         </div>
     </div>
 
     <!-- Claim Card -->
-    <div id="claim-card" class="card hidden">
+    <div id="claim-card" class="card">
       <h2>Pending Withdrawals</h2>
       <p class="text-sm text-muted mb-4">You have pending SHx withdrawal tickets created from Discord. Select one to claim to your linked wallet.</p>
       
@@ -542,8 +527,6 @@ def get_dashboard_html():
         const listEl = document.getElementById('withdrawal-list');
         const claimCard = document.getElementById('claim-card');
         if (!listEl || !claimCard) return;
-
-        claimCard.classList.remove('hidden');
         
         if (!withdrawals || withdrawals.length === 0) {
             listEl.innerHTML = '<div class="text-center py-4 text-muted">No pending tickets.</div>';
@@ -626,9 +609,11 @@ def get_dashboard_html():
     const updateUI = (address) => {
       console.log("updateUI called with address:", address);
       userAddress = address;
+      window.userAddress = address;
 
       const heroBadge = document.getElementById('connection-status-badge');
       const profileBadge = document.getElementById('link-status-badge');
+      const linkBtn = document.getElementById('btn-link');
       
       if (address) {
         const addrText = `<span style="width: 8px; height: 8px; background: #10b981; border-radius: 50%; display: inline-block; margin-right: 4px;"></span> Verified: ${address.slice(0,6)}...${address.slice(-4)}`;
@@ -650,14 +635,11 @@ def get_dashboard_html():
             linkBtn.innerText = "Verify & Link Wallet";
         }
         
-        // Hide hero connect button when connected
-        document.getElementById('hero-connect-btn-container')?.classList.add('hidden');
-        
         const claimBtn = document.getElementById('btn-claim-action');
         if (claimBtn) claimBtn.disabled = false;
         
         const existing = "{{EXISTING_KEY_VAL}}";
-        if (existing && existing.length > 10) {
+        if (existing && existing.startsWith('G') && existing.length === 56) {
             document.getElementById('unlink-container')?.classList.remove('hidden');
             if (linkBtn) linkBtn.innerText = "Switch / Change Linked Wallet";
         }
@@ -670,7 +652,8 @@ def get_dashboard_html():
             profileBadge.innerText = "Status: Wallet Disconnected";
             profileBadge.classList.replace('badge-success', 'badge-error');
         }
-        document.getElementById('btn-link').disabled = true;
+        const linkBtn = document.getElementById('btn-link');
+        if (linkBtn) linkBtn.disabled = true;
         const claimBtn = document.getElementById('btn-claim-action');
         if (claimBtn) claimBtn.disabled = true;
       }
@@ -1053,16 +1036,18 @@ def get_dashboard_html():
             selectTicket(CLAIM_ID, "{{CLAIM_AMOUNT}}");
         }
         
-        // Auto-run connectivity test on load for technical proof
-        setTimeout(runConnectivityTest, 1500);
+        // Connectivity test removed per user request
     };
     
     // Initialize kit immediately on script load
     initKit();
     
-    document.getElementById('btn-link').onclick = handleLink;
-    document.getElementById('btn-claim-action').onclick = handleClaim;
-    document.getElementById('btn-claim-cancel').onclick = handleCancel;
+    const linkBtnEl = document.getElementById('btn-link');
+    if (linkBtnEl) linkBtnEl.onclick = handleLink;
+    const claimActionEl = document.getElementById('btn-claim-action');
+    if (claimActionEl) claimActionEl.onclick = handleClaim;
+    const claimCancelEl = document.getElementById('btn-claim-cancel');
+    if (claimCancelEl) claimCancelEl.onclick = handleCancel;
     
     const unlinkHandler = async () => {
         if (!confirm("Are you sure you want to unlink your wallet? This will remove the connection between your Discord and this Stellar address.")) return;
@@ -1078,67 +1063,7 @@ def get_dashboard_html():
         document.getElementById('btn-unlink-action').onclick = unlinkHandler;
     }
 
-    // --- INTEGRATION PROOF: Connectivity Test ---
-    async function runConnectivityTest() {
-        const resultsEl = document.getElementById('self-test-results');
-        const btn = document.getElementById('btn-self-test');
-        resultsEl.classList.remove('hidden');
-        btn.disabled = true;
-        btn.innerText = "Running Tests...";
-        
-        const log = (id, msg, state) => {
-            const el = document.getElementById(id);
-            if (!el) return;
-            const color = state === 'ok' ? '#10b981' : (state === 'warn' ? '#f59e0b' : '#ef4444');
-            const icon = state === 'ok' ? '✓' : (state === 'warn' ? '⚠' : '✗');
-            el.innerHTML = `<span style="color:${color}">${icon} ${msg}</span>`;
-        };
-
-        try {
-            // 1. SDK Check
-            if (window.StellarSdk) log('test-sdk', `Stellar SDK version ${window.StellarSdk.version || 'v12+'} active.`, 'ok');
-            else log('test-sdk', 'Stellar SDK failed to load.', 'err');
-
-            // 2. Wallets Kit Check
-            if (window.StellarKit && window.StellarKit.StellarWalletsKit) log('test-swk', 'Stellar Wallets Kit v2 (static API) active.', 'ok');
-            else if (window.StellarKit) log('test-swk', 'StellarKit loaded but StellarWalletsKit missing.', 'warn');
-            else log('test-swk', 'Wallets Kit not found. Check /public/ bundle.', 'err');
-
-            // 3. Horizon Connectivity
-            try {
-                const hRes = await fetch(HORIZON_URL);
-                if (hRes.ok) log('test-horizon', `Horizon Mainnet reachable at ${HORIZON_URL.split('//')[1]}`, 'ok');
-                else log('test-horizon', `Horizon returned status ${hRes.status}`, 'warn');
-            } catch (e) { log('test-horizon', `Horizon blocked or offline: ${e.message}`, 'err'); }
-
-            // 4. Soroban RPC connectivity
-            try {
-                const sRes = await fetch(SOROBAN_URL, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({jsonrpc: '2.0', id: 1, method: 'getNetwork'})
-                });
-                if (sRes.ok) {
-                    const json = await sRes.json();
-                    if (json.result) log('test-soroban', `Soroban RPC Active: ${json.result.passphrase.slice(0,10)}...`, 'ok');
-                    else log('test-soroban', 'Soroban RPC responded but no result.', 'warn');
-                } else log('test-soroban', `Soroban RPC offline: ${sRes.status}`, 'err');
-            } catch (e) { log('test-soroban', `Soroban unreachable: ${e.message}`, 'err'); }
-
-            // 5. Contract Verification 
-            try {
-                const contractId = parseAddress(SOROBAN_CONTRACT_ID, 'Test');
-                if (contractId.startsWith('C')) log('test-contract', `Contract ID ${contractId.slice(0,8)} verified.`, 'ok');
-                else log('test-contract', 'Invalid contract ID format.', 'err');
-            } catch (e) { log('test-contract', `Contract mapping error: ${e.message}`, 'err'); }
-
-        } catch (e) {
-            console.error("Connectivity Test Failed:", e);
-        } finally {
-            btn.innerText = "Check Complete";
-            setTimeout(() => { btn.disabled = false; btn.innerText = "Run Integration Self-Test"; }, 3000);
-        }
-    }
+    // Self-test removed per user request
   </script>
 </body>
 </html>'''
