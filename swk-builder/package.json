@@ -10,6 +10,16 @@
     "vite-plugin-node-polyfills": "^0.22.0"
   },
   "dependencies": {
-    "@creit-tech/stellar-wallets-kit": "npm:@jsr/creit-tech__stellar-wallets-kit@^2.1.0"
+    "@creit-tech/stellar-wallets-kit": "npm:@jsr/creit-tech__stellar-wallets-kit@^2.1.0",
+    "stellar-sdk": "^13.3.0",
+    "@stellar/stellar-sdk": "^13.3.0"
+  },
+  "overrides": {
+    "stellar-sdk": "^13.3.0",
+    "@stellar/stellar-sdk": "^13.3.0",
+    "@creit-tech/stellar-wallets-kit": {
+      "stellar-sdk": "^13.3.0",
+      "@stellar/stellar-sdk": "^13.3.0"
+    }
   }
 }
