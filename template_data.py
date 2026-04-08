@@ -1075,6 +1075,15 @@ def get_dashboard_html():
         if (!confirm("Are you sure you want to unlink your wallet? This will remove the connection between your Discord and this Stellar address.")) return;
         try {
             await axios.post(`${API_BASE}/api/unlink`, { token: TOKEN });
+            
+            // Fully wipe local session metadata to prevent auto-relogin
+            if (window.StellarKit && window.StellarKit.StellarWalletsKit) {
+                try { await window.StellarKit.StellarWalletsKit.disconnect(); } catch(e) {}
+            }
+            // Clear entire localStorage
+            localStorage.clear();
+            
+            // Force a reload
             location.reload();
         } catch (e) {
             alert("Failed to unlink: " + (e.response?.data?.detail || e.message));
