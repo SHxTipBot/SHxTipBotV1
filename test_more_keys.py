@@ -1,0 +1,13 @@
+from stellar_sdk import StrKey
+keys = [
+    "CCKNYB3CH4RKZXGFYMDQGL2AIDUJCYT5IDKVPOBCCHJ4WKXWDE6MPVTL",
+    "CDKTBBANOBPUDLJELYRUBZ65V2QXAKERJJ5BJTHAYR6W4667DDLL7X3Q",
+    "CBD6YZXZKZVJXO5HIARSHGKU5PLZAOLMMNIFQN4VV7BV4ZBIPIEY4VT2",
+    "CCQWDN7ISJLGDR6BCTXCUKZNWHZ2XG7PS2TFGBK75QJ2F2X7F4KLPNMX"
+]
+for k in keys:
+    try:
+        decoded = StrKey.decode_contract(k)
+        print(f"{k}: Valid.")
+    except Exception as e:
+        print(f"{k}: Invalid. {e}")

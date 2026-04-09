@@ -712,11 +712,38 @@ async def stream_deposits(cursor: str = "now", callback=None):
     """
     Continually poll for payments to the House account using ServerAsync with an explicit AiohttpClient.
     """
-    logger.info(f"Starting deposit monitor for {HOUSE_ACCOUNT_PUBLIC[:8]}... from cursor {cursor}")
-    
+    if cursor == "now":
+        # Robustness: Get the very last transaction first to establish a safe cursor,
+        # but also process the last few transactions just in case they were missed during downtime.
+        try:
+            async with ServerAsync(HORIZON_URL, client=AiohttpClient()) as server:
+                # Look back at the last 10 payments to ensure we didn't miss anything while offline
+                history = await server.payments().for_account(HOUSE_ACCOUNT_PUBLIC).order("desc").limit(10).call()
+                records = history.get("_embedded", {}).get("records", [])
+                if records:
+                    # Process these historical records backwards (oldest to newest)
+                    for r in reversed(records):
+                        # The callback should handle deduplication (which it does via DB tx_hash)
+                        if callback:
+                            tx_hash = r.get("transaction_hash")
+                            amount_shx = float(r.get("amount"))
+                            if r.get("type") in ("payment", "path_payment_strict_receive"):
+                                if (r.get("asset_code") == SHX_ASSET_CODE and r.get("asset_issuer") == SHX_ISSUER):
+                                    # Fetch tx details for memo
+                                    tx = await server.transactions().transaction(tx_hash).call()
+                                    await callback(tx.get("memo"), tx_hash, amount_shx, tx.get("memo_type"))
+                    
+                    # Set the cursor to the latest one we just saw
+                    cursor = records[0].get("paging_token")
+                    logger.info(f"Resuming deposit monitor from historical cursor: {cursor}")
+                else:
+                    cursor = "now"
+        except Exception as e:
+            logger.error(f"Failed to perform startup sweep: {e}")
+            cursor = "now"
+
     while True:
         try:
-            # Explicit AiohttpClient() to bypass internal HAS_AIOHTTP check issues
             async with ServerAsync(HORIZON_URL, client=AiohttpClient()) as server:
                 while True:
                     # Polling 10 at a time

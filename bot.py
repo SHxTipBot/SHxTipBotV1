@@ -1173,6 +1173,8 @@ async def start_deposit_monitor():
         except Exception as e:
             logger.error(f"Error processing deposit {tx_hash}: {e}")
 
+    # Start the live monitor (now with automatic startup sweep)
+    logger.info(f"DASHBOARD | Starting deposit monitor for {stellar.HOUSE_ACCOUNT_PUBLIC[:8]}...")
     await stellar.stream_deposits(cursor="now", callback=handle_deposit)
 
 
