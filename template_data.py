@@ -415,7 +415,7 @@ def get_dashboard_html():
   </div>
 
   <!-- Stellar SDK + Axios from CDN, SWK UMD from local bundle -->
-  <script src="https://cdn.jsdelivr.net/npm/@stellar/stellar-sdk@15.0.1/dist/index.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/stellar-sdk/11.3.0/stellar-sdk.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
   <script src="/wallet-kit-bundle.umd.js"></script>
 
@@ -473,7 +473,7 @@ def get_dashboard_html():
         if (!address) return;
         try {
             console.log("Refreshing Stellar Balance for:", address);
-            const server = new window.StellarSdk.Server(HORIZON_URL);
+            const server = new window.StellarSdk.Horizon.Server(HORIZON_URL);
             const acc = await server.loadAccount(address);
             const shxBal = acc.balances.find(b => b.asset_code === SHX_ASSET_CODE && b.asset_issuer === SHX_ISSUER_VAL);
             const val = shxBal ? parseFloat(shxBal.balance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00";
@@ -487,16 +487,15 @@ def get_dashboard_html():
     }
 
     const setStatus = (msg, isError = false) => {
-        const el = document.getElementById('link-status-text');
+        const el = document.getElementById('link-status-badge');
         if (!el) return;
         
-        // If it's a success message, we might want to split or style it
-        if (msg === "Connected ✅" || msg === "Linked ✅") {
-            el.innerText = msg;
-            el.className = "text-success text-bold";
+        if (msg.includes("✅")) {
+            el.innerText = "Status: " + msg;
+            el.classList.replace('badge-error', 'badge-success');
         } else {
-            el.innerText = (isError ? "❌ " : "") + msg;
-            el.className = isError ? "text-error" : "text-muted";
+            el.innerText = "Status: " + msg;
+            if (isError) el.classList.replace('badge-success', 'badge-error');
         }
     };
 
@@ -508,11 +507,6 @@ def get_dashboard_html():
                 const balanceEl = document.getElementById('internal-balance-val');
                 if (balanceEl) balanceEl.innerText = currentBalance;
                 
-                const statusEl = document.getElementById('link-status-text');
-                if (statusEl && (statusEl.innerText === "Syncing..." || statusEl.innerText.includes("Connected") || statusEl.innerText.includes("Linked"))) {
-                    setStatus("Connected ✅");
-                }
-                
                 if (res.data.pending_withdrawals && res.data.pending_withdrawals.length > 0) {
                     PENDING_IDS = res.data.pending_withdrawals.map(w => w.id);
                     renderWithdrawals(res.data.pending_withdrawals);
@@ -520,10 +514,7 @@ def get_dashboard_html():
                     document.getElementById('withdrawal-list').innerHTML = '<div class="text-center py-4 text-muted">No pending withdrawal tickets found.</div>';
                 }
 
-                // If wallet already connected, refresh on-chain balance too
-                if (userAddress) {
-                    fetchStellarBalance(userAddress);
-                }
+                if (userAddress) fetchStellarBalance(userAddress);
             }
         } catch (e) {
             console.error("Failed to fetch data:", e);
@@ -562,11 +553,8 @@ def get_dashboard_html():
         document.getElementById('active-claim-view').classList.remove('hidden');
         document.getElementById('active-ticket-id').innerText = `...${id.slice(-8)}`;
         document.getElementById('active-ticket-amount').innerText = amount;
-        
-        // Ensure buttons are visible if they were hidden by a previous action
         document.getElementById('btn-claim-action').classList.remove('hidden');
         document.getElementById('btn-claim-cancel').classList.remove('hidden');
-        
         notify('claim-notify', "Ticket selected. Ready to claim on-chain.");
     };
 
@@ -579,7 +567,6 @@ def get_dashboard_html():
 
     const resetSession = () => {
         if (!confirm("This will clear your local wallet connection cache and reload the page. Continue?")) return;
-        setStatus("Clearing session...");
         for (let key in localStorage) {
             if (key.includes('wc@2') || key.includes('walletconnect')) {
                 localStorage.removeItem(key);
@@ -588,8 +575,8 @@ def get_dashboard_html():
         location.reload();
     };
 
-    window.onerror = (msg) => setStatus("Error: " + msg, true);
-    window.onunhandledrejection = (event) => setStatus("Async Error: " + (event.reason?.message || event.reason || "Unknown"), true);
+    window.onerror = (msg) => console.error("Global Error:", msg);
+    window.onunhandledrejection = (event) => console.error("Async Error:", event.reason);
 
     const DISCORD_ID = "{{DISCORD_ID}}";
     const SHX_SAC_CONTRACT_ID = "{{SHX_SAC_CONTRACT_ID}}";
@@ -597,21 +584,6 @@ def get_dashboard_html():
 
     let userAddress = null;
     let kitInitialized = false;
-
-    /**
-     * Defensive helper to prevent 'Unsupported address type: undefined' errors.
-     */
-    const parseAddress = (val, name) => {
-        if (!val || typeof val !== 'string' || val.includes('{{')) {
-            const msg = `FATAL: Invalid or unrendered Address [${name}]: ${val || 'undefined'}`;
-            console.error(msg);
-            throw new Error(msg);
-        }
-        if (val.length < 56) {
-             console.warn(`Warning: Address [${name}] seems short (${val.length} chars): ${val}`);
-        }
-        return val;
-    };
 
     const updateUI = (address) => {
       console.log("updateUI called with address:", address);
@@ -622,6 +594,9 @@ def get_dashboard_html():
       const profileBadge = document.getElementById('link-status-badge');
       const linkBtn = document.getElementById('btn-link');
       
+      const existingKey = "{{EXISTING_KEY_VAL}}";
+      const isAlreadyLinked = (existingKey && existingKey.length === 56 && existingKey === address);
+
       if (address) {
         const addrText = `<span style="width: 8px; height: 8px; background: #10b981; border-radius: 50%; display: inline-block; margin-right: 4px;"></span> Verified: ${address.slice(0,6)}...${address.slice(-4)}`;
         
@@ -629,26 +604,37 @@ def get_dashboard_html():
             heroBadge.innerHTML = addrText;
             heroBadge.classList.replace('badge-error', 'badge-success');
         }
+        
         if (profileBadge) {
-            profileBadge.innerHTML = addrText;
-            profileBadge.classList.replace('badge-error', 'badge-success');
+            if (isAlreadyLinked) {
+                profileBadge.innerHTML = "Status: Linked ✅";
+                profileBadge.classList.replace('badge-error', 'badge-success');
+            } else {
+                profileBadge.innerHTML = "Status: Wallet Not Linked";
+                profileBadge.classList.replace('badge-success', 'badge-error');
+            }
         }
 
-        setStatus("Ready ✅");
         fetchStellarBalance(address);
         
         if (linkBtn) {
             linkBtn.disabled = false;
-            linkBtn.innerText = "Verify & Link Wallet";
+            if (isAlreadyLinked) {
+                linkBtn.innerText = "Linked ✅";
+                linkBtn.classList.replace('btn-primary', 'btn-secondary');
+                linkBtn.disabled = true;
+            } else if (existingKey && existingKey.length === 56) {
+                linkBtn.innerText = "Switch to this Wallet";
+            } else {
+                linkBtn.innerText = "Verify & Link Wallet";
+            }
         }
         
         const claimBtn = document.getElementById('btn-claim-action');
         if (claimBtn) claimBtn.disabled = false;
         
-        const existing = "{{EXISTING_KEY_VAL}}";
-        if (existing && existing.startsWith('G') && existing.length === 56) {
+        if (existingKey && existingKey.length === 56) {
             document.getElementById('unlink-container')?.classList.remove('hidden');
-            if (linkBtn) linkBtn.innerText = "Switch / Change Linked Wallet";
         }
       } else {
         if (heroBadge) {
@@ -659,8 +645,10 @@ def get_dashboard_html():
             profileBadge.innerText = "Status: Wallet Disconnected";
             profileBadge.classList.replace('badge-success', 'badge-error');
         }
-        const linkBtn = document.getElementById('btn-link');
-        if (linkBtn) linkBtn.disabled = true;
+        if (linkBtn) {
+            linkBtn.disabled = true;
+            linkBtn.innerText = "Verify & Link Wallet";
+        }
         const claimBtn = document.getElementById('btn-claim-action');
         if (claimBtn) claimBtn.disabled = true;
       }
@@ -668,6 +656,7 @@ def get_dashboard_html():
 
     const notify = (id, msg, isError = false) => {
         const div = document.getElementById(id);
+        if (!div) return;
         div.classList.remove('hidden', 'success', 'error');
         div.classList.add(isError ? 'error' : 'success');
         div.innerText = msg;
@@ -680,20 +669,13 @@ def get_dashboard_html():
         
         try {
             if (!window.StellarKit || !window.StellarKit.StellarWalletsKit) {
-                console.warn("DASHBOARD | StellarKit global not found. Retrying in 500ms...");
-                setTimeout(() => {
-                    kitInitInProgress = false;
-                    initKit();
-                }, 500);
+                setTimeout(() => { kitInitInProgress = false; initKit(); }, 500);
                 return;
             }
             
             const { StellarWalletsKit, KitEventType, SwkAppDarkTheme, defaultModules, WalletConnectModule } = window.StellarKit;
-            
-            // Build module list
             const modules = [...defaultModules()];
             
-            // Add WalletConnect if project ID is available
             if (WalletConnectModule && WC_PROJECT_ID && !WC_PROJECT_ID.includes('{{')) {
                 try {
                     modules.push(new WalletConnectModule({
@@ -705,147 +687,77 @@ def get_dashboard_html():
                             icons: ["https://shxtipbotv1.vercel.app/stronghold_logo_watermark.svg"]
                         }
                     }));
-                    console.log("DASHBOARD | WalletConnect module added.");
-                } catch (wcErr) {
-                    console.warn("DASHBOARD | WalletConnect module failed to load (non-fatal):", wcErr);
-                }
+                } catch (wcErr) { console.warn("WC Init Fail:", wcErr); }
             }
 
-            // ── SWK v2: Static init ──
-            StellarWalletsKit.init({
-                theme: SwkAppDarkTheme,
-                modules: modules,
-                network: NETWORK_PASSPHRASE
-            });
+            StellarWalletsKit.init({ theme: SwkAppDarkTheme, modules: modules, network: NETWORK_PASSPHRASE });
             
-            console.log("DASHBOARD | SWK v2 initialized for network:", NETWORK);
-
-            // ── Create the built-in connect button ──
             const buttonWrapper = document.getElementById('swk-button-wrapper');
-            if (buttonWrapper) {
-                StellarWalletsKit.createButton(buttonWrapper);
-                console.log("DASHBOARD | SWK button created.");
-            }
+            if (buttonWrapper) StellarWalletsKit.createButton(buttonWrapper);
 
-            // ── Listen to STATE_UPDATED events ──
             StellarWalletsKit.on(KitEventType.STATE_UPDATED, (event) => {
-                console.log("DASHBOARD | STATE_UPDATED:", event);
                 const addr = event && event.payload ? event.payload.address : null;
-                if (addr) {
-                    userAddress = addr;
-                    window.userAddress = addr;
-                    updateUI(addr);
-                }
+                updateUI(addr);
             });
 
-            // ── Listen to DISCONNECT events ──
-            StellarWalletsKit.on(KitEventType.DISCONNECT, () => {
-                console.log("DASHBOARD | DISCONNECT event.");
-                userAddress = null;
-                window.userAddress = null;
-                updateUI(null);
-            });
+            StellarWalletsKit.on(KitEventType.DISCONNECT, () => updateUI(null));
             
-            // ── Try to restore previously connected wallet ──
             try {
                const { address: currentAddr } = await StellarWalletsKit.getAddress();
-               if (currentAddr) {
-                   userAddress = currentAddr;
-                   window.userAddress = currentAddr;
-                   updateUI(currentAddr);
-                   console.log("DASHBOARD | Restored address:", currentAddr);
-               }
-            } catch(e) {
-                // No wallet previously connected — this is normal
-                console.log("DASHBOARD | No previously connected wallet.");
-            }
+               if (currentAddr) updateUI(currentAddr);
+            } catch(e) {}
             
             kitInitialized = true;
             kitInitInProgress = false;
-            console.log("DASHBOARD | Kit Ready ✓");
         } catch (err) {
-            console.error("DASHBOARD | SWK INIT FAILED:", err);
+            console.error("SWK INIT FAIL:", err);
             kitInitInProgress = false;
-            setStatus("Connection Error", true);
         }
     };
 
-    // ── APP LOGIC ──
     async function handleLink() {
-        console.log("handleLink() triggered. Current userAddress:", userAddress);
-        
-        // Fallback: try to pull address from kit if global is missing
-        if (!userAddress && window.StellarKit && window.StellarKit.StellarWalletsKit) {
+        if (!userAddress) {
             try {
                 const { address } = await window.StellarKit.StellarWalletsKit.getAddress();
                 if (address) userAddress = address;
-                console.log("Synced address from kit:", userAddress);
-            } catch (e) {
-                console.warn("Could not sync state from kit:", e);
-            }
+            } catch (e) {}
         }
 
         if (!userAddress || userAddress.length < 56) {
-            alert("Wallet not recognized. Please click the 'Connect Wallet' button (top right) and select your wallet first.");
+            alert("Please connect your wallet first (top right).");
             return;
         }
         
         try {
             notify('link-notify', "Signing Link Request...");
-            const server = new window.StellarSdk.Server(HORIZON_URL);
+            const server = new window.StellarSdk.Horizon.Server(HORIZON_URL);
             const account = await server.loadAccount(userAddress);
             const tx = new window.StellarSdk.TransactionBuilder(account, { fee: "1000", networkPassphrase: NETWORK_PASSPHRASE })
                 .addOperation(window.StellarSdk.Operation.manageData({ name: "link_discord", value: DISCORD_ID }))
                 .setTimeout(300).build();
 
             notify('link-notify', "Awaiting wallet signature...");
-            console.log("Linking TX XDR:", tx.toXDR());
-            console.log("Requesting signature from address:", userAddress);
-            
             const result = await window.StellarKit.StellarWalletsKit.signTransaction(tx.toXDR(), {
                 networkPassphrase: NETWORK_PASSPHRASE,
                 address: userAddress,
             });
             
-            const signedTxXdr = result.signedTxXdr;
-            console.log("Received signed TX XDR:", signedTxXdr);
-
             notify('link-notify', "Verifying on server...");
             const res = await axios.post(`${API_BASE}/api/link`, {
-                token: TOKEN, public_key: userAddress, signature_xdr: signedTxXdr, is_approved: true
+                token: TOKEN, public_key: userAddress, signature_xdr: result.signedTxXdr, is_approved: true
             });
             if (res.data.success) {
                 notify('link-notify', "✅ Wallet linked successfully!");
-                setStatus("Linked ✅");
-                document.getElementById('unlink-container')?.classList.remove('hidden');
-                
-                // Show/hide trustline warning
-                const trustWarning = document.getElementById('trustline-warning');
-                if (res.data.has_shx_trustline) {
-                    trustWarning?.classList.add('hidden');
-                } else {
-                    trustWarning?.classList.remove('hidden');
-                }
-
-                // Show withdraw card immediately after link
-                document.getElementById('withdraw-card')?.classList.remove('hidden');
-                
-                fetchBalance(); // Refresh balance after link
+                location.reload(); // Hard refresh to update everything
             }
         } catch (e) {
-            const msg = e.response?.data?.detail || e.message || String(e);
-            if (msg.includes('User rejected') || msg.includes('Request rejected')) {
-                notify('link-notify', "Linking cancelled in wallet.", true);
-            } else {
-                notify('link-notify', msg, true); 
-            }
+            notify('link-notify', e.message || String(e), true);
         }
     }
 
     async function handleClaim() {
-        console.log("handleClaim() triggered for userAddress:", userAddress, "CLAIM_ID:", CLAIM_ID);
-        if (!userAddress || typeof userAddress !== 'string' || userAddress.length < 56) {
-            alert(`No wallet connected or invalid address: ${userAddress}`);
+        if (!userAddress || userAddress.length < 56) {
+            alert("No wallet connected.");
             return;
         }
         try {
