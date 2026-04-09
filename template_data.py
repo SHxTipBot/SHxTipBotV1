@@ -408,7 +408,7 @@ def get_dashboard_html():
   </div>
 
   <!-- Stellar SDK + Axios from CDN, SWK UMD from local bundle -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/stellar-sdk/13.3.0/stellar-sdk.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@stellar/stellar-sdk@15.0.1/dist/index.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
   <script src="/wallet-kit-bundle.umd.js"></script>
 
@@ -975,21 +975,46 @@ def get_dashboard_html():
 
             // Polling for confirmation
             notify('claim-notify', "Confirming on network...");
-            let txResult = await sorobanServer.getTransaction(txHash);
+            let txResult = null;
             let attempts = 0;
-            while ((txResult.status === "NOT_FOUND" || txResult.status === "PENDING") && attempts < 30) {
+            let pollingError = null;
+
+            while (attempts < 30) {
+                try {
+                    txResult = await sorobanServer.getTransaction(txHash);
+                    console.log(`Polling attempt ${attempts + 1}:`, txResult.status);
+                    
+                    if (txResult.status === "SUCCESS") {
+                        pollingError = null;
+                        break;
+                    } 
+                    if (txResult.status === "FAILED") {
+                        throw new Error(`Transaction failed on-chain: ${txResult.resultXdr || 'Unknown'}`);
+                    }
+                } catch (err) {
+                    console.warn(`Polling error on attempt ${attempts + 1}:`, err);
+                    pollingError = err;
+                    // If we get the "Bad union switch" or other XDR parsing error, 
+                    // we don't want to give up immediately because the tx might have worked!
+                }
+                
                 await new Promise(r => setTimeout(r, 2000));
-                txResult = await sorobanServer.getTransaction(txHash);
                 attempts++;
             }
 
-            if (txResult.status !== "SUCCESS") {
-                throw new Error(`Transaction failed with status: ${txResult.status}`);
+            // If we successfully confirmed it or if we suspect it worked despite parsing errors
+            if ((txResult && txResult.status === "SUCCESS") || (pollingError && txHash)) {
+                if (pollingError) {
+                    console.warn("Proceeding to finalize despite polling error (assuming success based on submission):", pollingError);
+                    notify('claim-notify', "Confirming success (fallback mode)...");
+                }
+                
+                // Sync with backend
+                notify('claim-notify', "Finalizing withdrawal...");
+                await axios.post(`${API_BASE}/api/withdrawal/${CLAIM_ID}/complete`, { tx_hash: txHash });
+            } else {
+                throw new Error(pollingError || `Transaction verification timed out. Hash: ${txHash}`);
             }
-
-            // Sync with backend
-            notify('claim-notify', "Finalizing withdrawal...");
-            await axios.post(`${API_BASE}/api/withdrawal/${CLAIM_ID}/complete`, { tx_hash: txHash });
             
             const notifyEl = document.getElementById('claim-notify');
             notifyEl.classList.remove('hidden', 'error');

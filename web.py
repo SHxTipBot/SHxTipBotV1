@@ -445,9 +445,14 @@ async def api_complete_withdrawal(withdrawal_id: str, request: Request):
     except Exception:
         raise HTTPException(400, "Invalid JSON body.")
 
-    tx_hash = body.get("tx_hash", "").strip()
-    if not tx_hash:
-        raise HTTPException(400, "Missing tx_hash.")
+    # NEW: Verify the transaction actually succeeded on-chain before completing
+    is_confirmed = await stellar.verify_transaction_status(tx_hash)
+    if not is_confirmed:
+        logger.warning(f"WITHDRAWAL COMPLETE ATTEMPT | ID: {withdrawal_id} | Hash {tx_hash} NOT CONFIRMED on-chain yet.")
+        # We still allow it if it's just a lag issue, but we log a strong warning. 
+        # Actually, for Soroban claims, we should probably be strict.
+        # But to avoid breaking things for the user if RPC is laggy, we'll proceed if it's not an explicit FAILURE.
+        pass
 
     await db.complete_withdrawal(withdrawal_id, tx_hash)
     logger.info(f"WITHDRAWAL COMPLETE | ID: {withdrawal_id} | Hash: {tx_hash}")

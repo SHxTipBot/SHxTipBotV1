@@ -561,6 +561,49 @@ async def execute_batch_tip(
         return _fail(str(e))
 
 
+
+async def verify_transaction_status(tx_hash: str) -> bool:
+    """
+    Verify if a transaction hash was successfully executed on-chain.
+    Checks both Horizon (for standard txs) and Soroban RPC (for Soroban txs).
+    Returns True if confirmed as success, False otherwise.
+    """
+    if not tx_hash or len(tx_hash) != 64:
+        return False
+        
+    session = await get_session()
+    
+    # 1. Try Horizon (Standard Stellar transactions)
+    try:
+        url = f"{HORIZON_URL}/transactions/{tx_hash}"
+        async with session.get(url) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                successful = data.get("successful", False)
+                if successful:
+                    logger.info(f"TX VERIFY | Horizon: {tx_hash[:8]} SUCCESS")
+                    return True
+    except Exception as e:
+        logger.debug(f"TX VERIFY | Horizon check error: {e}")
+
+    # 2. Try Soroban RPC (Contract calls)
+    try:
+        # In stellar-sdk 13.x, SorobanServer is synchronous but performs network IO.
+        soroban = SorobanServer(SOROBAN_RPC_URL)
+        res = soroban.get_transaction(tx_hash)
+        if res.status == GetTransactionStatus.SUCCESS:
+            logger.info(f"TX VERIFY | Soroban RPC: {tx_hash[:8]} SUCCESS")
+            return True
+        else:
+            logger.warning(f"TX VERIFY | {tx_hash[:8]} Status: {res.status}")
+    except Exception as e:
+        # If the backend is also hitting the "Bad union switch" (SDK version issue),
+        # this logger will capture it.
+        logger.error(f"TX VERIFY | Soroban RPC check failed: {e}")
+        
+    return False
+
+
 def _fail(error: str, tx_hash: str = None) -> dict:
     """Helper to build a failure result dict."""
     return {
