@@ -134,6 +134,8 @@ def get_dashboard_html():
     .btn-primary:hover { background-color: #2563eb; transform: translateY(-1px); }
     .btn-secondary { background: rgba(59, 130, 246, 0.1); color: var(--accent); border: 1px solid var(--border); }
     .btn-secondary:hover { border-color: var(--accent); }
+    .btn-danger { background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); }
+    .btn-danger:hover { background: #ef4444; color: white; transform: translateY(-1px); }
     .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
     /* Utility Helpers */
@@ -302,6 +304,7 @@ def get_dashboard_html():
         <h3 class="mb-2">Claiming: <span id="active-ticket-id" class="text-accent"></span></h3>
         <p class="mb-4">Amount: <span id="active-ticket-amount" class="text-bold text-accent"></span> SHx</p>
         <button id="btn-claim-action" class="btn btn-primary bg-success w-full justify-center" disabled>Confirm & Claim on Stellar</button>
+        <button id="btn-claim-cancel" class="btn btn-danger w-full justify-center mt-4">Cancel Ticket & Refund to Discord</button>
         <p class="text-xs text-center mt-4 text-muted" onclick="showList()" style="cursor:pointer; text-decoration: underline;">← Back to List</p>
       </div>
     </div>
@@ -360,7 +363,7 @@ def get_dashboard_html():
         let html = '';
         ws.forEach(w => {
             html += `<div class="bg-dark-overlay mb-2 p-3 rounded-lg border border-opacity-10" style="display:flex; justify-content:space-between; align-items:center;">
-              <div><p class="text-bold text-accent">${w.amount} SHx</p><p class="text-xs text-muted">Ticket: ...${w.id.slice(-6)}</p></div>
+              <div><p class="text-bold text-accent">${w.amount} SHx</p><p class="text-xs text-muted">Ticket: ...${w.id.slice(-6)}</p><span onclick="handleCancel('${w.id}')" class="text-error text-xs" style="cursor:pointer; text-decoration: underline; margin-top: 4px; display: inline-block;">Cancel & Refund</span></div>
               <button onclick="selectTicket('${w.id}', '${w.amount}')" class="btn btn-primary text-xs px-4 py-2">Select to Claim</button>
             </div>`;
         });
@@ -481,6 +484,15 @@ def get_dashboard_html():
         } catch (e) { notify('claim-notify', e.message || String(e), true); }
     }
 
+    async function handleCancel(id) {
+        if (!confirm("Are you sure you want to cancel this withdrawal and refund the SHx back to your Discord balance?")) return;
+        try {
+            notify('claim-notify', "Processing refund...");
+            const res = await axios.post(`${API_BASE}/api/withdrawal/${id || CLAIM_ID}/cancel`, { token: TOKEN });
+            if (res.data.success) { notify('claim-notify', "✅ Refunded back to Discord!"); setTimeout(showList, 1500); }
+        } catch (e) { notify('claim-notify', e.message || String(e), true); }
+    }
+
     window.onload = () => {
         fetchBalance(); 
         const e = "{{EXISTING_KEY_VAL}}";
@@ -490,9 +502,11 @@ def get_dashboard_html():
     
     document.getElementById('btn-link').onclick = handleLink;
     document.getElementById('btn-claim-action').onclick = handleClaim;
+    const cancelBtn = document.getElementById('btn-claim-cancel');
+    if (cancelBtn) cancelBtn.onclick = () => handleCancel();
+    
     document.getElementById('btn-unlink-action').onclick = async () => {
         if (confirm("Unlink wallet?")) { await axios.post(`${API_BASE}/api/unlink`, { token: TOKEN }); localStorage.clear(); location.reload(); }
     };
   </script>
-</body>
 </html>'''
