@@ -726,15 +726,3 @@ def get_dashboard_html():
   </script>
 </body>
 </html>'''
-            alert("Failed to unlink: " + (e.response?.data?.detail || e.message));
-        }
-    };
-    
-    if (document.getElementById('btn-unlink-action')) {
-        document.getElementById('btn-unlink-action').onclick = unlinkHandler;
-    }
-
-    // Self-test removed per user request
-  </script>
-</body>
-</html>'''
