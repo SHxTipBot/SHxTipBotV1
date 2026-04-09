@@ -473,7 +473,7 @@ def get_dashboard_html():
         if (!address) return;
         try {
             console.log("Refreshing Stellar Balance for:", address);
-            const server = new window.StellarSdk.Horizon.Server(HORIZON_URL);
+            const server = new window.StellarSdk.Server(HORIZON_URL);
             const acc = await server.loadAccount(address);
             const shxBal = acc.balances.find(b => b.asset_code === SHX_ASSET_CODE && b.asset_issuer === SHX_ISSUER_VAL);
             const val = shxBal ? parseFloat(shxBal.balance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00";
@@ -792,7 +792,7 @@ def get_dashboard_html():
         
         try {
             notify('link-notify', "Signing Link Request...");
-            const server = new window.StellarSdk.Horizon.Server(HORIZON_URL);
+            const server = new window.StellarSdk.Server(HORIZON_URL);
             const account = await server.loadAccount(userAddress);
             const tx = new window.StellarSdk.TransactionBuilder(account, { fee: "1000", networkPassphrase: NETWORK_PASSPHRASE })
                 .addOperation(window.StellarSdk.Operation.manageData({ name: "link_discord", value: DISCORD_ID }))
@@ -860,7 +860,7 @@ def get_dashboard_html():
             const { amount, nonce, signature } = res.data;
             console.log("Ticket data:", { amount, nonce, signature });
 
-            const server = new window.StellarSdk.Horizon.Server(HORIZON_URL);
+            const server = new window.StellarSdk.Server(HORIZON_URL);
             // Detect correct Soroban server class
             const SorobanServerClass = window.StellarSdk.rpc?.Server || window.StellarSdk.SorobanServer;
             const sorobanServer = new SorobanServerClass(SOROBAN_URL, { allowHttp: true });
