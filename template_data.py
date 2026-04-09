@@ -257,7 +257,7 @@ def get_dashboard_html():
     </nav>
 
     <div class="hero">
-      <h1>Community Portal <span class="text-xs" style="opacity: 0.5;">v1.9</span></h1>
+      <h1>Community Portal <span class="text-xs" style="opacity: 0.5;">v2.0</span></h1>
       <p>Securely link your Discord and manage claims.</p>
       <div id="connection-status-badge" class="badge badge-error mt-4">Wallet: Not Connected</div>
     </div>
@@ -350,15 +350,22 @@ def get_dashboard_html():
     };
 
     const fetchBalance = async () => {
-        if (!TOKEN && !CLAIM_ID) return; // Silent in guest mode
+        if (!TOKEN && !CLAIM_ID) {
+            document.getElementById('withdrawal-list').innerHTML = '<div class="text-center py-4 text-muted">Guest Mode: Use <b>/link</b> in Discord to see your tickets.</div>';
+            return;
+        }
         try {
             const res = await axios.get(`${API_BASE}/api/balance?token=${TOKEN}&claim_id=${CLAIM_ID}`);
             if (res.data.success) {
                 document.getElementById('internal-balance-val').innerText = res.data.balance;
                 if (res.data.pending_withdrawals?.length > 0) renderWithdrawals(res.data.pending_withdrawals);
+                else document.getElementById('withdrawal-list').innerHTML = '<div class="text-center py-4 text-muted">No pending tickets found.</div>';
                 if (userAddress) fetchStellarBalance(userAddress);
             }
-        } catch (e) { console.warn("Balance fetch skipped/failed:", e); }
+        } catch (e) { 
+            console.warn("Balance fetch failed:", e); 
+            document.getElementById('withdrawal-list').innerHTML = '<div class="text-center py-4 text-muted">Wait for a fresh link from Discord...</div>';
+        }
     };
 
     const renderWithdrawals = (ws) => {
@@ -380,6 +387,11 @@ def get_dashboard_html():
         document.getElementById('active-ticket-id').innerText = `...${id.slice(-8)}`;
         document.getElementById('active-ticket-amount').innerText = amt;
         document.getElementById('btn-claim-action').disabled = !userAddress;
+        
+        // Ensure the cancel button is visible and active
+        const cBtn = document.getElementById('btn-claim-cancel');
+        if (cBtn) { cBtn.classList.remove('hidden'); cBtn.onclick = () => handleCancel(id); }
+        
         notify('claim-notify', "Review details and confirm below.");
     };
 
