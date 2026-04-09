@@ -761,30 +761,47 @@ async def stream_deposits(cursor="now", callback=None):
                             continue
 
                         for r in records:
-                            # Update cursor immediately
-                            cursor = r.get("paging_token", cursor)
-                            await db.save_cursor("deposit_monitor", cursor)
+                            _page_token = r.get("paging_token", cursor)
                             
                             if r.get("type") not in ("payment", "path_payment_strict_receive"):
+                                cursor = _page_token
+                                await db.save_cursor("deposit_monitor", cursor)
                                 continue
                             if (r.get("asset_code") != SHX_ASSET_CODE or r.get("asset_issuer") != SHX_ISSUER):
+                                cursor = _page_token
+                                await db.save_cursor("deposit_monitor", cursor)
                                 continue
                             if r.get("to") != HOUSE_ACCOUNT_PUBLIC:
+                                cursor = _page_token
+                                await db.save_cursor("deposit_monitor", cursor)
                                 continue
 
                             tx_hash = r.get("transaction_hash")
                             amount_shx = float(r.get("amount"))
                             
-                            try:
-                                # Fetch tx details for memo
-                                tx = await server.transactions().transaction(tx_hash).call()
-                                memo_type = tx.get("memo_type")
-                                memo_val = tx.get("memo")
+                            tx = None
+                            for attempt in range(3):
+                                try:
+                                    # Fetch tx details for memo
+                                    tx = await server.transactions().transaction(tx_hash).call()
+                                    break
+                                except Exception as ex:
+                                    logger.error(f"Error fetching tx details for {tx_hash} (attempt {attempt+1}): {ex}")
+                                    await asyncio.sleep(2)
+                            
+                            if tx is None:
+                                raise Exception(f"Failed to fetch tx details for {tx_hash} after multiple attempts.")
                                 
-                                if callback:
-                                    await callback(memo_val, tx_hash, amount_shx, memo_type)
-                            except Exception as ex:
-                                logger.error(f"Error fetching tx details for {tx_hash}: {ex}")
+                            memo_type = tx.get("memo_type")
+                            memo_val = tx.get("memo")
+                            
+                            # Only call callback after we fully fetched tx
+                            if callback:
+                                await callback(memo_val, tx_hash, amount_shx, memo_type)
+
+                            # Successfully processed, now advance cursor
+                            cursor = _page_token
+                            await db.save_cursor("deposit_monitor", cursor)
 
                     except asyncio.TimeoutError:
                         logger.warning("Horizon poll timed out. Reconnecting...")

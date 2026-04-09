@@ -520,7 +520,7 @@ def get_dashboard_html():
             const tx = new sdk.TransactionBuilder(account, { fee: "100000", networkPassphrase: NETWORK_PASSPHRASE }).addOperation((new sdk.Contract(SOROBAN_CONTRACT_ID)).call("claim_withdrawal", ...args)).setTimeout(300).build();
             const sim = await soroban.simulateTransaction(tx);
             const prepared = await soroban.prepareTransaction(tx, sim);
-            const sig = await window.StellarKit.StellarWalletsKit.signTransaction(prepared.toXDR(), { networkPassphrase: NETWORK_PASSPHRASE, address: userAddress });
+            const sig = await window.StellarKit.StellarWalletsKit.signTransaction(prepared.toXDR(), { networkPassphrase: NETWORK_PASSPHRASE, address: userAddress, network: NETWORK.toUpperCase() });
             const resp = await soroban.sendTransaction(sdk.TransactionBuilder.fromXDR(sig.signedTxXdr, NETWORK_PASSPHRASE));
             notify('claim-notify', "Confirming...");
             let txR = null; let att = 0;
