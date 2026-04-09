@@ -1161,9 +1161,10 @@ async def start_deposit_monitor():
 
             user = bot.get_user(int(target_discord_id))
             if user:
+                tx_url = stellar.get_explorer_url(tx_hash)
                 embed = _footer(discord.Embed(
                     title="💰 Deposit Confirmed",
-                    description=f"Your account has been credited with **{amount_shx:,.2f} SHx**.",
+                    description=f"Your account has been credited with **{amount_shx:,.2f} SHx**.\n\n[View on Stellar Expert]({tx_url})",
                     color=SUCCESS_COLOR
                 ))
                 try:

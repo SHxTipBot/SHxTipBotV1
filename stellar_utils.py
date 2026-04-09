@@ -708,8 +708,11 @@ async def build_approve_tx_xdr(
 
 # ── Custodial Operations ─────────────────────────────────────────────────────
 
-    import database as db
+import database as db
 
+async def stream_deposits(cursor="now", callback=None):
+    """Monitor incoming deposits to the house account using Horizon."""
+    
     # 1. Recovery Logic: Resuming from a saved cursor OR performing a look-back if 'now'
     if cursor == "now":
         # Check DB first

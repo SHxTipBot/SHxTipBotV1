@@ -445,6 +445,10 @@ async def api_complete_withdrawal(withdrawal_id: str, request: Request):
     except Exception:
         raise HTTPException(400, "Invalid JSON body.")
 
+    tx_hash = body.get("tx_hash", "").strip()
+    if not tx_hash:
+        raise HTTPException(400, "Missing tx_hash.")
+
     # NEW: Verify the transaction actually succeeded on-chain before completing
     is_confirmed = await stellar.verify_transaction_status(tx_hash)
     if not is_confirmed:

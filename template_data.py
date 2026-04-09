@@ -324,6 +324,8 @@ def get_dashboard_html():
     let CLAIM_ID_RAW = urlParams.get('claim_id') || "{{CLAIM_ID}}";
     let CLAIM_ID = (CLAIM_ID_RAW.includes("{{") || !CLAIM_ID_RAW) ? "" : CLAIM_ID_RAW;
     let PENDING_IDS = {{PENDING_IDS}};
+    const NETWORK = "{{NETWORK}}";
+    const STELLAR_EXPERT_BASE = `https://stellar.expert/explorer/${NETWORK === 'public' ? 'public' : 'testnet'}`;
     const NETWORK_PASSPHRASE = "{{NETWORK_PASSPHRASE}}";
     const SHX_ASSET_CODE = "{{SHX_ASSET_CODE}}";
     const SHX_ISSUER_VAL = "{{SHX_ISSUER}}";
@@ -437,7 +439,7 @@ def get_dashboard_html():
         const div = document.getElementById(id);
         if (!div) return;
         div.className = `status ${isError ? 'error' : 'success'}`;
-        div.innerText = msg;
+        div.innerHTML = msg;
         div.classList.remove('hidden');
     };
 
@@ -460,6 +462,7 @@ def get_dashboard_html():
 
     async function handleLink() {
         if (!userAddress) return alert("Connect wallet first.");
+        if (!TOKEN) return alert("Guest Mode: Please navigate here using the /link command from Discord to verify your wallet.");
         try {
             const sdk = getSdk();
             notify('link-notify', "Awaiting signature...");
@@ -471,7 +474,10 @@ def get_dashboard_html():
             const res = await window.StellarKit.StellarWalletsKit.signTransaction(tx.toXDR(), { networkPassphrase: NETWORK_PASSPHRASE, address: userAddress });
             await axios.post(`${API_BASE}/api/link`, { token: TOKEN, public_key: userAddress, signature_xdr: res.signedTxXdr, is_approved: true });
             location.reload();
-        } catch (e) { notify('link-notify', e.message || String(e), true); }
+        } catch (e) {
+            const errorMsg = e.response?.data?.detail || e.message || String(e);
+            notify('link-notify', errorMsg, true);
+        }
     }
 
     async function handleClaim() {
@@ -494,9 +500,13 @@ def get_dashboard_html():
             let txR = null; let att = 0;
             while(att<15) { txR = await soroban.getTransaction(resp.hash); if(txR.status==="SUCCESS") break; await new Promise(r=>setTimeout(r,2000)); att++; }
             await axios.post(`${API_BASE}/api/withdrawal/${CLAIM_ID}/complete`, { tx_hash: resp.hash });
-            notify('claim-notify', "✅ Success!");
-            setTimeout(location.reload, 3000);
-        } catch (e) { notify('claim-notify', e.message || String(e), true); }
+            const txUrl = `${STELLAR_EXPERT_BASE}/tx/${resp.hash}`;
+            notify('claim-notify', `✅ Success! <a href="${txUrl}" target="_blank" style="color:var(--accent); text-decoration:underline;">View on Explorer</a>`);
+            setTimeout(() => location.reload(), 4500);
+        } catch (e) {
+            const errorMsg = e.response?.data?.detail || e.message || String(e);
+            notify('claim-notify', errorMsg, true);
+        }
     }
 
     async function handleCancel(id) {
