@@ -415,43 +415,48 @@ def get_dashboard_html():
   </div>
 
   <!-- Stellar SDK + Axios from CDN, SWK UMD from local bundle -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/stellar-sdk/11.3.0/stellar-sdk.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/stellar-sdk@12.3.0/dist/stellar-sdk.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
   <script src="/wallet-kit-bundle.umd.js"></script>
 
   <script>
-    // ══════════════════════════════════════════════════════════════
-    // SHx Community Portal — SWK v2 Static API Integration
-    // Uses: StellarKit.StellarWalletsKit.init() / .authModal() / etc.
-    // ══════════════════════════════════════════════════════════════
+    // ── SDK READINESS HELPER ──
+    const getSdk = () => {
+        if (window.StellarSdk) return window.StellarSdk;
+        if (window.Stellar) return window.Stellar;
+        return null;
+    };
+
+    const checkSdkReady = () => {
+        const sdk = getSdk();
+        if (!sdk) {
+            console.warn("DASHBOARD | Stellar SDK not ready yet...");
+            return false;
+        }
+        return true;
+    };
 
     // ── GLOBAL MODAL HELPER ──
     window.openKitModal = async () => {
-        console.log("DASHBOARD | openKitModal() called. Kit ready:", kitInitialized);
         if (!kitInitialized) {
-            console.warn("DASHBOARD | Kit not initialized yet. Attempting init...");
             if (typeof initKit === 'function') await initKit();
         }
         try {
-            console.log("DASHBOARD | Opening auth modal...");
             const { address } = await window.StellarKit.StellarWalletsKit.authModal();
-            console.log("DASHBOARD | Auth modal returned address:", address);
             if (address) {
                 userAddress = address;
                 window.userAddress = address;
                 updateUI(address);
             }
         } catch (e) {
-            if (e && e.code === -1 && e.message && e.message.includes('closed')) {
-                console.log("DASHBOARD | User closed the modal.");
-            } else {
+            if (!(e && e.code === -1 && e.message && e.message.includes('closed'))) {
                 console.error("DASHBOARD | authModal error:", e);
                 alert("Wallet connection error: " + (e.message || e));
             }
         }
     };
 
-    // ── INJECTED CONSTANTS (de-duplicated) ──
+    // ── INJECTED CONSTANTS ──
     const urlParams = new URLSearchParams(window.location.search);
     const TOKEN = urlParams.get('token') || "{{TOKEN}}";
     let CLAIM_ID = urlParams.get('claim_id') || "{{CLAIM_ID}}";
@@ -466,14 +471,15 @@ def get_dashboard_html():
     const SOROBAN_URL = "{{SOROBAN_URL}}";
     const API_BASE = window.location.origin;
 
-    console.log("DASHBOARD | Network:", NETWORK, "| Asset:", SHX_ASSET_CODE, "@", SHX_ISSUER_VAL);
-
     // ── BALANCE REFRESH ──
     async function fetchStellarBalance(address) {
-        if (!address) return;
+        if (!address || !checkSdkReady()) return;
         try {
-            console.log("Refreshing Stellar Balance for:", address);
-            const server = new window.StellarSdk.Horizon.Server(HORIZON_URL);
+            const sdk = getSdk();
+            // In v12, Server is under Horizon
+            const ServerClass = sdk.Horizon?.Server || sdk.Server;
+            const server = new ServerClass(HORIZON_URL);
+            
             const acc = await server.loadAccount(address);
             const shxBal = acc.balances.find(b => b.asset_code === SHX_ASSET_CODE && b.asset_issuer === SHX_ISSUER_VAL);
             const val = shxBal ? parseFloat(shxBal.balance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00";
@@ -489,7 +495,6 @@ def get_dashboard_html():
     const setStatus = (msg, isError = false) => {
         const el = document.getElementById('link-status-badge');
         if (!el) return;
-        
         if (msg.includes("✅")) {
             el.innerText = "Status: " + msg;
             el.classList.replace('badge-error', 'badge-success');
@@ -503,34 +508,27 @@ def get_dashboard_html():
         try {
             const res = await axios.get(`${API_BASE}/api/balance?token=${TOKEN}&claim_id=${CLAIM_ID}`);
             if (res.data.success) {
-                currentBalance = res.data.balance;
                 const balanceEl = document.getElementById('internal-balance-val');
-                if (balanceEl) balanceEl.innerText = currentBalance;
+                if (balanceEl) balanceEl.innerText = res.data.balance;
                 
                 if (res.data.pending_withdrawals && res.data.pending_withdrawals.length > 0) {
                     PENDING_IDS = res.data.pending_withdrawals.map(w => w.id);
                     renderWithdrawals(res.data.pending_withdrawals);
                 } else {
-                    document.getElementById('withdrawal-list').innerHTML = '<div class="text-center py-4 text-muted">No pending withdrawal tickets found.</div>';
+                    document.getElementById('withdrawal-list').innerHTML = '<div class="text-center py-4 text-muted">No pending tickets found.</div>';
                 }
-
                 if (userAddress) fetchStellarBalance(userAddress);
             }
-        } catch (e) {
-            console.error("Failed to fetch data:", e);
-        }
+        } catch (e) { console.error("Data fetch failed:", e); }
     };
 
     const renderWithdrawals = (withdrawals) => {
         const listEl = document.getElementById('withdrawal-list');
-        const claimCard = document.getElementById('claim-card');
-        if (!listEl || !claimCard) return;
-        
+        if (!listEl) return;
         if (!withdrawals || withdrawals.length === 0) {
             listEl.innerHTML = '<div class="text-center py-4 text-muted">No pending tickets.</div>';
             return;
         }
-
         let html = '';
         withdrawals.forEach(w => {
             const date = new Date(w.created_at * 1000).toLocaleDateString();
@@ -550,12 +548,13 @@ def get_dashboard_html():
     const selectTicket = (id, amount) => {
         CLAIM_ID = id;
         document.getElementById('withdrawal-list').classList.add('hidden');
-        document.getElementById('active-claim-view').classList.remove('hidden');
+        const view = document.getElementById('active-claim-view');
+        view.classList.remove('hidden');
         document.getElementById('active-ticket-id').innerText = `...${id.slice(-8)}`;
         document.getElementById('active-ticket-amount').innerText = amount;
         document.getElementById('btn-claim-action').classList.remove('hidden');
         document.getElementById('btn-claim-cancel').classList.remove('hidden');
-        notify('claim-notify', "Ticket selected. Ready to claim on-chain.");
+        notify('claim-notify', "Ticket selected. Ready to claim.");
     };
 
     const showList = () => {
@@ -566,91 +565,48 @@ def get_dashboard_html():
     };
 
     const resetSession = () => {
-        if (!confirm("This will clear your local wallet connection cache and reload the page. Continue?")) return;
-        for (let key in localStorage) {
-            if (key.includes('wc@2') || key.includes('walletconnect')) {
-                localStorage.removeItem(key);
-            }
-        }
+        if (!confirm("Clear wallet cache and reload?")) return;
+        localStorage.clear();
         location.reload();
     };
 
-    window.onerror = (msg) => console.error("Global Error:", msg);
-    window.onunhandledrejection = (event) => console.error("Async Error:", event.reason);
-
     const DISCORD_ID = "{{DISCORD_ID}}";
-    const SHX_SAC_CONTRACT_ID = "{{SHX_SAC_CONTRACT_ID}}";
     const SOROBAN_CONTRACT_ID = "{{SOROBAN_CONTRACT_ID}}";
-
     let userAddress = null;
     let kitInitialized = false;
 
     const updateUI = (address) => {
-      console.log("updateUI called with address:", address);
       userAddress = address;
       window.userAddress = address;
-
       const heroBadge = document.getElementById('connection-status-badge');
       const profileBadge = document.getElementById('link-status-badge');
       const linkBtn = document.getElementById('btn-link');
-      
       const existingKey = "{{EXISTING_KEY_VAL}}";
       const isAlreadyLinked = (existingKey && existingKey.length === 56 && existingKey === address);
 
       if (address) {
         const addrText = `<span style="width: 8px; height: 8px; background: #10b981; border-radius: 50%; display: inline-block; margin-right: 4px;"></span> Verified: ${address.slice(0,6)}...${address.slice(-4)}`;
-        
         if (heroBadge) {
             heroBadge.innerHTML = addrText;
             heroBadge.classList.replace('badge-error', 'badge-success');
         }
-        
         if (profileBadge) {
-            if (isAlreadyLinked) {
-                profileBadge.innerHTML = "Status: Linked ✅";
-                profileBadge.classList.replace('badge-error', 'badge-success');
-            } else {
-                profileBadge.innerHTML = "Status: Wallet Not Linked";
-                profileBadge.classList.replace('badge-success', 'badge-error');
-            }
+            profileBadge.innerHTML = isAlreadyLinked ? "Status: Linked ✅" : "Status: Wallet Not Linked";
+            profileBadge.classList.replace(isAlreadyLinked ? 'badge-error' : 'badge-success', isAlreadyLinked ? 'badge-success' : 'badge-error');
         }
-
         fetchStellarBalance(address);
-        
         if (linkBtn) {
-            linkBtn.disabled = false;
-            if (isAlreadyLinked) {
-                linkBtn.innerText = "Linked ✅";
-                linkBtn.classList.replace('btn-primary', 'btn-secondary');
-                linkBtn.disabled = true;
-            } else if (existingKey && existingKey.length === 56) {
-                linkBtn.innerText = "Switch to this Wallet";
-            } else {
-                linkBtn.innerText = "Verify & Link Wallet";
-            }
+            linkBtn.disabled = address === existingKey;
+            linkBtn.innerText = address === existingKey ? "Linked ✅" : (existingKey ? "Switch to this Wallet" : "Verify & Link Wallet");
+            if (address === existingKey) linkBtn.classList.replace('btn-primary', 'btn-secondary');
         }
-        
         const claimBtn = document.getElementById('btn-claim-action');
         if (claimBtn) claimBtn.disabled = false;
-        
-        if (existingKey && existingKey.length === 56) {
-            document.getElementById('unlink-container')?.classList.remove('hidden');
-        }
+        if (existingKey && existingKey.length === 56) document.getElementById('unlink-container')?.classList.remove('hidden');
       } else {
-        if (heroBadge) {
-            heroBadge.innerText = "Wallet: Not Connected";
-            heroBadge.classList.replace('badge-success', 'badge-error');
-        }
-        if (profileBadge) {
-            profileBadge.innerText = "Status: Wallet Disconnected";
-            profileBadge.classList.replace('badge-success', 'badge-error');
-        }
-        if (linkBtn) {
-            linkBtn.disabled = true;
-            linkBtn.innerText = "Verify & Link Wallet";
-        }
-        const claimBtn = document.getElementById('btn-claim-action');
-        if (claimBtn) claimBtn.disabled = true;
+        if (heroBadge) heroBadge.innerText = "Wallet: Not Connected";
+        if (profileBadge) profileBadge.innerText = "Status: Wallet Disconnected";
+        if (linkBtn) { linkBtn.disabled = true; linkBtn.innerText = "Verify & Link Wallet"; }
       }
     };
 
@@ -662,302 +618,114 @@ def get_dashboard_html():
         div.innerText = msg;
     };
 
-    let kitInitInProgress = false;
     async function initKit() {
-        if (kitInitialized || kitInitInProgress) return;
-        kitInitInProgress = true;
-        
+        if (kitInitialized) return;
         try {
-            if (!window.StellarKit || !window.StellarKit.StellarWalletsKit) {
-                setTimeout(() => { kitInitInProgress = false; initKit(); }, 500);
-                return;
-            }
-            
+            if (!window.StellarKit) { setTimeout(initKit, 500); return; }
             const { StellarWalletsKit, KitEventType, SwkAppDarkTheme, defaultModules, WalletConnectModule } = window.StellarKit;
             const modules = [...defaultModules()];
-            
             if (WalletConnectModule && WC_PROJECT_ID && !WC_PROJECT_ID.includes('{{')) {
-                try {
-                    modules.push(new WalletConnectModule({
-                        projectId: WC_PROJECT_ID,
-                        metadata: {
-                            name: "SHx Tip Bot",
-                            description: "SHx Community Portal",
-                            url: window.location.origin,
-                            icons: ["https://shxtipbotv1.vercel.app/stronghold_logo_watermark.svg"]
-                        }
-                    }));
-                } catch (wcErr) { console.warn("WC Init Fail:", wcErr); }
+                modules.push(new WalletConnectModule({
+                    projectId: WC_PROJECT_ID,
+                    metadata: { name: "SHx Tip Bot", url: window.location.origin }
+                }));
             }
-
-            StellarWalletsKit.init({ theme: SwkAppDarkTheme, modules: modules, network: NETWORK_PASSPHRASE });
-            
-            const buttonWrapper = document.getElementById('swk-button-wrapper');
-            if (buttonWrapper) StellarWalletsKit.createButton(buttonWrapper);
-
-            StellarWalletsKit.on(KitEventType.STATE_UPDATED, (event) => {
-                const addr = event && event.payload ? event.payload.address : null;
-                updateUI(addr);
-            });
-
+            StellarWalletsKit.init({ theme: SwkAppDarkTheme, modules, network: NETWORK_PASSPHRASE });
+            const wrapper = document.getElementById('swk-button-wrapper');
+            if (wrapper) StellarWalletsKit.createButton(wrapper);
+            StellarWalletsKit.on(KitEventType.STATE_UPDATED, (e) => updateUI(e?.payload?.address));
             StellarWalletsKit.on(KitEventType.DISCONNECT, () => updateUI(null));
-            
-            try {
-               const { address: currentAddr } = await StellarWalletsKit.getAddress();
-               if (currentAddr) updateUI(currentAddr);
-            } catch(e) {}
-            
+            try { const { address: a } = await StellarWalletsKit.getAddress(); if (a) updateUI(a); } catch(e) {}
             kitInitialized = true;
-            kitInitInProgress = false;
-        } catch (err) {
-            console.error("SWK INIT FAIL:", err);
-            kitInitInProgress = false;
-        }
+        } catch (err) { console.error("Kit Init Fail:", err); }
     };
 
     async function handleLink() {
-        if (!userAddress) {
-            try {
-                const { address } = await window.StellarKit.StellarWalletsKit.getAddress();
-                if (address) userAddress = address;
-            } catch (e) {}
-        }
-
-        if (!userAddress || userAddress.length < 56) {
-            alert("Please connect your wallet first (top right).");
-            return;
-        }
+        if (!checkSdkReady()) { alert("Please wait for Stellar SDK to load..."); return; }
+        if (!userAddress) { try { const { address: a } = await window.StellarKit.StellarWalletsKit.getAddress(); userAddress = a; } catch(e){} }
+        if (!userAddress) { alert("Connect wallet first."); return; }
         
         try {
-            notify('link-notify', "Signing Link Request...");
-            const server = new window.StellarSdk.Horizon.Server(HORIZON_URL);
+            const sdk = getSdk();
+            notify('link-notify', "Building request...");
+            const ServerClass = sdk.Horizon?.Server || sdk.Server;
+            const server = new ServerClass(HORIZON_URL);
             const account = await server.loadAccount(userAddress);
-            const tx = new window.StellarSdk.TransactionBuilder(account, { fee: "1000", networkPassphrase: NETWORK_PASSPHRASE })
-                .addOperation(window.StellarSdk.Operation.manageData({ name: "link_discord", value: DISCORD_ID }))
+            const tx = new sdk.TransactionBuilder(account, { fee: "1000", networkPassphrase: NETWORK_PASSPHRASE })
+                .addOperation(sdk.Operation.manageData({ name: "link_discord", value: DISCORD_ID }))
                 .setTimeout(300).build();
 
-            notify('link-notify', "Awaiting wallet signature...");
-            const result = await window.StellarKit.StellarWalletsKit.signTransaction(tx.toXDR(), {
-                networkPassphrase: NETWORK_PASSPHRASE,
-                address: userAddress,
-            });
-            
-            notify('link-notify', "Verifying on server...");
-            const res = await axios.post(`${API_BASE}/api/link`, {
-                token: TOKEN, public_key: userAddress, signature_xdr: result.signedTxXdr, is_approved: true
-            });
-            if (res.data.success) {
-                notify('link-notify', "✅ Wallet linked successfully!");
-                location.reload(); // Hard refresh to update everything
-            }
-        } catch (e) {
-            notify('link-notify', e.message || String(e), true);
-        }
+            notify('link-notify', "Awaiting signature...");
+            const res = await window.StellarKit.StellarWalletsKit.signTransaction(tx.toXDR(), { networkPassphrase: NETWORK_PASSPHRASE, address: userAddress });
+            notify('link-notify', "Verifying...");
+            const apiRes = await axios.post(`${API_BASE}/api/link`, { token: TOKEN, public_key: userAddress, signature_xdr: res.signedTxXdr, is_approved: true });
+            if (apiRes.data.success) location.reload();
+        } catch (e) { notify('link-notify', e.message || String(e), true); }
     }
 
     async function handleClaim() {
-        if (!userAddress || userAddress.length < 56) {
-            alert("No wallet connected.");
-            return;
-        }
+        if (!checkSdkReady() || !userAddress) { alert("Check wallet/SDK connection."); return; }
         try {
-            console.log("--- Starting Claim Flow ---");
-            console.log("userAddress:", userAddress);
-            console.log("CLAIM_ID:", CLAIM_ID);
-            
-            notify('claim-notify', "Fetching withdrawal details...");
+            const sdk = getSdk();
+            notify('claim-notify', "Fetching ticket...");
             const res = await axios.get(`${API_BASE}/api/withdrawal/${CLAIM_ID}`);
-            if (!res.data.success) throw new Error(res.data.message || "Failed to fetch withdrawal details.");
-            
             const { amount, nonce, signature } = res.data;
-            console.log("Ticket data:", { amount, nonce, signature });
-
-            const server = new window.StellarSdk.Horizon.Server(HORIZON_URL);
-            // Detect correct Soroban server class (v11 uses rpc.Server or SorobanServer)
-            const SorobanServerClass = window.StellarSdk.rpc?.Server || window.StellarSdk.SorobanServer || window.StellarSdk.rpc.Server;
-            const sorobanServer = new SorobanServerClass(SOROBAN_URL, { allowHttp: true });
-            
-            notify('claim-notify', "Loading account information...");
+            const ServerClass = sdk.Horizon?.Server || sdk.Server;
+            const server = new ServerClass(HORIZON_URL);
+            const SorobanClass = sdk.rpc?.Server || sdk.SorobanServer || sdk.Server;
+            const soroban = new SorobanClass(SOROBAN_URL);
             const account = await server.loadAccount(userAddress);
-            console.log("Account loaded successfully. Seq:", account.sequenceNumber());
-            
             const sigBytes = Uint8Array.from(atob(signature), c => c.charCodeAt(0));
-            const amountStroops = BigInt(Math.round(amount * 10000000));
-            
-            notify('claim-notify', "Building proof of claim...");
-            
-            // Safer ScVal construction
-            let userAddressVal;
-            try {
-                userAddressVal = window.StellarSdk.nativeToScVal(userAddress, { type: 'address' });
-            } catch (addrErr) {
-                console.warn("Standard 'address' type failed, falling back to manual ScVal construction:", addrErr);
-                // Fallback for older SDKs or specific environments
-                userAddressVal = window.StellarSdk.xdr.ScVal.scvAddress(
-                    window.StellarSdk.Address.fromString(userAddress).toScAddress()
-                );
-            }
-
-            const args = [
-                userAddressVal,
-                window.StellarSdk.nativeToScVal(amountStroops, { type: 'i128' }),
-                window.StellarSdk.nativeToScVal(BigInt(nonce), { type: 'u64' }),
-                window.StellarSdk.nativeToScVal(sigBytes, { type: 'bytes' })
-            ];
-            
-            console.log("Prepared Soroban Args (Raw):", args);
-            args.forEach((arg, i) => console.log(`Arg ${i} XDR:`, arg.toXDR('base64')));
-            
-            console.log("Preparing Transaction for network:", NETWORK, "Passphrase:", NETWORK_PASSPHRASE);
-            
-            let tx;
-            try {
-                const contractIdStr = String(parseAddress(SOROBAN_CONTRACT_ID, 'Contract'));
-                console.log("Using Contract ID:", contractIdStr);
-                
-                notify('claim-notify', "Building Soroban operation...");
-                
-                // Use the Contract class to build the operation safely
-                const contract = new window.StellarSdk.Contract(contractIdStr);
-                const op = contract.call("claim_withdrawal", ...args);
-
-                tx = new window.StellarSdk.TransactionBuilder(account, { 
-                    fee: "100000", 
-                    networkPassphrase: NETWORK_PASSPHRASE 
-                })
-                .addOperation(op)
-                .setTimeout(300)
-                .build();
-                
-                console.log("Transaction built successfully.");
-            } catch (txError) {
-
-                console.error("FAILED TO BUILD TRANSACTION:", txError);
-                throw new Error(`Transaction build error: ${txError.message || txError}`);
-            }
-
-            notify('claim-notify', "Simulating on network...");
-            let sim;
-            try {
-                sim = await sorobanServer.simulateTransaction(tx);
-                console.log("Simulation result:", sim);
-            } catch (simError) {
-                console.error("SIMULATION FAIL (Network/RPC):", simError);
-                throw new Error(`Simulation failed (RPC): ${simError.message || simError}`);
-            }
-            
-            if (sim.error) {
-                console.error("Simulation failed (Contract level). Full Response:", sim);
-                // Extract more descriptive error if possible from events or diagnostic data
-                let errorDetails = sim.error;
-                if (sim.diagnosticEvents) {
-                    console.warn("Diagnostic Events:", sim.diagnosticEvents);
-                }
-                throw new Error(`Contract rejected: ${errorDetails}. This often happens if the signature is invalid or you already claimed this nonce.`);
-            }
-            
-            notify('claim-notify', "Simulation successful. Preparing footprint...");
-            const preparedTx = await sorobanServer.prepareTransaction(tx, sim);
-            
-            notify('claim-notify', "Awaiting signature from your wallet...");
-            const preparedXdr = preparedTx.toXDR();
-            console.log("Prepared Soroban TX XDR:", preparedXdr);
-            console.log("Signing claim with address:", userAddress);
-
-            let signResult;
-            try {
-                signResult = await window.StellarKit.StellarWalletsKit.signTransaction(preparedXdr, {
-                    networkPassphrase: NETWORK_PASSPHRASE,
-                    address: userAddress,
-                });
-            } catch (signErr) {
-                console.error("SIGNING FAILED:", signErr);
-                if (signErr.message?.includes("xBull")) {
-                    throw new Error("xBull signing failed. Please ensure your xBull wallet is unlocked and the correct account is selected.");
-                }
-                throw signErr;
-            }
-            
-            const { signedTxXdr } = signResult;
-            console.log("Successfully received signed Soroban TX.");
-
-            notify('claim-notify', "Submitting to network...");
-            const resp = await sorobanServer.sendTransaction(window.StellarSdk.TransactionBuilder.fromXDR(signedTxXdr, NETWORK_PASSPHRASE));
-            
-            if (resp.status === "ERROR") {
-                throw new Error(`Submission failed: ${resp.error_result_xdr}`);
-            }
-            
-            const txHash = resp.hash;
-            const networkPrefix = (NETWORK === 'mainnet' || NETWORK === 'public') ? 'public' : 'testnet';
-            const explorerUrl = `https://stellar.expert/explorer/${networkPrefix}/tx/${txHash}`;
-
-            // Polling for confirmation
-            notify('claim-notify', "Confirming on network...");
-            let txResult = null;
-            let attempts = 0;
-            let pollingError = null;
-
-            while (attempts < 30) {
-                try {
-                    txResult = await sorobanServer.getTransaction(txHash);
-                    console.log(`Polling attempt ${attempts + 1}:`, txResult.status);
-                    
-                    if (txResult.status === "SUCCESS") {
-                        pollingError = null;
-                        break;
-                    } 
-                    if (txResult.status === "FAILED") {
-                        throw new Error(`Transaction failed on-chain: ${txResult.resultXdr || 'Unknown'}`);
-                    }
-                } catch (err) {
-                    console.warn(`Polling error on attempt ${attempts + 1}:`, err);
-                    pollingError = err;
-                    // If we get the "Bad union switch" or other XDR parsing error, 
-                    // we don't want to give up immediately because the tx might have worked!
-                }
-                
-                await new Promise(r => setTimeout(r, 2000));
-                attempts++;
-            }
-
-            // If we successfully confirmed it or if we suspect it worked despite parsing errors
-            if ((txResult && txResult.status === "SUCCESS") || (pollingError && txHash)) {
-                if (pollingError) {
-                    console.warn("Proceeding to finalize despite polling error (assuming success based on submission):", pollingError);
-                    notify('claim-notify', "Confirming success (fallback mode)...");
-                }
-                
-                // Sync with backend
-                notify('claim-notify', "Finalizing withdrawal...");
-                await axios.post(`${API_BASE}/api/withdrawal/${CLAIM_ID}/complete`, { tx_hash: txHash });
-            } else {
-                throw new Error(pollingError || `Transaction verification timed out. Hash: ${txHash}`);
-            }
-            
-            const notifyEl = document.getElementById('claim-notify');
-            notifyEl.classList.remove('hidden', 'error');
-            notifyEl.classList.add('success');
-            notifyEl.innerHTML = `✅ Claim Successful!<br><a href="${explorerUrl}" target="_blank" style="color:var(--accent); text-decoration: underline; margin-top: 0.5rem; display: inline-block;">View on Stellar.Expert</a><p style="font-size: 0.8rem; opacity: 0.7; margin-top: 1rem;">Closing in 10 seconds...</p>`;
-            
-            document.getElementById('btn-claim-action').classList.add('hidden');
-            document.getElementById('btn-claim-cancel').classList.add('hidden');
-            
-            // After 10s, refresh and show the list again
-            setTimeout(() => {
-                showList();
-                fetchBalance();
-            }, 10000);
-        } catch (e) {
-            console.error("CLAIM FLOW FAILED:", e);
-            const msg = e.response?.data?.detail || e.message || String(e);
-            if (msg.includes('User rejected') || msg.includes('Request rejected')) {
-                notify('claim-notify', "Claim rejected by user.", true);
-            } else {
-                notify('claim-notify', msg, true); 
-            }
-        }
+            const uVal = sdk.nativeToScVal(userAddress, { type: 'address' });
+            const args = [uVal, sdk.nativeToScVal(BigInt(Math.round(amount*1M7)), { type: 'i128' }), sdk.nativeToScVal(BigInt(nonce), { type: 'u64' }), sdk.nativeToScVal(sigBytes, { type: 'bytes' })];
+            const contract = new sdk.Contract(SOROBAN_CONTRACT_ID);
+            const tx = new sdk.TransactionBuilder(account, { fee: "100000", networkPassphrase: NETWORK_PASSPHRASE }).addOperation(contract.call("claim_withdrawal", ...args)).setTimeout(300).build();
+            notify('claim-notify', "Simulating...");
+            const sim = await soroban.simulateTransaction(tx);
+            if (sim.error) throw new Error(sim.error);
+            const prepared = await soroban.prepareTransaction(tx, sim);
+            notify('claim-notify', "Signing...");
+            const sig = await window.StellarKit.StellarWalletsKit.signTransaction(prepared.toXDR(), { networkPassphrase: NETWORK_PASSPHRASE, address: userAddress });
+            notify('claim-notify', "Submitting...");
+            const resp = await soroban.sendTransaction(sdk.TransactionBuilder.fromXDR(sig.signedTxXdr, NETWORK_PASSPHRASE));
+            if (resp.status === "ERROR") throw new Error(resp.error_result_xdr);
+            notify('claim-notify', "Confirming...");
+            let txR = null; let att = 0;
+            while(att<30) { txR = await soroban.getTransaction(resp.hash); if(txR.status==="SUCCESS") break; await new Promise(r=>setTimeout(r,2000)); att++; }
+            await axios.post(`${API_BASE}/api/withdrawal/${CLAIM_ID}/complete`, { tx_hash: resp.hash });
+            notify('claim-notify', "✅ Success!");
+            setTimeout(location.reload, 5000);
+        } catch (e) { notify('claim-notify', e.message || String(e), true); }
     }
+
+    async function handleCancel(id) {
+        if (!confirm("Cancel and refund?")) return;
+        try {
+            const res = await axios.post(`${API_BASE}/api/withdrawal/${id || CLAIM_ID}/cancel`, { token: TOKEN });
+            if (res.data.success) { notify('claim-notify', "✅ Refunded!"); setTimeout(showList, 1500); }
+        } catch (e) { notify('claim-notify', e.message || String(e), true); }
+    }
+
+    window.onload = () => {
+        fetchBalance(); 
+        const e = "{{EXISTING_KEY_VAL}}";
+        if (e && e.length === 56) setStatus("Linked ✅");
+        initKit();
+    };
+    
+    document.getElementById('btn-link').onclick = handleLink;
+    document.getElementById('btn-claim-action').onclick = handleClaim;
+    document.getElementById('btn-claim-cancel').onclick = handleCancel;
+    document.getElementById('btn-unlink-action').onclick = async () => {
+        if (confirm("Unlink wallet?")) {
+            await axios.post(`${API_BASE}/api/unlink`, { token: TOKEN });
+            localStorage.clear();
+            location.reload();
+        }
+    };
+  </script>
+</body>
+</html>'''
 
 
     async function handleCancel(id) {
