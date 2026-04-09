@@ -772,9 +772,9 @@ def get_dashboard_html():
             const { amount, nonce, signature } = res.data;
             console.log("Ticket data:", { amount, nonce, signature });
 
-            const server = new window.StellarSdk.Server(HORIZON_URL);
-            // Detect correct Soroban server class
-            const SorobanServerClass = window.StellarSdk.rpc?.Server || window.StellarSdk.SorobanServer;
+            const server = new window.StellarSdk.Horizon.Server(HORIZON_URL);
+            // Detect correct Soroban server class (v11 uses rpc.Server or SorobanServer)
+            const SorobanServerClass = window.StellarSdk.rpc?.Server || window.StellarSdk.SorobanServer || window.StellarSdk.rpc.Server;
             const sorobanServer = new SorobanServerClass(SOROBAN_URL, { allowHttp: true });
             
             notify('claim-notify', "Loading account information...");
