@@ -233,6 +233,7 @@ def get_dashboard_html():
       border: 1px solid rgba(16, 185, 129, 0.2);
     }
 
+    /* Utilities */
     .hidden { display: none !important; }
 
     #swk-button-wrapper { display: inline-block; min-width: 160px; text-align: right; }
@@ -243,6 +244,16 @@ def get_dashboard_html():
       transition: all 0.2s ease !important; cursor: pointer !important;
     }
     #swk-button-wrapper button:hover { background: #2563eb !important; transform: translateY(-1px); }
+
+    /* Responsive */
+    @media (max-width: 640px) {
+      .profile-section { flex-direction: column; align-items: flex-start; gap: 1.5rem; }
+      .stats-row { flex-direction: column; align-items: flex-start; gap: 1rem; width: 100%; }
+      .stat-divider { display: none; }
+      .hero h1 { font-size: 2rem; }
+      nav { flex-direction: column; gap: 1rem; align-items: center; }
+      #swk-button-wrapper { text-align: center; }
+    }
   </style>
 </head>
 <body>
@@ -448,8 +459,23 @@ def get_dashboard_html():
         console.log("DASHBOARD | Initializing Wallet Kit...");
         try {
             if (!window.StellarKit) { setTimeout(initKit, 500); return; }
-            const { StellarWalletsKit, KitEventType, SwkAppDarkTheme, defaultModules } = window.StellarKit;
-            StellarWalletsKit.init({ theme: SwkAppDarkTheme, modules: defaultModules(), network: NETWORK_PASSPHRASE });
+            const { StellarWalletsKit, KitEventType, SwkAppDarkTheme, defaultModules, WalletConnectModule } = window.StellarKit;
+            
+            const wcProjectId = "{{WC_PROJECT_ID}}";
+            let modules = defaultModules();
+            if (wcProjectId) {
+                modules.push(new WalletConnectModule({
+                    projectId: wcProjectId,
+                    metadata: {
+                        name: "SHx Tip Bot",
+                        description: "SHx Community Tipping Dashboard",
+                        url: window.location.origin,
+                        icons: ["https://cdn.prod.website-files.com/5e9a1cde22bbc0a89dba7f5b/60c9649cf8fb48e5c883950e_Stronghold%20Logo%20Mark%20Blue.png"]
+                    }
+                }));
+            }
+            
+            StellarWalletsKit.init({ theme: SwkAppDarkTheme, modules: modules, network: NETWORK_PASSPHRASE });
             StellarWalletsKit.createButton(document.getElementById('swk-button-wrapper'));
             StellarWalletsKit.on(KitEventType.STATE_UPDATED, (e) => updateUI(e?.payload?.address));
             StellarWalletsKit.on(KitEventType.DISCONNECT, () => updateUI(null));
