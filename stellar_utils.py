@@ -708,82 +708,91 @@ async def build_approve_tx_xdr(
 
 # ── Custodial Operations ─────────────────────────────────────────────────────
 
-async def stream_deposits(cursor: str = "now", callback=None):
-    """
-    Continually poll for payments to the House account using ServerAsync with an explicit AiohttpClient.
-    """
+    import database as db
+
+    # 1. Recovery Logic: Resuming from a saved cursor OR performing a look-back if 'now'
     if cursor == "now":
-        # Robustness: Get the very last transaction first to establish a safe cursor,
-        # but also process the last few transactions just in case they were missed during downtime.
-        try:
-            async with ServerAsync(HORIZON_URL, client=AiohttpClient()) as server:
-                # Look back at the last 10 payments to ensure we didn't miss anything while offline
-                history = await server.payments().for_account(HOUSE_ACCOUNT_PUBLIC).order("desc").limit(10).call()
-                records = history.get("_embedded", {}).get("records", [])
-                if records:
-                    # Process these historical records backwards (oldest to newest)
-                    for r in reversed(records):
-                        # The callback should handle deduplication (which it does via DB tx_hash)
-                        if callback:
-                            tx_hash = r.get("transaction_hash")
-                            amount_shx = float(r.get("amount"))
-                            if r.get("type") in ("payment", "path_payment_strict_receive"):
-                                if (r.get("asset_code") == SHX_ASSET_CODE and r.get("asset_issuer") == SHX_ISSUER):
-                                    # Fetch tx details for memo
-                                    tx = await server.transactions().transaction(tx_hash).call()
-                                    await callback(tx.get("memo"), tx_hash, amount_shx, tx.get("memo_type"))
-                    
-                    # Set the cursor to the latest one we just saw
-                    cursor = records[0].get("paging_token")
-                    logger.info(f"Resuming deposit monitor from historical cursor: {cursor}")
-                else:
-                    cursor = "now"
-        except Exception as e:
-            logger.error(f"Failed to perform startup sweep: {e}")
-            cursor = "now"
+        # Check DB first
+        saved_cursor = await db.get_cursor("deposit_monitor")
+        if saved_cursor:
+            cursor = saved_cursor
+            logger.info(f"Resuming deposit monitor from PERSISTENT cursor: {cursor}")
+        else:
+            # Fallback to look-back sweep if no saved cursor
+            try:
+                async with ServerAsync(HORIZON_URL, client=AiohttpClient()) as server:
+                    history = await server.payments().for_account(HOUSE_ACCOUNT_PUBLIC).order("desc").limit(10).call()
+                    records = history.get("_embedded", {}).get("records", [])
+                    if records:
+                        for r in reversed(records):
+                            if callback:
+                                tx_hash = r.get("transaction_hash")
+                                amount_shx = float(r.get("amount"))
+                                if r.get("type") in ("payment", "path_payment_strict_receive"):
+                                    if (r.get("asset_code") == SHX_ASSET_CODE and r.get("asset_issuer") == SHX_ISSUER):
+                                        tx = await server.transactions().transaction(tx_hash).call()
+                                        await callback(tx.get("memo"), tx_hash, amount_shx, tx.get("memo_type"))
+                        cursor = records[0].get("paging_token")
+                        await db.save_cursor("deposit_monitor", cursor)
+                        logger.info(f"Initialized deposit monitor from history: {cursor}")
+            except Exception as e:
+                logger.error(f"Failed to perform startup sweep: {e}")
+                cursor = "now"
 
     while True:
         try:
+            # Reconnect loop
             async with ServerAsync(HORIZON_URL, client=AiohttpClient()) as server:
                 while True:
-                    # Polling 10 at a time
-                    response = await server.payments().for_account(HOUSE_ACCOUNT_PUBLIC).cursor(cursor).limit(10).call()
-                    records = response.get("_embedded", {}).get("records", [])
-                    
-                    if not records:
-                        # No new records, wait 10 seconds
-                        await asyncio.sleep(10)
-                        continue
-
-                    for r in records:
-                        # Update cursor
-                        cursor = r.get("paging_token", cursor)
+                    # Polling with a strict timeout to prevent zombie connections
+                    try:
+                        # Horizon payments query
+                        p_call = server.payments().for_account(HOUSE_ACCOUNT_PUBLIC).cursor(cursor).limit(10)
                         
-                        if r.get("type") not in ("payment", "path_payment_strict_receive"):
-                            continue
+                        # Use a 30s timeout for the network call
+                        response = await asyncio.wait_for(p_call.call(), timeout=30.0)
+                        records = response.get("_embedded", {}).get("records", [])
                         
-                        if (r.get("asset_code") != SHX_ASSET_CODE or 
-                            r.get("asset_issuer") != SHX_ISSUER):
-                            continue
-                        
-                        if r.get("to") != HOUSE_ACCOUNT_PUBLIC:
+                        if not records:
+                            await asyncio.sleep(10)
                             continue
 
-                        tx_hash = r.get("transaction_hash")
-                        amount_shx = float(r.get("amount"))
-                        
-                        try:
-                            tx = await server.transactions().transaction(tx_hash).call()
-                            memo_type = tx.get("memo_type")
-                            memo_val = tx.get("memo")
+                        for r in records:
+                            # Update cursor immediately
+                            cursor = r.get("paging_token", cursor)
+                            await db.save_cursor("deposit_monitor", cursor)
                             
-                            if callback:
-                                await callback(memo_val, tx_hash, amount_shx, memo_type)
-                        except Exception as ex:
-                            logger.error(f"Error fetching tx details for {tx_hash}: {ex}")
+                            if r.get("type") not in ("payment", "path_payment_strict_receive"):
+                                continue
+                            if (r.get("asset_code") != SHX_ASSET_CODE or r.get("asset_issuer") != SHX_ISSUER):
+                                continue
+                            if r.get("to") != HOUSE_ACCOUNT_PUBLIC:
+                                continue
+
+                            tx_hash = r.get("transaction_hash")
+                            amount_shx = float(r.get("amount"))
+                            
+                            try:
+                                # Fetch tx details for memo
+                                tx = await server.transactions().transaction(tx_hash).call()
+                                memo_type = tx.get("memo_type")
+                                memo_val = tx.get("memo")
+                                
+                                if callback:
+                                    await callback(memo_val, tx_hash, amount_shx, memo_type)
+                            except Exception as ex:
+                                logger.error(f"Error fetching tx details for {tx_hash}: {ex}")
+
+                    except asyncio.TimeoutError:
+                        logger.warning("Horizon poll timed out. Reconnecting...")
+                        break # Break inner loop to trigger server/session recreation
+                    except Exception as loop_err:
+                        # Log and break to reconnect
+                        logger.error(f"Inner monitor loop error: {loop_err}")
+                        break
 
         except Exception as e:
-            logger.error(f"Deposit monitor encountered error: {e}. Retrying in 5s...")
+            logger.error(f"Deposit monitor encountered critical error: {e}. Reconnecting in 5s...")
             await asyncio.sleep(5)
 
 async def send_withdrawal(destination: str, amount_shx: float, memo: str = None) -> dict:

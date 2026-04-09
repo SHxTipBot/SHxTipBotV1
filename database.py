@@ -159,6 +159,13 @@ async def init_db():
                 completed_at DOUBLE PRECISION
             )
         """)
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS service_cursors (
+                service_name TEXT PRIMARY KEY,
+                cursor_val TEXT NOT NULL,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+            )
+        """)
     
     # Run migrations: comprehensively sanitize all legacy NOT NULL constraints for Tip.cc zero-friction architecture
     migration_queries = [
@@ -187,6 +194,34 @@ async def init_db():
                     logger.warning(f"Migration query failed: {query} -> {e}")
 
     logger.info("Database initialized successfully.")
+
+
+# ── Cursor Management (for Deposit Monitor) ───────────────────────────────────
+
+async def get_cursor(service_name: str) -> str | None:
+    """Get the last saved paging token for a service."""
+    try:
+        pool = await get_pool()
+        row = await pool.fetchrow("SELECT cursor_val FROM service_cursors WHERE service_name = $1", service_name)
+        return row["cursor_val"] if row else None
+    except Exception as e:
+        logger.error(f"get_cursor error: {e}")
+        return None
+
+async def save_cursor(service_name: str, cursor_val: str):
+    """Persist a paging token for a service."""
+    try:
+        pool = await get_pool()
+        await pool.execute(
+            """
+            INSERT INTO service_cursors (service_name, cursor_val, updated_at)
+            VALUES ($1, $2, NOW())
+            ON CONFLICT (service_name) DO UPDATE SET cursor_val = $2, updated_at = NOW()
+            """,
+            service_name, cursor_val
+        )
+    except Exception as e:
+        logger.error(f"save_cursor error: {e}")
 
 
 # ── Implementation Functions ──────────────────────────────────────────────────
