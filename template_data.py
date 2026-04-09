@@ -319,8 +319,10 @@ def get_dashboard_html():
     const checkSdkReady = () => !!getSdk();
 
     const urlParams = new URLSearchParams(window.location.search);
-    const TOKEN = urlParams.get('token') || "{{TOKEN}}";
-    let CLAIM_ID = urlParams.get('claim_id') || "{{CLAIM_ID}}";
+    const TOKEN_RAW = urlParams.get('token') || "{{TOKEN}}";
+    const TOKEN = (TOKEN_RAW.includes("{{") || !TOKEN_RAW) ? "" : TOKEN_RAW;
+    let CLAIM_ID_RAW = urlParams.get('claim_id') || "{{CLAIM_ID}}";
+    let CLAIM_ID = (CLAIM_ID_RAW.includes("{{") || !CLAIM_ID_RAW) ? "" : CLAIM_ID_RAW;
     let PENDING_IDS = {{PENDING_IDS}};
     const NETWORK_PASSPHRASE = "{{NETWORK_PASSPHRASE}}";
     const SHX_ASSET_CODE = "{{SHX_ASSET_CODE}}";
@@ -348,6 +350,7 @@ def get_dashboard_html():
     };
 
     const fetchBalance = async () => {
+        if (!TOKEN && !CLAIM_ID) return; // Silent in guest mode
         try {
             const res = await axios.get(`${API_BASE}/api/balance?token=${TOKEN}&claim_id=${CLAIM_ID}`);
             if (res.data.success) {
@@ -355,7 +358,7 @@ def get_dashboard_html():
                 if (res.data.pending_withdrawals?.length > 0) renderWithdrawals(res.data.pending_withdrawals);
                 if (userAddress) fetchStellarBalance(userAddress);
             }
-        } catch (e) {}
+        } catch (e) { console.warn("Balance fetch skipped/failed:", e); }
     };
 
     const renderWithdrawals = (ws) => {
@@ -408,9 +411,9 @@ def get_dashboard_html():
         profile.className = `badge text-xs mt-1 ${linked ? 'badge-success' : 'badge-error'}`;
         fetchStellarBalance(address);
         linkBtn.disabled = linked;
-        linkBtn.innerText = linked ? "Linked ✅" : (existing ? "Switch to this Wallet" : "Verify & Link Wallet");
+        linkBtn.innerText = linked ? "Linked ✅" : (existing && existing.length === 56 ? "Switch to this Wallet" : "Verify & Link Wallet");
         document.getElementById('btn-claim-action').disabled = false;
-        if(existing) document.getElementById('unlink-container').classList.remove('hidden');
+        if(existing && existing.length === 56) document.getElementById('unlink-container').classList.remove('hidden');
       } else {
         hero.innerText = "Wallet: Not Connected";
         hero.className = "badge badge-error mt-4";
