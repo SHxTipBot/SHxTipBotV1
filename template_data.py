@@ -31,6 +31,13 @@ def get_dashboard_html():
       min-height: 100vh;
       display: flex;
       flex-direction: column;
+      overflow-x: hidden;
+      width: 100%;
+    }
+    
+    html {
+      overflow-x: hidden;
+      width: 100%;
     }
 
     .background-castle {
@@ -145,7 +152,7 @@ def get_dashboard_html():
     .text-white { color: #fff; }
     .bg-success { background: var(--success) !important; }
     .bg-dark-overlay { background: rgba(0,0,0,0.3); padding: 1rem; border-radius: 0.75rem; border: 1px solid var(--border); }
-    .break-word { overflow-wrap: break-word; display: block; }
+    .break-word { word-break: break-all; overflow-wrap: break-word; }
     .user-subtitle { font-size: 0.85rem; color: var(--muted); margin-top: 0.25rem; }
     .status-badge-inline { display: inline-flex; align-items: center; gap: 0.5rem; font-weight: 600; }
 
@@ -368,8 +375,8 @@ def get_dashboard_html():
           <div class="bg-dark-overlay p-2 rounded text-xs">
             <span class="text-muted">Status:</span> <span id="rpc_status" class="text-success text-bold">Connected</span>
           </div>
-          <div class="bg-dark-overlay p-2 rounded text-xs col-span-2" style="grid-column: span 2;">
-            <span class="text-muted">Contract:</span> <span id="contract_label" class="text-accent text-bold">{{SOROBAN_CONTRACT_ID}}</span>
+          <div class="bg-dark-overlay p-2 rounded text-xs col-span-2" style="grid-column: span 2; overflow: hidden;">
+            <span class="text-muted">Contract:</span> <span id="contract_label" class="text-accent text-bold break-word" style="font-size: 0.7rem;">{{SOROBAN_CONTRACT_ID}}</span>
           </div>
         </div>
         
