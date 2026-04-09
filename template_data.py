@@ -257,7 +257,7 @@ def get_dashboard_html():
     </nav>
 
     <div class="hero">
-      <h1>Community Portal <span class="text-xs" style="opacity: 0.5;">v1.8</span></h1>
+      <h1>Community Portal <span class="text-xs" style="opacity: 0.5;">v1.9</span></h1>
       <p>Securely link your Discord and manage claims.</p>
       <div id="connection-status-badge" class="badge badge-error mt-4">Wallet: Not Connected</div>
     </div>
