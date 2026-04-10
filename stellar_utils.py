@@ -729,10 +729,10 @@ async def stream_deposits(cursor="now", callback=None):
                     if records:
                         for r in reversed(records):
                             if callback:
-                                tx_hash = r.get("transaction_hash")
-                                amount_shx = float(r.get("amount"))
                                 if r.get("type") in ("payment", "path_payment_strict_receive"):
                                     if (r.get("asset_code") == SHX_ASSET_CODE and r.get("asset_issuer") == SHX_ISSUER):
+                                        tx_hash = r.get("transaction_hash")
+                                        amount_shx = float(r.get("amount"))
                                         tx = await server.transactions().transaction(tx_hash).call()
                                         await callback(tx.get("memo"), tx_hash, amount_shx, tx.get("memo_type"))
                         cursor = records[0].get("paging_token")
