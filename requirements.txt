@@ -1,6 +1,6 @@
 fastapi==0.135.1
 starlette==0.52.1
-stellar-sdk==13.2.1
+stellar-sdk[aiohttp]==13.2.1
 aiohttp==3.13.3
 asyncpg==0.30.0
 python-dotenv==1.2.2
