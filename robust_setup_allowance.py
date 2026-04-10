@@ -59,8 +59,11 @@ async def robust_allowance():
     print(f"Submitting transaction...")
     res = server.send_transaction(tx)
     print(f"Status: {res.status}")
-    if res.status == "error":
-        print(f"ERROR: {res.__dict__}")
+    from stellar_sdk.soroban_rpc import SendTransactionStatus, GetTransactionStatus
+    print(f"Status: {res.status}")
+    if res.status == SendTransactionStatus.ERROR:
+        print(f"ERROR_XDR: {res.error_result_xdr}")
+        return
     else:
         print(f"Tx Hash: {res.hash}")
         print("Waiting for confirmation...")

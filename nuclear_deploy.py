@@ -16,7 +16,7 @@ async def deploy():
     public = os.getenv("HOUSE_ACCOUNT_PUBLIC")
     shx_sac = os.getenv("SHX_SAC_CONTRACT_ID")
     
-    wasm_path = "soroban_tipping_contract/target/wasm32-unknown-unknown/release/shx_tipping_contract.wasm"
+    wasm_path = "soroban_tipping_contract.wasm"
     
     logger.info("Installing new WASM...")
     wasm_id = await stellar_utils.deploy_contract_wasm(secret, wasm_path)
