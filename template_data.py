@@ -46,7 +46,7 @@ def get_dashboard_html():
       background-image: url('https://cdn.prod.website-files.com/5e9a1cde22bbc0a89dba7f5b/60c9649cf8fb48e5c883950e_Stronghold%20Logo%20Mark%20Blue.png');
       background-repeat: no-repeat;
       background-position: center;
-      background-size: 70%;
+      background-size: min(70vw, 80vh);
       opacity: 0.32;
       z-index: -1;
       filter: blur(1px) brightness(1.1);
