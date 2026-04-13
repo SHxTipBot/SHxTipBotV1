@@ -262,7 +262,7 @@ def get_dashboard_html():
     <nav>
       <div class="logo">
         <img src="https://cdn.prod.website-files.com/5e9a1cde22bbc0a89dba7f5b/60c9649cf8fb48e5c883950e_Stronghold%20Logo%20Mark%20Blue.png" alt="SHx">
-        <span>SHx Community</span>
+        <span>SHx Tip Bot</span>
       </div>
       <div id="swk-button-wrapper"></div>
     </nav>
@@ -318,6 +318,10 @@ def get_dashboard_html():
         <button id="btn-claim-cancel" class="btn btn-danger w-full justify-center mt-4">Cancel Ticket & Refund to Discord</button>
         <p class="text-xs text-center mt-4 text-muted" onclick="showList()" style="cursor:pointer; text-decoration: underline;">← Back to List</p>
       </div>
+    </div>
+
+    <div class="text-center mt-4 text-xs text-muted" style="padding-bottom: 2rem;">
+      Questions directed to: <a href="mailto:SHxTipBot@Gmail.com" style="color: var(--accent); text-decoration: none;">SHxTipBot@Gmail.com</a>
     </div>
   </div>
 
