@@ -112,7 +112,24 @@ async def parse_amount_full(input_str: str) -> dict | None:
     """
     input_str = str(input_str).strip().lower()
     is_usd = input_str.startswith('$') or input_str.endswith('usd')
-    clean_str = input_str.replace('$', '').replace('usd', '').replace(',', '').strip()
+    clean_str = input_str.replace('$', '').replace('usd', '').strip()
+    
+    last_comma = clean_str.rfind(',')
+    last_dot = clean_str.rfind('.')
+    
+    if last_comma != -1 and last_dot != -1:
+        if last_comma > last_dot:
+            clean_str = clean_str.replace('.', '').replace(',', '.')
+        else:
+            clean_str = clean_str.replace(',', '')
+    elif last_comma != -1:
+        if clean_str.count(',') > 1 or len(clean_str) - last_comma - 1 == 3:
+            clean_str = clean_str.replace(',', '')
+        else:
+            clean_str = clean_str.replace(',', '.')
+    else:
+        if clean_str.count('.') > 1:
+            clean_str = clean_str.replace('.', '')
     try:
         val = float(clean_str)
         if val <= 0: return None
