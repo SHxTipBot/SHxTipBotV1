@@ -79,9 +79,10 @@ def get_dashboard_html():
     }
 
     .logo img { 
-      width: 44px; 
-      height: 44px; 
+      width: 56px; 
+      height: 56px; 
       object-fit: contain;
+      border-radius: 50%;
       filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.4));
     }
 
