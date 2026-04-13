@@ -611,7 +611,7 @@ def get_dashboard_html():
 
     const fetchBalance = async () => {
         if (!TOKEN && !CLAIM_ID) {
-            document.getElementById('withdrawal-list').innerHTML = '`<div class="text-center py-4 text-muted">${t('js_guest_mode')}</div>`';
+            document.getElementById('withdrawal-list').innerHTML = `<div class="text-center py-4 text-muted">${t('js_guest_mode')}</div>`;
             return;
         }
         try {
@@ -619,12 +619,12 @@ def get_dashboard_html():
             if (res.data.success) {
                 document.getElementById('internal-balance-val').innerText = res.data.balance;
                 if (res.data.pending_withdrawals?.length > 0) renderWithdrawals(res.data.pending_withdrawals);
-                else document.getElementById('withdrawal-list').innerHTML = '`<div class="text-center py-4 text-muted">${t('js_no_tickets')}</div>`';
+                else document.getElementById('withdrawal-list').innerHTML = `<div class="text-center py-4 text-muted">${t('js_no_tickets')}</div>`;
                 if (userAddress) fetchStellarBalance(userAddress);
             }
         } catch (e) { 
             console.warn("Balance fetch failed:", e); 
-            document.getElementById('withdrawal-list').innerHTML = '`<div class="text-center py-4 text-muted">${t('js_wait_fresh')}</div>`';
+            document.getElementById('withdrawal-list').innerHTML = `<div class="text-center py-4 text-muted">${t('js_wait_fresh')}</div>`;
         }
     };
 
