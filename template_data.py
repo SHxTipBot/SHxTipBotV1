@@ -261,7 +261,7 @@ def get_dashboard_html():
   <div class="container">
     <nav>
       <div class="logo">
-        <img src="/public/bot_avatar.png" alt="SHx Tip Bot Avatar">
+        <img src="/bot_avatar.png" alt="SHx Tip Bot Avatar">
         <span>SHx Tip Bot</span>
       </div>
       <div id="swk-button-wrapper"></div>
