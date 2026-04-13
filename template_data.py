@@ -261,7 +261,7 @@ def get_dashboard_html():
   <div class="container">
     <nav>
       <div class="logo">
-        <img src="https://cdn.prod.website-files.com/5e9a1cde22bbc0a89dba7f5b/60c9649cf8fb48e5c883950e_Stronghold%20Logo%20Mark%20Blue.png" alt="SHx">
+        <img src="/public/bot_avatar.png" alt="SHx Tip Bot Avatar">
         <span>SHx Tip Bot</span>
       </div>
       <div id="swk-button-wrapper"></div>
@@ -321,7 +321,7 @@ def get_dashboard_html():
     </div>
 
     <div class="text-center mt-4 text-xs text-muted" style="padding-bottom: 2rem;">
-      Questions directed to: <a href="mailto:SHxTipBot@Gmail.com" style="color: var(--accent); text-decoration: none;">SHxTipBot@Gmail.com</a>
+      Questions?: Email <a href="mailto:SHxTipBot@Gmail.com" style="color: var(--accent); text-decoration: none;">SHxTipBot@Gmail.com</a>
     </div>
   </div>
 
