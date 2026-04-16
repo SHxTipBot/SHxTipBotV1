@@ -270,6 +270,11 @@ def get_dashboard_html():
       .hero h1 { font-size: 2rem; }
       nav { flex-direction: column; gap: 1rem; align-items: center; }
       #swk-button-wrapper { text-align: center; }
+      
+      /* Fix Tooltip cutoff on mobile */
+      .tooltip { left: -10px; transform: translateY(10px); width: 280px; }
+      .tooltip::after { left: 17px; transform: translateX(-50%); }
+      .info-trigger:hover + .tooltip, .tooltip:hover { transform: translateY(0); }
     }
   </style>
 </head>
@@ -345,7 +350,7 @@ def get_dashboard_html():
         <h3 class="mb-2"><span data-i18n="claiming">Claiming</span>: <span id="active-ticket-id" class="text-accent"></span></h3>
         <p class="mb-4"><span data-i18n="amount">Amount</span>: <span id="active-ticket-amount" class="text-bold text-accent"></span> SHx</p>
         <button id="btn-claim-action" class="btn btn-primary bg-success w-full justify-center" disabled data-i18n="btn_claim">Confirm & Claim on Stellar</button>
-        <button id="btn-claim-cancel" class="btn btn-danger w-full justify-center mt-4" data-i18n="btn_cancel">Cancel Ticket & Refund to Discord</button>
+        <button id="btn-claim-cancel" class="btn btn-danger w-full justify-center mt-4 hidden" data-i18n="btn_cancel">Cancel Ticket & Refund to Discord</button>
         <p class="text-xs text-center mt-4 text-muted" onclick="showList()" style="cursor:pointer; text-decoration: underline;" data-i18n="back_list">← Back to List</p>
       </div>
     </div>
@@ -760,11 +765,12 @@ def get_dashboard_html():
             const sdk = getSdk();
             notify('claim-notify', t('js_preparing'));
             const res = await axios.get(`${API_BASE}/api/withdrawal/${CLAIM_ID}`);
-            const { amount, nonce, signature } = res.data;
+            const { amount, nonce, expires_at, signature } = res.data;
             const soroban = new (sdk.rpc?.Server || sdk.SorobanServer || sdk.Server)(SOROBAN_URL);
             const account = await (new (sdk.Horizon?.Server || sdk.Server)(HORIZON_URL)).loadAccount(userAddress);
             const uVal = sdk.nativeToScVal(userAddress, { type: 'address' });
-            const args = [uVal, sdk.nativeToScVal(BigInt(Math.round(amount*10000000)), { type: 'i128' }), sdk.nativeToScVal(BigInt(nonce), { type: 'u64' }), sdk.nativeToScVal(Uint8Array.from(atob(signature), c => c.charCodeAt(0)), { type: 'bytes' })];
+            const expVal = sdk.nativeToScVal(BigInt(expires_at || 0), { type: 'u64' });
+            const args = [uVal, sdk.nativeToScVal(BigInt(Math.round(amount*10000000)), { type: 'i128' }), sdk.nativeToScVal(BigInt(nonce), { type: 'u64' }), expVal, sdk.nativeToScVal(Uint8Array.from(atob(signature), c => c.charCodeAt(0)), { type: 'bytes' })];
             const tx = new sdk.TransactionBuilder(account, { fee: "100000", networkPassphrase: NETWORK_PASSPHRASE }).addOperation((new sdk.Contract(SOROBAN_CONTRACT_ID)).call("claim_withdrawal", ...args)).setTimeout(300).build();
             const sim = await soroban.simulateTransaction(tx);
             const prepared = await soroban.prepareTransaction(tx, sim);
@@ -789,7 +795,7 @@ def get_dashboard_html():
             notify('claim-notify', t('js_processing'));
             const res = await axios.post(`${API_BASE}/api/withdrawal/${id || CLAIM_ID}/cancel`, { token: TOKEN });
             if (res.data.success) { notify('claim-notify', t('js_refunded')); setTimeout(showList, 1500); }
-        } catch (e) { notify('claim-notify', e.message || String(e), true); }
+        } catch (e) { notify('claim-notify', e.response?.data?.detail || e.message || String(e), true); }
     }
 
     window.onload = () => {

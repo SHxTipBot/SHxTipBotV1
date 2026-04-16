@@ -480,10 +480,11 @@ async def withdraw_command(interaction: Interaction, amount: str, destination: s
 
     withdrawal_id = secrets.token_hex(16)
     nonce = int(time.time() * 1000)
+    expires_at = int(time.time()) + (15 * 60) # 15 minutes expiration
     
     try:
         # We sign specifically for the target destination
-        signature = stellar.sign_withdrawal(destination, amount_f, nonce)
+        signature = stellar.sign_withdrawal(destination, amount_f, nonce, expires_at)
     except Exception as e:
         logger.error(f"Failed to sign withdrawal for {discord_id}: {e}")
         await interaction.followup.send("❌ System error generating withdrawal ticket.", ephemeral=True)
@@ -492,7 +493,7 @@ async def withdraw_command(interaction: Interaction, amount: str, destination: s
     # 4. Atomic Balance Deduction
     await db.get_or_create_user(discord_id, username=interaction.user.display_name)
     await db.add_deposit(discord_id, f"WD_PENDING_{withdrawal_id}", -amount_f)
-    await db.create_withdrawal(withdrawal_id, discord_id, destination, amount_f, nonce, signature)
+    await db.create_withdrawal(withdrawal_id, discord_id, destination, amount_f, nonce, signature, expires_at)
 
     logger.info(f"WITHDRAWAL TICKET | User: {interaction.user.id} | Amt: {amount_f} | Nonce: {nonce} | ID: {withdrawal_id}")
 
@@ -1015,8 +1016,10 @@ async def airdrop_command(
     if duration_minutes: total_mins += duration_minutes
     if duration_hours: total_mins += duration_hours * 60
     if duration_days: total_mins += duration_days * 1440
-    # Default to 1 hour if none provided, or ensure at least 1 min
-    if total_mins == 0: total_mins = 60 
+    # Default to 24 hours if none provided
+    if total_mins == 0: 
+        total_mins = 1440
+        duration_days = 1
     
     airdrop_id = secrets.token_hex(4)
     await db.create_airdrop(
@@ -1039,7 +1042,7 @@ async def airdrop_command(
         color=0xFF00AA
     ))
     embed.add_field(name="Total Pool", value=f"**{parsed_amount:,.2f} SHx**", inline=True)
-    embed.add_field(name="Duration", value=f"**{', '.join(expires_parts) if expires_parts else '60 minutes'}**", inline=True)
+    embed.add_field(name="Duration", value=f"**{', '.join(expires_parts)}**", inline=True)
     
     view = AirdropView(airdrop_id)
     await interaction.followup.send(embed=embed, view=view)

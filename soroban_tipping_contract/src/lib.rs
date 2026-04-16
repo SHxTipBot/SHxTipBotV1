@@ -33,6 +33,7 @@ pub enum ContractError {
     NonceAlreadyUsed = 5,
     AdminPubkeyNotSet = 6,
     InsufficientAllowance = 7,
+    ExpiredClaim = 8,
 }
 
 #[contract]
@@ -114,6 +115,7 @@ impl TippingContract {
         user: Address,
         amount: i128,
         nonce: u64,
+        expires_at: u64,
         signature: soroban_sdk::BytesN<64>,
     ) -> Result<(), ContractError> {
         user.require_auth(); // The user pays the gas
@@ -122,6 +124,11 @@ impl TippingContract {
         let nonce_key = (symbol_short!("nonce"), user.clone(), nonce);
         if env.storage().persistent().has(&nonce_key) {
             return Err(ContractError::NonceAlreadyUsed);
+        }
+
+        // 1.5. Expiration Check
+        if env.ledger().timestamp() > expires_at {
+            return Err(ContractError::ExpiredClaim);
         }
 
         // 2. Signature Verification
@@ -137,6 +144,7 @@ impl TippingContract {
         msg_bin.append(&user.clone().to_xdr(&env));
         msg_bin.append(&amount.clone().to_xdr(&env));
         msg_bin.append(&nonce.clone().to_xdr(&env));
+        msg_bin.append(&expires_at.clone().to_xdr(&env));
 
         env.crypto().ed25519_verify(&admin_pubkey, &msg_bin, &signature);
 

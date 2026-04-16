@@ -979,7 +979,7 @@ async def invoke_contract_function(secret: str, contract_id: str, function_name:
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-def build_withdrawal_payload(contract_id: str, user_address: str, amount_stroops: int, nonce: int) -> bytes:
+def build_withdrawal_payload(contract_id: str, user_address: str, amount_stroops: int, nonce: int, expires_at: int) -> bytes:
     """
     Construct the raw bytes payload for the withdrawal signature.
     Matches the Soroban contract's message reconstruction exactly.
@@ -991,19 +991,20 @@ def build_withdrawal_payload(contract_id: str, user_address: str, amount_stroops
     user_addr_xdr = scval.to_address(user_address).to_xdr_bytes()
     amount_xdr = scval.to_int128(amount_stroops).to_xdr_bytes()
     nonce_xdr = scval.to_uint64(nonce).to_xdr_bytes()
+    expires_at_xdr = scval.to_uint64(expires_at).to_xdr_bytes()
     
-    payload = contract_addr_xdr + user_addr_xdr + amount_xdr + nonce_xdr
+    payload = contract_addr_xdr + user_addr_xdr + amount_xdr + nonce_xdr + expires_at_xdr
     return payload
 
-def sign_withdrawal(user_address: str, amount_shx: float, nonce: int) -> str:
+def sign_withdrawal(user_address: str, amount_shx: float, nonce: int, expires_at: int) -> str:
     """
     Generate an Ed25519 signature for a withdrawal claim.
-    Matches Soroban contract: [ContractAddress, User, Amount, Nonce]
+    Matches Soroban contract: [ContractAddress, User, Amount, Nonce, ExpiresAt]
     """
     kp = Keypair.from_secret(HOUSE_ACCOUNT_SECRET)
     amount_stroops = _to_stroops(amount_shx)
     
-    payload = build_withdrawal_payload(SOROBAN_CONTRACT_ID, user_address, amount_stroops, nonce)
+    payload = build_withdrawal_payload(SOROBAN_CONTRACT_ID, user_address, amount_stroops, nonce, expires_at)
     
     import hashlib
     payload_hash = hashlib.sha256(payload).hexdigest()

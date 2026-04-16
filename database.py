@@ -478,15 +478,16 @@ async def create_withdrawal(
     stellar_address: str,
     amount: float,
     nonce: int,
-    signature: str
+    signature: str,
+    expires_at: int
 ):
     """Create a pending withdrawal entry."""
     pool = await get_pool()
     await pool.execute(
         """INSERT INTO withdrawals 
-            (id, discord_id, stellar_address, amount, nonce, signature, created_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)""",
-        withdrawal_id, discord_id, stellar_address, amount, nonce, signature, time.time()
+            (id, discord_id, stellar_address, amount, nonce, signature, created_at, expires_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)""",
+        withdrawal_id, discord_id, stellar_address, amount, nonce, signature, time.time(), expires_at
     )
 
 async def get_withdrawal(withdrawal_id: str) -> Optional[Dict[str, Any]]:

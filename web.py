@@ -407,6 +407,7 @@ async def api_get_withdrawal(withdrawal_id: str):
         "success": True,
         "amount": data["amount"],
         "nonce": data["nonce"],
+        "expires_at": data.get("expires_at"),
         "signature": data["signature"],
         "stellar_address": data["stellar_address"],
         "created_at": data["created_at"]
@@ -430,6 +431,13 @@ async def api_cancel_withdrawal(withdrawal_id: str, request: Request):
     
     if not withdrawal or not discord_id or withdrawal["discord_id"] != discord_id:
         raise HTTPException(403, "Unauthorized or withdrawal not found.")
+        
+    # Security Phase 2: Verify the cryptographic claim has expired
+    expires_at = withdrawal.get("expires_at")
+    import time
+    now_ts = int(time.time())
+    if expires_at and now_ts <= expires_at:
+        raise HTTPException(400, f"Cannot cancel yet. On-chain claim is fully valid for {(expires_at - now_ts) // 60} more minutes.")
         
     success = await db.cancel_withdrawal(withdrawal_id)
     if success:
