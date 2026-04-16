@@ -133,7 +133,9 @@ async def init_db():
                 active INTEGER DEFAULT 1,
                 reason TEXT,
                 created_at DOUBLE PRECISION NOT NULL,
-                expires_at DOUBLE PRECISION
+                expires_at DOUBLE PRECISION,
+                channel_id TEXT,
+                message_id TEXT
             )
         """)
         await conn.execute("""
@@ -402,6 +404,13 @@ async def create_airdrop(
             (id, creator_discord_id, total_amount, amount_per_claim, max_claims, reason, created_at, expires_at)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)""",
         airdrop_id, creator_id, total_amount, 0.0, 0, reason, now, expires_at
+    )
+    
+async def update_airdrop_message(airdrop_id: str, channel_id: str, message_id: str):
+    pool = await get_pool()
+    await pool.execute(
+        "UPDATE airdrops SET channel_id = $1, message_id = $2 WHERE id = $3",
+        channel_id, message_id, airdrop_id
     )
 
 async def get_airdrop(airdrop_id: str) -> Optional[Dict[str, Any]]:

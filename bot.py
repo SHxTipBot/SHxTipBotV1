@@ -1047,7 +1047,8 @@ async def airdrop_command(
     embed.add_field(name="Duration", value=f"**{', '.join(expires_parts)}**", inline=True)
     
     view = AirdropView(airdrop_id)
-    await interaction.followup.send(embed=embed, view=view)
+    msg = await interaction.followup.send(embed=embed, view=view)
+    await db.update_airdrop_message(airdrop_id, str(msg.channel.id), str(msg.id))
 
 
 # ── Background Task: Airdrop Processing ──────────────────────────────────────────
@@ -1100,6 +1101,29 @@ async def process_airdrops():
                 # Refund creator if 0 participants
                 await db.transfer_internal(AIRDROP_RESERVE, creator_id, total_amount, 0.0, f"Airdrop {airdrop_id} Refund (0 participants)")
                 logger.info(f"AIRDROP | {airdrop_id} | Refunded {total_amount} SHx to {creator_id} (No participants)")
+
+            # Edit the original discord message to show it is expired
+            cid = ad.get("channel_id")
+            mid = ad.get("message_id")
+            if cid and mid and guild:
+                channel = guild.get_channel(int(cid))
+                if channel:
+                    try:
+                        msg = await channel.fetch_message(int(mid))
+                        if msg:
+                            embed = msg.embeds[0] if msg.embeds else discord.Embed(title="Airdrop")
+                            # Add information that it is expired
+                            embed.color = discord.Color.dark_gray()
+                            
+                            class ExpiredView(discord.ui.View):
+                                def __init__(self):
+                                    super().__init__(timeout=None)
+                                    btn = discord.ui.Button(label="Expired", style=discord.ButtonStyle.secondary, disabled=True, custom_id="expired_btn")
+                                    self.add_item(btn)
+                                    
+                            await msg.edit(embed=embed, view=ExpiredView())
+                    except Exception as e:
+                        logger.warning(f"Could not edit expired airdrop message: {e}")
 
             # Close the airdrop
             await db.close_airdrop(airdrop_id)
