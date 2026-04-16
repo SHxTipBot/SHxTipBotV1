@@ -747,6 +747,7 @@ async def tip_multiple_each_command(interaction: Interaction, user: Optional[str
 # ── /create-role ──────────────────────────────────────────────────────────────
 
 @bot.tree.command(name="create-role", description="[Admin] Create a new Discord role")
+@app_commands.default_permissions(administrator=True)
 @app_commands.describe(name="Name of the role", hex_color="Hex color code (e.g. 0x5865F2)")
 async def create_role_command(interaction: Interaction, name: str, hex_color: str):
     logger.info(f"COMMAND | /create-role | User: {interaction.user} Name: {name} Color: {hex_color}")
@@ -771,6 +772,7 @@ async def create_role_command(interaction: Interaction, name: str, hex_color: st
 # ── /assign-role ──────────────────────────────────────────────────────────────
 
 @bot.tree.command(name="assign-role", description="[Admin] Assign a role to a user")
+@app_commands.default_permissions(administrator=True)
 @app_commands.describe(user="The user to assign", role="The role to assign")
 async def assign_role_command(interaction: Interaction, user: discord.Member, role: discord.Role):
     logger.info(f"COMMAND | /assign-role | User: {interaction.user} Target: {user} Role: {role.name}")
@@ -1223,6 +1225,7 @@ bot.close = patched_close
 # ── Admin Sync ────────────────────────────────────────────────────────────────
 
 @bot.tree.command(name="bot-sync", description="[Admin] Sync the bot's command tree with Discord")
+@app_commands.default_permissions(administrator=True)
 async def bot_sync_command(interaction: Interaction):
     logger.info(f"COMMAND | /bot-sync | User: {interaction.user}")
     await interaction.response.defer(ephemeral=True)
@@ -1242,6 +1245,7 @@ async def bot_sync_command(interaction: Interaction):
 # ── /distribute ───────────────────────────────────────────────────────────────
 
 @bot.tree.command(name="distribute", description="[Admin] Manually fund a user's internal SHx balance")
+@app_commands.default_permissions(administrator=True)
 @app_commands.describe(user="The user to fund", amount="Amount of SHx to grant")
 async def distribute_command(interaction: Interaction, user: discord.User, amount: str):
     logger.info(f"COMMAND | /distribute | User: {interaction.user} Target: {user} Amount: {amount}")
