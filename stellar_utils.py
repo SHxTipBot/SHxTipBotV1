@@ -1002,7 +1002,8 @@ def sign_withdrawal(user_address: str, amount_shx: float, nonce: int, expires_at
     Matches Soroban contract: [ContractAddress, User, Amount, Nonce, ExpiresAt]
     """
     kp = Keypair.from_secret(HOUSE_ACCOUNT_SECRET)
-    amount_stroops = _to_stroops(amount_shx)
+    
+    amount_stroops = int(round(amount_shx * 10000000))
     
     payload = build_withdrawal_payload(SOROBAN_CONTRACT_ID, user_address, amount_stroops, nonce, expires_at)
     
