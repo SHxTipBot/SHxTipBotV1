@@ -731,7 +731,7 @@ def get_dashboard_html():
                 }));
             }
             
-            StellarWalletsKit.init({ theme: SwkAppDarkTheme, modules: modules, network: NETWORK_PASSPHRASE });
+            StellarWalletsKit.init({ theme: SwkAppDarkTheme, modules: modules, network: NETWORK.toUpperCase() });
             StellarWalletsKit.createButton(document.getElementById('swk-button-wrapper'));
             StellarWalletsKit.on(KitEventType.STATE_UPDATED, (e) => updateUI(e?.payload?.address));
             StellarWalletsKit.on(KitEventType.DISCONNECT, () => updateUI(null));
