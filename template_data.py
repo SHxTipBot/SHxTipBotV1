@@ -716,8 +716,7 @@ def get_dashboard_html():
             
             const wcProjectId = "{{WC_PROJECT_ID}}";
             let modules = [
-                new FreighterModule(), 
-                new LobstrModule({ projectId: wcProjectId }), 
+                new FreighterModule(),
                 new xBullModule()
             ];
             if (wcProjectId) {
