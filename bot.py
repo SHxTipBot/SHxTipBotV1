@@ -97,10 +97,23 @@ class AirdropView(discord.ui.View):
         rem_str = "soon"
         if expires_at:
             delta = int(expires_at - time.time())
-            if delta > 60:
-                rem_str = f"in {delta // 60} minutes"
-            elif delta > 0:
-                rem_str = f"in {delta} seconds"
+            if delta > 0:
+                days = delta // 86400
+                hours = (delta % 86400) // 3600
+                minutes = (delta % 3600) // 60
+                
+                parts = []
+                if days > 0:
+                    parts.append(f"{days} day(s)")
+                if hours > 0:
+                    parts.append(f"{hours} hour(s)")
+                if minutes > 0:
+                    parts.append(f"{minutes} minute(s)")
+                
+                if not parts:
+                    rem_str = f"in {delta} seconds"
+                else:
+                    rem_str = f"in {', '.join(parts)}"
         
         await interaction.followup.send(f"✅ **Entry Confirmed!** You will receive your share of the pool {rem_str}. Keep an eye on the channel!", ephemeral=True)
 
