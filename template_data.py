@@ -715,7 +715,11 @@ def get_dashboard_html():
             const { StellarWalletsKit, KitEventType, SwkAppDarkTheme, FreighterModule, LobstrModule, xBullModule, WalletConnectModule } = window.StellarKit;
             
             const wcProjectId = "{{WC_PROJECT_ID}}";
-            let modules = [new FreighterModule(), new LobstrModule(), new xBullModule()];
+            let modules = [
+                new FreighterModule(), 
+                new LobstrModule({ projectId: wcProjectId }), 
+                new xBullModule()
+            ];
             if (wcProjectId) {
                 modules.push(new WalletConnectModule({
                     projectId: wcProjectId,
