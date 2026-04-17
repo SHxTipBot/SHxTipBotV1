@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "build": "vite build"
+    "build": "vite build",
+    "postinstall": "node patches/patch-wallet-connect.js"
   },
   "devDependencies": {
     "vite": "^5.4.21",
@@ -11,8 +12,9 @@
   },
   "dependencies": {
     "@creit-tech/stellar-wallets-kit": "npm:@jsr/creit-tech__stellar-wallets-kit@^2.1.0",
-    "stellar-sdk": "npm:@stellar/stellar-sdk@^15.0.1",
-    "@stellar/stellar-sdk": "^15.0.1"
+    "@stellar/stellar-sdk": "^15.0.1",
+    "@walletconnect/modal": "^2.7.0",
+    "stellar-sdk": "npm:@stellar/stellar-sdk@^15.0.1"
   },
   "overrides": {
     "stellar-sdk": "npm:@stellar/stellar-sdk@^15.0.1",

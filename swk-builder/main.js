@@ -8,7 +8,8 @@ import { StellarWalletsKit } from '@creit-tech/stellar-wallets-kit/sdk';
 import { 
   KitEventType, 
   SwkAppDarkTheme,
-  SwkAppLightTheme
+  SwkAppLightTheme,
+  Networks
 } from '@creit-tech/stellar-wallets-kit';
 
 import { FreighterModule } from '@creit-tech/stellar-wallets-kit/modules/freighter';
@@ -21,7 +22,7 @@ import {
 } from '@creit-tech/stellar-wallets-kit/modules/utils';
 
 // Import WalletConnect specific module to expose it for manual configuration
-import { WalletConnectModule } from '@creit-tech/stellar-wallets-kit/modules/wallet-connect';
+import { WalletConnectModule, WalletConnectTargetChain } from '@creit-tech/stellar-wallets-kit/modules/wallet-connect';
 
 // 4. Export them all for the UMD bundle (becomes window.StellarKit)
 export {
@@ -29,9 +30,11 @@ export {
   KitEventType,
   SwkAppDarkTheme,
   SwkAppLightTheme,
+  Networks,
   FreighterModule,
   LobstrModule,
   xBullModule,
   defaultModules,
-  WalletConnectModule
+  WalletConnectModule,
+  WalletConnectTargetChain
 };

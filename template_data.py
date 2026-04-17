@@ -712,9 +712,19 @@ def get_dashboard_html():
         console.log("DASHBOARD | Initializing Wallet Kit...");
         try {
             if (!window.StellarKit) { setTimeout(initKit, 500); return; }
-            const { StellarWalletsKit, KitEventType, SwkAppDarkTheme, FreighterModule, LobstrModule, xBullModule, WalletConnectModule } = window.StellarKit;
+            const { StellarWalletsKit, KitEventType, SwkAppDarkTheme, FreighterModule, LobstrModule, xBullModule, WalletConnectModule, WalletConnectTargetChain, Networks } = window.StellarKit;
             
             const wcProjectId = "{{WC_PROJECT_ID}}";
+            const stellarNetwork = NETWORK.toUpperCase() === "PUBLIC" ? Networks.PUBLIC : Networks.TESTNET;
+            const wcMetadata = {
+                name: "SHx Tip Bot",
+                description: "SHx Community Tipping Dashboard",
+                url: window.location.origin,
+                icons: ["https://cdn.prod.website-files.com/5e9a1cde22bbc0a89dba7f5b/60c9649cf8fb48e5c883950e_Stronghold%20Logo%20Mark%20Blue.png"]
+            };
+            const wcChain = NETWORK.toUpperCase() === "PUBLIC"
+                ? WalletConnectTargetChain.PUBLIC
+                : WalletConnectTargetChain.TESTNET;
             let modules = [
                 new FreighterModule(),
                 new xBullModule()
@@ -722,16 +732,20 @@ def get_dashboard_html():
             if (wcProjectId) {
                 modules.push(new WalletConnectModule({
                     projectId: wcProjectId,
-                    metadata: {
-                        name: "SHx Tip Bot",
-                        description: "SHx Community Tipping Dashboard",
-                        url: window.location.origin,
-                        icons: ["https://cdn.prod.website-files.com/5e9a1cde22bbc0a89dba7f5b/60c9649cf8fb48e5c883950e_Stronghold%20Logo%20Mark%20Blue.png"]
+                    metadata: wcMetadata,
+                    allowedChains: [wcChain],
+                    appKitOptions: {
+                        metadata: wcMetadata
                     }
                 }));
+                console.log("DASHBOARD | WalletConnect module added with chain:", wcChain);
             }
             
-            StellarWalletsKit.init({ theme: SwkAppDarkTheme, modules: modules, network: NETWORK.toUpperCase() });
+            StellarWalletsKit.init({ theme: SwkAppDarkTheme, modules: modules, network: stellarNetwork });
+            
+            // Give WalletConnect SignClient time to initialize (async in constructor)
+            await new Promise(r => setTimeout(r, 1500));
+            
             StellarWalletsKit.createButton(document.getElementById('swk-button-wrapper'));
             StellarWalletsKit.on(KitEventType.STATE_UPDATED, (e) => updateUI(e?.payload?.address));
             StellarWalletsKit.on(KitEventType.DISCONNECT, () => updateUI(null));
