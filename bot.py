@@ -64,7 +64,7 @@ def _footer(embed: discord.Embed) -> discord.Embed:
     return embed
 
 class AirdropView(discord.ui.View):
-    def __init__(self, airdrop_id: str):
+    def __init__(self, airdrop_id: str = None):
         super().__init__(timeout=None)
         self.airdrop_id = airdrop_id
 
@@ -72,18 +72,25 @@ class AirdropView(discord.ui.View):
     async def claim_button(self, interaction: Interaction, button: discord.ui.Button):
         await interaction.response.defer(ephemeral=True)
         user_id = str(interaction.user.id)
+        msg_id = str(interaction.message.id)
         
-        ad = await db.get_airdrop(self.airdrop_id)
+        if self.airdrop_id:
+            ad = await db.get_airdrop(self.airdrop_id)
+        else:
+            ad = await db.get_airdrop_by_message(msg_id)
+            
         if not ad:
             await interaction.followup.send("❌ This airdrop is no longer active.", ephemeral=True)
             return
             
-        if await db.has_user_claimed(self.airdrop_id, user_id):
+        active_airdrop_id = ad["id"]
+            
+        if await db.has_user_claimed(active_airdrop_id, user_id):
             await interaction.followup.send("❌ You have already entered this airdrop.", ephemeral=True)
             return
             
         await db.get_or_create_user(user_id)
-        await db.add_airdrop_claim(self.airdrop_id, user_id)
+        await db.add_airdrop_claim(active_airdrop_id, user_id)
         
         # Calculate time remaining
         expires_at = ad.get("expires_at")
@@ -1151,6 +1158,7 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
 async def on_ready():
     logger.info(f"Bot online as {bot.user} (ID: {bot.user.id})")
     logger.info(f"Guild: {DISCORD_GUILD_ID} | Network: {stellar.STELLAR_NETWORK}")
+    bot.add_view(AirdropView())
 
     # Initialize DB and HTTP session
     await db.init_db()

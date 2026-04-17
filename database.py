@@ -427,6 +427,20 @@ async def get_airdrop(airdrop_id: str) -> Optional[Dict[str, Any]]:
         return dict(row)
     return None
 
+async def get_airdrop_by_message(message_id: str) -> Optional[dict]:
+    """Retrieve an active airdrop by its tied message ID."""
+    pool = await get_pool()
+    row = await pool.fetchrow(
+        "SELECT * FROM airdrops WHERE message_id = $1 AND active = 1",
+        message_id
+    )
+    if row:
+        expires_at = row.get("expires_at")
+        if expires_at and time.time() > expires_at:
+            return None
+        return dict(row)
+    return None
+
 async def has_user_claimed(airdrop_id: str, discord_id: str) -> bool:
     """Check if a user has already claimed from this airdrop."""
     pool = await get_pool()
