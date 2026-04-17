@@ -11,6 +11,9 @@ import {
   SwkAppLightTheme
 } from '@creit-tech/stellar-wallets-kit';
 
+import { FreighterModule } from '@creit-tech/stellar-wallets-kit/modules/freighter';
+import { LobstrModule } from '@creit-tech/stellar-wallets-kit/modules/lobstr';
+
 // 3. Default wallet modules (Freighter, Albedo, xBull, LOBSTR/WalletConnect, Hana, etc.)
 import { 
   defaultModules 
@@ -25,6 +28,8 @@ export {
   KitEventType,
   SwkAppDarkTheme,
   SwkAppLightTheme,
+  FreighterModule,
+  LobstrModule,
   defaultModules,
   WalletConnectModule
 };

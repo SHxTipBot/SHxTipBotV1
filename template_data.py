@@ -712,10 +712,10 @@ def get_dashboard_html():
         console.log("DASHBOARD | Initializing Wallet Kit...");
         try {
             if (!window.StellarKit) { setTimeout(initKit, 500); return; }
-            const { StellarWalletsKit, KitEventType, SwkAppDarkTheme, defaultModules, WalletConnectModule } = window.StellarKit;
+            const { StellarWalletsKit, KitEventType, SwkAppDarkTheme, FreighterModule, LobstrModule, WalletConnectModule } = window.StellarKit;
             
             const wcProjectId = "{{WC_PROJECT_ID}}";
-            let modules = defaultModules();
+            let modules = [new FreighterModule(), new LobstrModule()];
             if (wcProjectId) {
                 modules.push(new WalletConnectModule({
                     projectId: wcProjectId,

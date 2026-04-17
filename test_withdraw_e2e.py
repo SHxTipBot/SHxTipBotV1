@@ -48,7 +48,8 @@ async def test_e2e():
     print(f"  Amount: {amount_shx} SHx ({amount_stroops} stroops)")
     print(f"  Nonce:  {nonce}")
     
-    sig_b64 = stellar.sign_withdrawal(pubkey, amount_shx, nonce)
+    expires_at = int(time.time() + 900)
+    sig_b64 = stellar.sign_withdrawal(pubkey, amount_shx, nonce, expires_at)
     sig_bytes = base64.b64decode(sig_b64)
     print(f"  Signature (b64): {sig_b64[:40]}...")
     
@@ -57,7 +58,8 @@ async def test_e2e():
         scval.to_address(contract_id).to_xdr_bytes() +
         scval.to_address(pubkey).to_xdr_bytes() +
         scval.to_int128(amount_stroops).to_xdr_bytes() +
-        scval.to_uint64(nonce).to_xdr_bytes()
+        scval.to_uint64(nonce).to_xdr_bytes() +
+        scval.to_uint64(expires_at).to_xdr_bytes()
     )
     print(f"  Payload size: {len(payload)} bytes")
     
@@ -93,6 +95,7 @@ async def test_e2e():
         scval.to_address(pubkey),       # user
         scval.to_int128(amount_stroops), # amount
         scval.to_uint64(nonce),          # nonce
+        scval.to_uint64(expires_at),     # expires_at
         scval.to_bytes(sig_bytes),       # signature
     ]
     
