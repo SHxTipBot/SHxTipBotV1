@@ -765,7 +765,13 @@ def get_dashboard_html():
             const sdk = getSdk();
             notify('claim-notify', t('js_preparing'));
             const res = await axios.get(`${API_BASE}/api/withdrawal/${CLAIM_ID}`);
-            const { amount, nonce, expires_at, signature } = res.data;
+            const { amount, nonce, expires_at, signature, stellar_address } = res.data;
+            
+            // STRICT SECURITY ENFORCEMENT: The connected wallet must physically match the destination bound to the cryptic signature.
+            if (userAddress !== stellar_address) {
+                throw new Error(`Connected wallet mismatch! Please switch to account ending in ...${stellar_address.slice(-4)}`);
+            }
+            
             const soroban = new (sdk.rpc?.Server || sdk.SorobanServer || sdk.Server)(SOROBAN_URL);
             const account = await (new (sdk.Horizon?.Server || sdk.Server)(HORIZON_URL)).loadAccount(userAddress);
             const uVal = sdk.nativeToScVal(userAddress, { type: 'address' });
