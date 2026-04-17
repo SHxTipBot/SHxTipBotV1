@@ -180,7 +180,14 @@ async def init_db():
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS internal_balance REAL DEFAULT 0.0",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS memo_id BIGINT",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS username TEXT",
-        "ALTER TABLE airdrops ADD COLUMN IF NOT EXISTS expires_at DOUBLE PRECISION"
+        "ALTER TABLE airdrops ADD COLUMN IF NOT EXISTS expires_at DOUBLE PRECISION",
+        "ALTER TABLE withdrawals ALTER COLUMN amount TYPE DOUBLE PRECISION",
+        "ALTER TABLE internal_tips ALTER COLUMN amount TYPE DOUBLE PRECISION",
+        "ALTER TABLE internal_tips ALTER COLUMN fee TYPE DOUBLE PRECISION",
+        "ALTER TABLE deposits ALTER COLUMN amount TYPE DOUBLE PRECISION",
+        "ALTER TABLE airdrops ALTER COLUMN total_amount TYPE DOUBLE PRECISION",
+        "ALTER TABLE airdrops ALTER COLUMN amount_per_claim TYPE DOUBLE PRECISION",
+        "ALTER TABLE users ALTER COLUMN internal_balance TYPE DOUBLE PRECISION"
     ]
     
     async with pool.acquire() as conn:
