@@ -237,6 +237,12 @@ def get_dashboard_html():
     /* Utilities */
     .hidden { display: none !important; }
 
+    /* Fix WalletConnect modal being hidden under StellarWalletsKit modal */
+    wcm-modal, w3m-modal {
+      position: relative;
+      z-index: 2147483647 !important; /* Max 32-bit int */
+    }
+
     #swk-button-wrapper { display: inline-block; min-width: 160px; text-align: right; }
     #swk-button-wrapper button {
       background: var(--accent) !important; border-radius: 0.75rem !important;
