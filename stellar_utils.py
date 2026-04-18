@@ -604,6 +604,232 @@ async def verify_transaction_status(tx_hash: str) -> bool:
     return False
 
 
+# ── Withdrawal Security: On-Chain Nonce Verification ─────────────────────────
+
+async def check_withdrawal_nonce_used(user_address: str, nonce: int) -> bool:
+    """
+    Check if a withdrawal nonce has already been consumed on-chain.
+    Queries the contract's persistent storage key: ("nonce", user_address, nonce).
+    Returns True if nonce is used (claim was executed), False if unused.
+    """
+    if not SOROBAN_CONTRACT_ID or not user_address:
+        logger.error("NONCE CHECK | Missing contract ID or user address")
+        return False  # Fail-open if config is missing (should not happen in prod)
+    
+    try:
+        session = await get_session()
+        
+        # Build the SCVal key matching the contract's tuple: (Symbol("nonce"), Address, u64)
+        key_val = scval.to_vec([
+            scval.to_symbol("nonce"),
+            scval.to_address(user_address),
+            scval.to_uint64(nonce)
+        ])
+        
+        # Build the LedgerKey for persistent contract data
+        contract_id_bytes = StrKey.decode_contract(SOROBAN_CONTRACT_ID)
+        
+        ledger_key = xdr.LedgerKey(
+            type=xdr.LedgerEntryType.CONTRACT_DATA,
+            contract_data=xdr.LedgerKeyContractData(
+                contract=xdr.SCAddress(
+                    type=xdr.SCAddressType.SC_ADDRESS_TYPE_CONTRACT,
+                    contract_id=xdr.Hash(contract_id_bytes)
+                ),
+                key=xdr.SCVal.from_xdr(key_val.to_xdr()),
+                durability=xdr.ContractDataDurability.PERSISTENT
+            )
+        )
+        
+        payload = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getLedgerEntries",
+            "params": {
+                "keys": [ledger_key.to_xdr()]
+            }
+        }
+        
+        async with session.post(SOROBAN_RPC_URL, json=payload) as resp:
+            data = await resp.json()
+            
+            if "error" in data:
+                logger.error(f"NONCE CHECK | RPC error: {data['error']}")
+                return False  # Fail-open on RPC error
+            
+            entries = data.get("result", {}).get("entries", [])
+            nonce_used = len(entries) > 0
+            
+            if nonce_used:
+                logger.warning(f"NONCE CHECK | Nonce {nonce} for {user_address[:8]}... is USED (claimed on-chain)")
+            else:
+                logger.info(f"NONCE CHECK | Nonce {nonce} for {user_address[:8]}... is NOT used")
+            
+            return nonce_used
+            
+    except Exception as e:
+        logger.error(f"NONCE CHECK | Failed to check nonce: {e}", exc_info=True)
+        return False  # Fail-open on exception — Layer 2 (event watcher) provides backup
+
+
+async def stream_withdrawal_events(callback=None):
+    """
+    Background monitor for contract withdraw events.
+    Polls Soroban RPC getEvents for 'withdraw' events emitted by our tipping contract.
+    When a withdrawal is claimed on-chain, calls callback(nonce, tx_hash, amount_stroops, user_xdr).
+    
+    Uses the service_cursors table to persist position across restarts.
+    """
+    cursor_name = "withdrawal_event_monitor"
+    
+    # Build XDR for the "withdraw" symbol filter (cached, never changes)
+    withdraw_topic_xdr = scval.to_symbol("withdraw").to_xdr()
+    
+    while True:
+        try:
+            session = await get_session()
+            
+            # Get latest ledger for range calculation
+            async with session.post(SOROBAN_RPC_URL, json={
+                "jsonrpc": "2.0", "id": 1, "method": "getLatestLedger"
+            }) as resp:
+                latest_data = await resp.json()
+                latest_ledger = latest_data["result"]["sequence"]
+            
+            # Determine start ledger from cursor or default (~24h lookback)
+            saved_cursor = await db.get_cursor(cursor_name)
+            if saved_cursor:
+                start_ledger = int(saved_cursor) + 1
+            else:
+                # First run: start from ~1 hour ago to avoid processing too much history
+                start_ledger = max(1, latest_ledger - 720)
+                logger.info(f"WITHDRAW WATCHER | First run, starting from ledger {start_ledger}")
+            
+            # Don't query if we're already caught up
+            if start_ledger > latest_ledger:
+                await asyncio.sleep(10)
+                continue
+            
+            # Query for withdraw events
+            payload = {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "getEvents",
+                "params": {
+                    "startLedger": start_ledger,
+                    "filters": [{
+                        "type": "contract",
+                        "contractIds": [SOROBAN_CONTRACT_ID],
+                        "topics": [[withdraw_topic_xdr, "*"]]
+                    }],
+                    "pagination": {"limit": 50}
+                }
+            }
+            
+            async with session.post(SOROBAN_RPC_URL, json=payload) as resp:
+                data = await resp.json()
+                
+                if "error" in data:
+                    logger.error(f"WITHDRAW WATCHER | RPC error: {data['error']}")
+                    await asyncio.sleep(30)
+                    continue
+                
+                events = data.get("result", {}).get("events", [])
+                
+                if events:
+                    logger.info(f"WITHDRAW WATCHER | Processing {len(events)} withdraw event(s)")
+                    
+                    for event in events:
+                        try:
+                            event_ledger = event.get("ledger")
+                            tx_hash = event.get("txHash", "")
+                            value_xdr_str = event.get("value", "")
+                            
+                            # Decode the value: Vec([i128(amount), u64(nonce)])
+                            if value_xdr_str:
+                                val = xdr.SCVal.from_xdr(value_xdr_str)
+                                if val.vec and val.vec.sc_vec and len(val.vec.sc_vec) >= 2:
+                                    amount_val = val.vec.sc_vec[0]
+                                    nonce_val = val.vec.sc_vec[1]
+                                    
+                                    # Extract amount (i128 -> stroops)
+                                    amount_stroops = amount_val.i128.lo.uint64 if amount_val.i128 else 0
+                                    # Extract nonce (u64)
+                                    nonce = nonce_val.u64.uint64 if nonce_val.u64 else 0
+                                    
+                                    if callback and nonce > 0:
+                                        await callback(nonce, tx_hash, amount_stroops)
+                                    
+                                    logger.info(
+                                        f"WITHDRAW WATCHER | Event: nonce={nonce} "
+                                        f"amount={amount_stroops/10_000_000:.2f} SHx "
+                                        f"tx={tx_hash[:12]}... ledger={event_ledger}"
+                                    )
+                            
+                            # Advance cursor past this event's ledger
+                            if event_ledger:
+                                await db.save_cursor(cursor_name, str(event_ledger))
+                                
+                        except Exception as ev_err:
+                            logger.error(f"WITHDRAW WATCHER | Error processing event: {ev_err}")
+                            continue
+                else:
+                    # No new events — save cursor at latest_ledger to avoid re-scanning
+                    await db.save_cursor(cursor_name, str(latest_ledger))
+            
+            # Poll every 10 seconds
+            await asyncio.sleep(10)
+            
+        except Exception as e:
+            logger.error(f"WITHDRAW WATCHER | Critical error: {e}", exc_info=True)
+            await asyncio.sleep(30)
+
+
+async def check_pending_withdrawal_nonces():
+    """
+    Startup sweep: Check all PENDING withdrawals older than 15 minutes
+    against on-chain nonce state. If the nonce is used, mark as COMPLETED.
+    This catches withdrawals that were claimed on-chain while the bot was down.
+    """
+    try:
+        stale = await db.get_stale_pending_withdrawals(age_seconds=900)  # 15 min
+        if not stale:
+            logger.info("STARTUP SWEEP | No stale pending withdrawals to check.")
+            return
+        
+        logger.info(f"STARTUP SWEEP | Checking {len(stale)} stale pending withdrawal(s)...")
+        
+        for w in stale:
+            nonce = w.get("nonce")
+            stellar_address = w.get("stellar_address")
+            withdrawal_id = w.get("id")
+            
+            if not nonce or not stellar_address:
+                continue
+            
+            try:
+                is_used = await check_withdrawal_nonce_used(stellar_address, nonce)
+                if is_used:
+                    await db.complete_withdrawal_by_nonce(nonce, f"SWEEP_DETECTED_{withdrawal_id}")
+                    logger.warning(
+                        f"STARTUP SWEEP | Withdrawal {withdrawal_id} was claimed on-chain "
+                        f"(nonce {nonce}). Marked as COMPLETED to prevent double-spend."
+                    )
+                else:
+                    logger.info(f"STARTUP SWEEP | Withdrawal {withdrawal_id} nonce {nonce} not used on-chain (safe).")
+            except Exception as e:
+                logger.error(f"STARTUP SWEEP | Error checking withdrawal {withdrawal_id}: {e}")
+            
+            # Small delay to avoid hammering the RPC
+            await asyncio.sleep(0.5)
+        
+        logger.info("STARTUP SWEEP | Complete.")
+        
+    except Exception as e:
+        logger.error(f"STARTUP SWEEP | Failed: {e}", exc_info=True)
+
+
+
 def _fail(error: str, tx_hash: str = None) -> dict:
     """Helper to build a failure result dict."""
     return {

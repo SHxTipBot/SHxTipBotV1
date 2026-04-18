@@ -1202,6 +1202,7 @@ async def on_ready():
         logger.info("Background task process_airdrops started.")
     bot.loop.create_task(heartbeat())
     bot.loop.create_task(start_deposit_monitor())
+    bot.loop.create_task(start_withdrawal_event_monitor())
 
 
 async def start_deposit_monitor():
@@ -1244,6 +1245,43 @@ async def start_deposit_monitor():
     # Start the live monitor (now with automatic startup sweep)
     logger.info(f"DASHBOARD | Starting deposit monitor for {stellar.HOUSE_ACCOUNT_PUBLIC[:8]}...")
     await stellar.stream_deposits(cursor="now", callback=handle_deposit)
+
+
+async def start_withdrawal_event_monitor():
+    """Start the on-chain withdrawal event watcher and run a startup sweep."""
+    
+    # Phase 1: Startup sweep — check all stale PENDING withdrawals against on-chain nonce state
+    logger.info("WITHDRAWAL MONITOR | Running startup nonce sweep...")
+    try:
+        await stellar.check_pending_withdrawal_nonces()
+    except Exception as e:
+        logger.error(f"WITHDRAWAL MONITOR | Startup sweep failed: {e}")
+    
+    # Phase 2: Live event watcher
+    async def handle_withdrawal_event(nonce: int, tx_hash: str, amount_stroops: int):
+        """Callback when a withdraw event is detected on-chain."""
+        try:
+            withdrawal = await db.get_withdrawal_by_nonce(nonce)
+            if not withdrawal:
+                logger.debug(f"WITHDRAW EVENT | Nonce {nonce} not found in DB (may be from another system)")
+                return
+            
+            if withdrawal["status"] == "PENDING":
+                await db.complete_withdrawal_by_nonce(nonce, tx_hash)
+                amount_shx = amount_stroops / 10_000_000
+                logger.info(
+                    f"WITHDRAW EVENT | Auto-completed withdrawal {withdrawal['id']} | "
+                    f"{amount_shx:.2f} SHx | nonce={nonce} | tx={tx_hash[:16]}..."
+                )
+            elif withdrawal["status"] == "COMPLETED":
+                logger.debug(f"WITHDRAW EVENT | Nonce {nonce} already completed (ignoring duplicate)")
+            else:
+                logger.warning(f"WITHDRAW EVENT | Nonce {nonce} has status '{withdrawal['status']}' — unexpected")
+        except Exception as e:
+            logger.error(f"WITHDRAW EVENT | Error processing nonce {nonce}: {e}")
+    
+    logger.info("WITHDRAWAL MONITOR | Starting live event watcher...")
+    await stellar.stream_withdrawal_events(callback=handle_withdrawal_event)
 
 
 async def heartbeat():

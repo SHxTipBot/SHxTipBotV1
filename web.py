@@ -438,6 +438,22 @@ async def api_cancel_withdrawal(withdrawal_id: str, request: Request):
     now_ts = int(time.time())
     if expires_at and now_ts <= expires_at:
         raise HTTPException(400, f"Cannot cancel yet. On-chain claim is fully valid for {(expires_at - now_ts) // 60} more minutes.")
+    
+    # Security Phase 3: Verify the claim was NOT already executed on-chain
+    # This prevents the double-spend exploit where a user claims on-chain,
+    # doesn't call /complete, waits for expiry, then cancels for a refund.
+    stellar_address = withdrawal.get("stellar_address")
+    nonce = withdrawal.get("nonce")
+    if stellar_address and nonce:
+        nonce_used = await stellar.check_withdrawal_nonce_used(stellar_address, nonce)
+        if nonce_used:
+            # Auto-mark as COMPLETED to prevent future cancel attempts
+            await db.complete_withdrawal_by_nonce(nonce, f"CANCEL_BLOCKED_{withdrawal_id}")
+            logger.warning(
+                f"CANCEL BLOCKED | Withdrawal {withdrawal_id} was already claimed on-chain "
+                f"(nonce {nonce}). Blocked refund and marked COMPLETED."
+            )
+            raise HTTPException(400, "This withdrawal was already claimed on-chain. Refund denied.")
         
     success = await db.cancel_withdrawal(withdrawal_id)
     if success:

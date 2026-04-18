@@ -591,3 +591,38 @@ async def get_pending_withdrawals(discord_id: str, limit: int = 5) -> List[Dict[
     )
     return [dict(r) for r in rows]
 
+async def get_withdrawal_by_nonce(nonce: int) -> Optional[Dict[str, Any]]:
+    """Get a withdrawal by its nonce value (for event-based matching)."""
+    pool = await get_pool()
+    row = await pool.fetchrow(
+        "SELECT * FROM withdrawals WHERE nonce = $1 ORDER BY created_at DESC LIMIT 1",
+        nonce
+    )
+    return dict(row) if row else None
+
+async def complete_withdrawal_by_nonce(nonce: int, tx_hash: str):
+    """
+    Mark a withdrawal as completed by nonce (used by the event watcher).
+    Only updates if the current status is PENDING to avoid overwriting manual completions.
+    """
+    pool = await get_pool()
+    result = await pool.execute(
+        "UPDATE withdrawals SET status = 'COMPLETED', tx_hash = $1, completed_at = $2 WHERE nonce = $3 AND status = 'PENDING'",
+        tx_hash, time.time(), nonce
+    )
+    if result != "UPDATE 0":
+        logger.info(f"WITHDRAWAL AUTO-COMPLETE | Nonce {nonce} marked COMPLETED via on-chain event (tx: {tx_hash[:16]}...)")
+
+async def get_stale_pending_withdrawals(age_seconds: int = 900) -> List[Dict[str, Any]]:
+    """
+    Get all PENDING withdrawals older than age_seconds.
+    Used by the startup sweep to check if they were claimed on-chain.
+    """
+    pool = await get_pool()
+    cutoff = time.time() - age_seconds
+    rows = await pool.fetch(
+        "SELECT * FROM withdrawals WHERE status = 'PENDING' AND created_at < $1",
+        cutoff
+    )
+    return [dict(r) for r in rows]
+
