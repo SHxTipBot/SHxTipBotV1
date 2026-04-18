@@ -1122,7 +1122,7 @@ async def process_airdrops():
                 await db.transfer_internal(AIRDROP_RESERVE, creator_id, total_amount, 0.0, f"Airdrop {airdrop_id} Refund (0 participants)")
                 logger.info(f"AIRDROP | {airdrop_id} | Refunded {total_amount} SHx to {creator_id} (No participants)")
 
-            # Edit the original discord message to show it is expired
+            # Edit the original discord message to show it is expired + participant list
             cid = ad.get("channel_id")
             mid = ad.get("message_id")
             if cid and mid and guild:
@@ -1132,8 +1132,30 @@ async def process_airdrops():
                         msg = await channel.fetch_message(int(mid))
                         if msg:
                             embed = msg.embeds[0] if msg.embeds else discord.Embed(title="Airdrop")
-                            # Add information that it is expired
                             embed.color = discord.Color.dark_gray()
+                            embed.title = "\U0001f4e6 Airdrop Complete!"
+                            
+                            # Build participant list
+                            if count > 0:
+                                # Build mention strings for participants
+                                mention_lines = []
+                                for uid in participants[:20]:  # Cap at 20 to avoid embed limits
+                                    mention_lines.append(f"<@{uid}>")
+                                
+                                participant_text = ", ".join(mention_lines)
+                                if count > 20:
+                                    participant_text += f"\n... and **{count - 20}** more"
+                                
+                                embed.clear_fields()
+                                embed.add_field(name="Total Distributed", value=f"**{total_amount:,.2f} SHx**", inline=True)
+                                embed.add_field(name="Participants", value=f"**{count}**", inline=True)
+                                embed.add_field(name="Amount Each", value=f"**{share:,.2f} SHx**", inline=True)
+                                embed.add_field(name="\U0001f389 Recipients", value=participant_text, inline=False)
+                                embed.set_footer(text="SHx Tip Bot \u2022 Airdrop ended")
+                            else:
+                                embed.clear_fields()
+                                embed.description = f"Airdrop ended with **0 participants**.\nFunds refunded to <@{creator_id}>."
+                                embed.set_footer(text="SHx Tip Bot \u2022 Airdrop ended \u2022 No claims")
                             
                             class ExpiredView(discord.ui.View):
                                 def __init__(self):
