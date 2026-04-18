@@ -61,7 +61,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "style-src * 'unsafe-inline'; "
             "img-src * data: blob:; "
             "font-src * data:; "
-            "frame-src *; "
+            "frame-src *"
         )
         return response
 
