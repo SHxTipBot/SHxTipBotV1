@@ -9,8 +9,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Expose web server port
-EXPOSE 8080
-
-# Run both bot + web server
-CMD ["python", "run_all.py"]
+# Railway injects PORT dynamically
+CMD uvicorn web:app --host 0.0.0.0 --port ${PORT:-8080}
