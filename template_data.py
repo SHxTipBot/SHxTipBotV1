@@ -283,7 +283,7 @@ def get_dashboard_html():
   <div class="container">
     <nav>
       <div class="logo">
-        <img src="/bot_avatar.png" alt="SHx Tip Bot Avatar">
+        <img src="/public/bot_avatar.png" alt="SHx Tip Bot Avatar">
         <span data-i18n="nav_title">SHx Tip Bot</span>
       </div>
       <div style="display: flex; align-items: center;">
@@ -362,7 +362,7 @@ def get_dashboard_html():
 
   <script src="https://cdn.jsdelivr.net/npm/@stellar/stellar-sdk@15.0.1/dist/stellar-sdk.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
-  <script src="/wallet-kit-bundle.umd.js"></script>
+  <script src="/public/wallet-kit-bundle.umd.js"></script>
 
   <script>
 
