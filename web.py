@@ -26,20 +26,15 @@ logger = logging.getLogger("shx_tip_bot.web")
 
 app = FastAPI(title="SHx Tip Bot — Wallet Linking", docs_url=None, redoc_url=None)
 
-# --- Fix for Vercel: Resilient static file mounting ---
+# --- Static file mounting ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 static_dir = os.path.join(BASE_DIR, "src_public")
 
-# On Vercel, we skip the FastAPI mount entirely because Vercel's edge network
-# serves the /public folder (mapped via vercel.json) automatically.
-if not os.getenv("VERCEL") == "1":
-    if os.path.exists(static_dir):
-        logger.info(f"Mounting static files from: {static_dir}")
-        app.mount("/public", StaticFiles(directory=static_dir), name="public")
-    else:
-        logger.warning(f"Static directory NOT FOUND at {static_dir}. Skipping mount.")
+if os.path.exists(static_dir):
+    logger.info(f"Mounting static files from: {static_dir}")
+    app.mount("/public", StaticFiles(directory=static_dir), name="public")
 else:
-    logger.info("Vercel context detected: Skipping internal mount (delegating to Edge).")
+    logger.warning(f"Static directory NOT FOUND at {static_dir}. Skipping mount.")
 
 # ── Security Middleware ──────────────────────────────────────────────────────
 
@@ -70,8 +65,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         )
         return response
 
-# NOTE: Disabled on Vercel — serverless functions handle CSP via vercel.json headers instead
-# app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
 
 from template_data import get_dashboard_html
 
@@ -81,9 +75,7 @@ STARTUP_ERROR = None
 async def startup():
     global STARTUP_ERROR
     try:
-        # Prevent Neon DB wake-up timeouts on Vercel cold starts by skipping DDL
-        if not os.getenv("VERCEL") == "1":
-            await db.init_db()
+        await db.init_db()
         await stellar.get_session()
         logger.info("Web application started.")
     except Exception as e:
@@ -109,7 +101,7 @@ async def debug_info():
         "NETWORK_PASSPHRASE": stellar.NETWORK_PASSPHRASE,
         "SHX_ISSUER": stellar.SHX_ISSUER,
         "SOROBAN_CONTRACT_ID": stellar.SOROBAN_CONTRACT_ID,
-        "ENVIRONMENT": os.getenv("VERCEL", "local")
+        "ENVIRONMENT": os.getenv("RAILWAY_ENVIRONMENT", "local")
     }
 
 @app.get("/api/health")
@@ -117,7 +109,7 @@ async def debug_info():
 async def health_check():
     if STARTUP_ERROR:
         return HTMLResponse(content=f"<h1>STARTUP FAILED!</h1><pre>{STARTUP_ERROR}</pre>", status_code=500)
-    return {"status": "ok", "environment": "vercel"}
+    return {"status": "ok", "environment": os.getenv("RAILWAY_ENVIRONMENT", "local")}
 
 @app.get("/register", response_class=HTMLResponse)
 @app.get("/link", response_class=HTMLResponse)
