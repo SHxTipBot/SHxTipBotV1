@@ -778,7 +778,13 @@ def get_dashboard_html():
             location.reload();
         } catch (e) {
             const errorMsg = e.response?.data?.detail || e.message || String(e);
-            notify('link-notify', errorMsg, true);
+            if (errorMsg.toLowerCase().includes("session topic") || errorMsg.toLowerCase().includes("no matching key")) {
+                notify('link-notify', "Wallet session expired. Resetting...", true);
+                localStorage.clear();
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                notify('link-notify', errorMsg, true);
+            }
         }
     }
 
@@ -814,7 +820,13 @@ def get_dashboard_html():
             setTimeout(() => location.reload(), 4500);
         } catch (e) {
             const errorMsg = e.response?.data?.detail || e.message || String(e);
-            notify('claim-notify', errorMsg, true);
+            if (errorMsg.toLowerCase().includes("session topic") || errorMsg.toLowerCase().includes("no matching key")) {
+                notify('claim-notify', "Wallet session expired. Resetting...", true);
+                localStorage.clear();
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                notify('claim-notify', errorMsg, true);
+            }
         }
     }
 
